@@ -1,0 +1,29 @@
+.DS_Store
+.env
+.env.local
+.env.*.local
+node_modules
+dist
+coverage
+.turbo
+.cache
+tmp
+.idea
+.vscode
+*.log
+
+# Go
+bin
+*.out
+
+# Build artifacts
+apps/frontend/dist
+apps/auth/dist
+packages/api-client/generated
+
+# Runtime data
+infra/data
+infra/postgres
+infra/dragonfly
+infra/mailpit
+

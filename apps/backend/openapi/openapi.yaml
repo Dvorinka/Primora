@@ -1,0 +1,1613 @@
+openapi: 3.1.0
+info:
+  title: Primora API
+  version: 0.2.14
+  description: Core Primora platform API for tenancy, storage, API keys, and audit operations.
+servers:
+  - url: /api/v1
+tags:
+  - name: Health
+  - name: Platform
+  - name: Organizations
+  - name: Projects
+  - name: Storage
+  - name: Collections
+paths:
+  /health/liveness:
+    get:
+      tags: [Health]
+      operationId: getLiveness
+      responses:
+        "200":
+          description: Liveness check
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /health/readiness:
+    get:
+      tags: [Health]
+      operationId: getReadiness
+      responses:
+        "200":
+          description: Readiness check
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessStatus"
+  /me:
+    get:
+      tags: [Platform]
+      operationId: getMe
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current authenticated user and tenancy summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+  /bootstrap:
+    post:
+      tags: [Platform]
+      operationId: bootstrapPlatform
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BootstrapRequest"
+      responses:
+        "201":
+          description: Platform bootstrapped
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BootstrapResponse"
+        "409":
+          $ref: "#/components/responses/ErrorResponse"
+  /organizations:
+    get:
+      tags: [Organizations]
+      operationId: listOrganizations
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Organizations for the current user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/OrganizationMembership"
+                required: [items]
+    post:
+      tags: [Organizations]
+      operationId: createOrganization
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrganizationRequest"
+      responses:
+        "201":
+          description: Organization created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationMembership"
+  /organizations/{organizationID}:
+    patch:
+      tags: [Organizations]
+      operationId: updateOrganization
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateOrganizationRequest"
+      responses:
+        "204":
+          description: Organization updated
+    delete:
+      tags: [Organizations]
+      operationId: deleteOrganization
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationID"
+      responses:
+        "204":
+          description: Organization deleted
+  /organizations/{organizationID}/members:
+    get:
+      tags: [Organizations]
+      operationId: listOrganizationMembers
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationID"
+      responses:
+        "200":
+          description: Members of an organization
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/OrganizationMember"
+                required: [items]
+  /organizations/{organizationID}/members/{userID}:
+    patch:
+      tags: [Organizations]
+      operationId: updateOrganizationMemberRole
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationID"
+        - $ref: "#/components/parameters/UserID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateOrganizationMemberRoleRequest"
+      responses:
+        "200":
+          description: Organization member role updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationMember"
+    delete:
+      tags: [Organizations]
+      operationId: removeOrganizationMember
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationID"
+        - $ref: "#/components/parameters/UserID"
+      responses:
+        "204":
+          description: Organization member removed
+  /organizations/{organizationID}/projects:
+    get:
+      tags: [Projects]
+      operationId: listProjects
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationID"
+        - $ref: "#/components/parameters/AuditQuery"
+      responses:
+        "200":
+          description: Projects within an organization
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Project"
+                required: [items]
+    post:
+      tags: [Projects]
+      operationId: createProject
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+      responses:
+        "201":
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+  /organizations/{organizationID}/invitations:
+    get:
+      tags: [Organizations]
+      operationId: listOrganizationInvitations
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationID"
+      responses:
+        "200":
+          description: Invitations for an organization
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/OrganizationInvitation"
+                required: [items]
+    post:
+      tags: [Organizations]
+      operationId: createInvitation
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInvitationRequest"
+      responses:
+        "201":
+          description: Invitation created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invitation"
+  /organizations/{organizationID}/invitations/{invitationID}:
+    delete:
+      tags: [Organizations]
+      operationId: revokeInvitation
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrganizationID"
+        - $ref: "#/components/parameters/InvitationID"
+      responses:
+        "204":
+          description: Invitation revoked
+  /invitations/accept:
+    post:
+      tags: [Organizations]
+      operationId: acceptInvitation
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcceptInvitationRequest"
+      responses:
+        "204":
+          description: Invitation accepted
+  /projects/{projectID}/overview:
+    get:
+      tags: [Projects]
+      operationId: getProjectOverview
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "200":
+          description: Aggregated project overview metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectOverview"
+  /projects/{projectID}/api-keys:
+    get:
+      tags: [Projects]
+      operationId: listApiKeys
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "200":
+          description: API keys for a project
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ApiKey"
+                required: [items]
+    post:
+      tags: [Projects]
+      operationId: createApiKey
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateApiKeyRequest"
+      responses:
+        "201":
+          description: API key created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedApiKey"
+  /projects/{projectID}:
+    patch:
+      tags: [Projects]
+      operationId: updateProject
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProjectRequest"
+      responses:
+        "204":
+          description: Project updated
+    delete:
+      tags: [Projects]
+      operationId: deleteProject
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "204":
+          description: Project deleted
+  /projects/{projectID}/members:
+    get:
+      tags: [Projects]
+      operationId: listProjectMembers
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "200":
+          description: Members of a project
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ProjectMember"
+                required: [items]
+  /projects/{projectID}/members/{userID}:
+    patch:
+      tags: [Projects]
+      operationId: updateProjectMemberRole
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/UserID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProjectMemberRoleRequest"
+      responses:
+        "200":
+          description: Project member role updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectMember"
+    delete:
+      tags: [Projects]
+      operationId: removeProjectMember
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/UserID"
+      responses:
+        "204":
+          description: Project member removed
+  /projects/{projectID}/api-keys/{apiKeyID}:
+    delete:
+      tags: [Projects]
+      operationId: revokeApiKey
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/ApiKeyID"
+      responses:
+        "204":
+          description: API key revoked
+  /projects/{projectID}/buckets:
+    get:
+      tags: [Storage]
+      operationId: listBuckets
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/AuditQuery"
+      responses:
+        "200":
+          description: Buckets for a project
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Bucket"
+                required: [items]
+    post:
+      tags: [Storage]
+      operationId: createBucket
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBucketRequest"
+      responses:
+        "201":
+          description: Bucket created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bucket"
+  /projects/{projectID}/audit-logs:
+    get:
+      tags: [Projects]
+      operationId: listAuditLogs
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/AuditQuery"
+        - $ref: "#/components/parameters/AuditAction"
+        - $ref: "#/components/parameters/PaginationLimit"
+        - $ref: "#/components/parameters/PaginationOffset"
+      responses:
+        "200":
+          description: Audit logs for a project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogListResponse"
+  /buckets/{bucketID}/objects:
+    get:
+      tags: [Storage]
+      operationId: listBucketObjects
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/BucketID"
+        - $ref: "#/components/parameters/AuditQuery"
+        - $ref: "#/components/parameters/PaginationLimit"
+        - $ref: "#/components/parameters/PaginationOffset"
+      responses:
+        "200":
+          description: Bucket objects
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BucketObjectListResponse"
+    post:
+      tags: [Storage]
+      operationId: uploadBucketObject
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/BucketID"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                objectKey:
+                  type: string
+                file:
+                  type: string
+                  format: binary
+              required: [file]
+      responses:
+        "201":
+          description: Bucket object created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BucketObject"
+  /buckets/{bucketID}/object-copies:
+    post:
+      tags: [Storage]
+      operationId: copyBucketObject
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/BucketID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CopyBucketObjectRequest"
+      responses:
+        "201":
+          description: Bucket object copied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BucketObject"
+  /buckets/{bucketID}:
+    patch:
+      tags: [Storage]
+      operationId: updateBucket
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/BucketID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBucketRequest"
+      responses:
+        "204":
+          description: Bucket updated
+    delete:
+      tags: [Storage]
+      operationId: deleteBucket
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/BucketID"
+      responses:
+        "204":
+          description: Bucket deleted
+  /buckets/{bucketID}/objects/{objectKey}:
+    get:
+      tags: [Storage]
+      operationId: downloadBucketObject
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - {}
+      parameters:
+        - $ref: "#/components/parameters/BucketID"
+        - $ref: "#/components/parameters/ObjectKey"
+      responses:
+        "200":
+          description: Bucket object bytes
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+    patch:
+      tags: [Storage]
+      operationId: updateBucketObject
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/BucketID"
+        - $ref: "#/components/parameters/ObjectKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBucketObjectRequest"
+      responses:
+        "204":
+          description: Bucket object updated
+    delete:
+      tags: [Storage]
+      operationId: deleteBucketObject
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/BucketID"
+        - $ref: "#/components/parameters/ObjectKey"
+      responses:
+        "204":
+          description: Bucket object deleted
+  /projects/{projectID}/collections:
+    get:
+      tags: [Collections]
+      operationId: listCollections
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "200":
+          description: List of collections in the project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollectionListResponse"
+    post:
+      tags: [Collections]
+      operationId: createCollection
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCollectionRequest"
+      responses:
+        "201":
+          description: Collection created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Collection"
+  /projects/{projectID}/collections/{collectionID}:
+    get:
+      tags: [Collections]
+      operationId: getCollection
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/CollectionID"
+      responses:
+        "200":
+          description: Collection details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Collection"
+    patch:
+      tags: [Collections]
+      operationId: updateCollection
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/CollectionID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCollectionRequest"
+      responses:
+        "200":
+          description: Collection updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Collection"
+    delete:
+      tags: [Collections]
+      operationId: deleteCollection
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/CollectionID"
+      responses:
+        "204":
+          description: Collection deleted
+  /collections/{collectionID}/documents:
+    get:
+      tags: [Collections]
+      operationId: listDocuments
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CollectionID"
+        - $ref: "#/components/parameters/PaginationLimit"
+        - $ref: "#/components/parameters/PaginationOffset"
+      responses:
+        "200":
+          description: List of documents in the collection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentListResponse"
+    post:
+      tags: [Collections]
+      operationId: createDocument
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CollectionID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDocumentRequest"
+      responses:
+        "201":
+          description: Document created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+  /collections/{collectionID}/documents/{documentID}:
+    get:
+      tags: [Collections]
+      operationId: getDocument
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CollectionID"
+        - $ref: "#/components/parameters/DocumentID"
+      responses:
+        "200":
+          description: Document details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+    patch:
+      tags: [Collections]
+      operationId: updateDocument
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CollectionID"
+        - $ref: "#/components/parameters/DocumentID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDocumentRequest"
+      responses:
+        "200":
+          description: Document updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+    delete:
+      tags: [Collections]
+      operationId: deleteDocument
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CollectionID"
+        - $ref: "#/components/parameters/DocumentID"
+      responses:
+        "204":
+          description: Document deleted
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+  parameters:
+    OrganizationID:
+      name: organizationID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ProjectID:
+      name: projectID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    BucketID:
+      name: bucketID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ApiKeyID:
+      name: apiKeyID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CollectionID:
+      name: collectionID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DocumentID:
+      name: documentID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    InvitationID:
+      name: invitationID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    UserID:
+      name: userID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PaginationLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        maximum: 200
+        default: 50
+    PaginationOffset:
+      name: offset
+      in: query
+      required: false
+      schema:
+        type: integer
+        format: int32
+        minimum: 0
+        maximum: 100000
+        default: 0
+    AuditQuery:
+      name: q
+      in: query
+      required: false
+      schema:
+        type: string
+    AuditAction:
+      name: action
+      in: query
+      required: false
+      schema:
+        type: string
+    ObjectKey:
+      name: objectKey
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    ErrorResponse:
+      description: Error response
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required: [status]
+    ReadinessStatus:
+      type: object
+      properties:
+        status:
+          type: string
+        checks:
+          type: object
+          additionalProperties:
+            type: string
+      required: [status, checks]
+    ErrorEnvelope:
+      type: object
+      properties:
+        status:
+          type: string
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+          required: [code, message]
+      required: [status, error]
+    BootstrapRequest:
+      type: object
+      properties:
+        organizationName:
+          type: string
+        organizationSlug:
+          type: string
+        projectName:
+          type: string
+        projectSlug:
+          type: string
+        description:
+          type: string
+          nullable: true
+      required: [organizationName, organizationSlug, projectName, projectSlug]
+    BootstrapResponse:
+      type: object
+      properties:
+        organization_id:
+          type: string
+          format: uuid
+        organization_slug:
+          type: string
+        organization_name:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        project_slug:
+          type: string
+        project_name:
+          type: string
+      required:
+        - organization_id
+        - organization_slug
+        - organization_name
+        - project_id
+        - project_slug
+        - project_name
+    UserSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        authSubject:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        emailVerified:
+          type: boolean
+      required: [id, authSubject, email, name, emailVerified]
+    ProjectSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+          nullable: true
+        membershipRole:
+          type: string
+          nullable: true
+      required: [id, name, slug]
+    OrganizationSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        membershipRole:
+          type: string
+        projects:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectSummary"
+      required: [id, name, slug, membershipRole, projects]
+    MeResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/UserSummary"
+        organizations:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrganizationSummary"
+      required: [user, organizations]
+    OrganizationMembership:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+        membership_role:
+          type: string
+      required: [id, slug, name, membership_role]
+    CreateOrganizationRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+      required: [name, slug]
+    UpdateOrganizationRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+      required: [name, slug]
+    OrganizationMember:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        name:
+          type: string
+        email_verified:
+          type: boolean
+        role:
+          type: string
+          enum: [owner, admin, member]
+        joined_at:
+          type: string
+          format: date-time
+      required: [user_id, email, name, email_verified, role, joined_at]
+    UpdateOrganizationMemberRoleRequest:
+      type: object
+      properties:
+        role:
+          type: string
+          enum: [owner, admin, member]
+      required: [role]
+    CreateProjectRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+          nullable: true
+      required: [name, slug]
+    UpdateProjectRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+          nullable: true
+      required: [name, slug]
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        membership_role:
+          type: string
+          nullable: true
+      required: [id, organization_id, slug, name]
+    ProjectOverview:
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+          format: uuid
+        project_slug:
+          type: string
+        project_name:
+          type: string
+        member_count:
+          type: integer
+          format: int64
+        active_api_key_count:
+          type: integer
+          format: int64
+        bucket_count:
+          type: integer
+          format: int64
+        object_count:
+          type: integer
+          format: int64
+        object_bytes_total:
+          type: integer
+          format: int64
+        pending_invitation_count:
+          type: integer
+          format: int64
+        audit_events_24h:
+          type: integer
+          format: int64
+        last_audit_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+        - project_id
+        - organization_id
+        - project_slug
+        - project_name
+        - member_count
+        - active_api_key_count
+        - bucket_count
+        - object_count
+        - object_bytes_total
+        - pending_invitation_count
+        - audit_events_24h
+    ProjectMember:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        name:
+          type: string
+        email_verified:
+          type: boolean
+        role:
+          type: string
+          enum: [admin, developer, viewer]
+        joined_at:
+          type: string
+          format: date-time
+      required: [user_id, email, name, email_verified, role, joined_at]
+    UpdateProjectMemberRoleRequest:
+      type: object
+      properties:
+        role:
+          type: string
+          enum: [admin, developer, viewer]
+      required: [role]
+    CreateInvitationRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        orgRole:
+          type: string
+          enum: [owner, admin, member]
+        projectId:
+          type: string
+          format: uuid
+          nullable: true
+        projectRole:
+          type: string
+          enum: [admin, developer, viewer]
+          nullable: true
+        redirectUrl:
+          type: string
+          format: uri
+          nullable: true
+      required: [email, orgRole]
+    Invitation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        expiresAt:
+          type: string
+          format: date-time
+      required: [id, email, expiresAt]
+    OrganizationInvitation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+        project_name:
+          type: string
+          nullable: true
+        email:
+          type: string
+          format: email
+        org_role:
+          type: string
+          enum: [owner, admin, member]
+        project_role:
+          type: string
+          enum: [admin, developer, viewer]
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+        accepted_at:
+          type: string
+          format: date-time
+          nullable: true
+        invited_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [pending, accepted, expired]
+      required:
+        - id
+        - organization_id
+        - email
+        - org_role
+        - expires_at
+        - created_at
+        - status
+    AcceptInvitationRequest:
+      type: object
+      properties:
+        token:
+          type: string
+      required: [token]
+    CreateApiKeyRequest:
+      type: object
+      properties:
+        name:
+          type: string
+      required: [name]
+    ApiKey:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        prefix:
+          type: string
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+      required: [id, project_id, name, prefix]
+    CreatedApiKey:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        prefix:
+          type: string
+        secret:
+          type: string
+        name:
+          type: string
+      required: [id, prefix, secret, name]
+    CreateBucketRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        visibility:
+          type: string
+          enum: [private, public]
+      required: [name, slug, visibility]
+    UpdateBucketRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        visibility:
+          type: string
+          enum: [private, public]
+      required: [name, slug, visibility]
+    Bucket:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+        visibility:
+          type: string
+      required: [id, project_id, slug, name, visibility]
+    BucketObject:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        bucket_id:
+          type: string
+          format: uuid
+        object_key:
+          type: string
+        content_type:
+          type: string
+        size_bytes:
+          type: integer
+          format: int64
+        checksum_sha256:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      required: [id, bucket_id, object_key, content_type, size_bytes, checksum_sha256, created_at]
+    UpdateBucketObjectRequest:
+      type: object
+      properties:
+        newObjectKey:
+          type: string
+        destinationBucketId:
+          type: string
+          format: uuid
+          nullable: true
+      required: [newObjectKey]
+    CopyBucketObjectRequest:
+      type: object
+      properties:
+        objectKey:
+          type: string
+        newObjectKey:
+          type: string
+        destinationBucketId:
+          type: string
+          format: uuid
+          nullable: true
+      required: [objectKey, newObjectKey]
+    PaginationMetadata:
+      type: object
+      properties:
+        total:
+          type: integer
+          format: int64
+        limit:
+          type: integer
+          format: int32
+        offset:
+          type: integer
+          format: int32
+        has_more:
+          type: boolean
+      required: [total, limit, offset, has_more]
+    BucketObjectListResponse:
+      allOf:
+        - $ref: "#/components/schemas/PaginationMetadata"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/BucketObject"
+          required: [items]
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        action:
+          type: string
+        resource_type:
+          type: string
+        resource_id:
+          type: string
+        request_id:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+      required: [id, created_at, action, resource_type, resource_id, request_id, metadata]
+    AuditLogListResponse:
+      allOf:
+        - $ref: "#/components/schemas/PaginationMetadata"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/AuditLog"
+          required: [items]
+    Collection:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        schema:
+          type: object
+          description: JSON Schema for the collection
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required: [id, project_id, slug, name, schema, created_at, updated_at]
+    CreateCollectionRequest:
+      type: object
+      properties:
+        slug:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        schema:
+          type: object
+      required: [slug, name]
+    UpdateCollectionRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        schema:
+          type: object
+    Document:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        collection_id:
+          type: string
+          format: uuid
+        data:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required: [id, collection_id, data, created_at, updated_at]
+    CreateDocumentRequest:
+      type: object
+      properties:
+        data:
+          type: object
+      required: [data]
+    UpdateDocumentRequest:
+      type: object
+      properties:
+        data:
+          type: object
+      required: [data]
+    CollectionListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Collection"
+      required: [items]
+    DocumentListResponse:
+      allOf:
+        - $ref: "#/components/schemas/PaginationMetadata"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/Document"
+          required: [items]

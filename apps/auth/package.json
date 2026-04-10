@@ -1,0 +1,32 @@
+{
+  "name": "@primora/auth",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.4",
+    "@hono/zod-validator": "^0.7.2",
+    "better-auth": "^1.5.6",
+    "hono": "^4.12.9",
+    "jose": "^6.1.0",
+    "nodemailer": "^7.0.6",
+    "pg": "^8.16.3",
+    "redis": "^5.8.2",
+    "resend": "^6.1.2",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "^7.0.2",
+    "@types/node": "^24.5.2",
+    "@types/pg": "^8.15.5",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
