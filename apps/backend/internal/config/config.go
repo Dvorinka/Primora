@@ -33,7 +33,14 @@ type Config struct {
 	SMTPUser     string
 	SMTPPassword string
 	SMTPSecure   bool
+
+	EncryptionKey string
 }
+
+// devEncryptionKey is the built-in credential key for local development only.
+// Set PRIMORA_ENCRYPTION_KEY in any real deployment — credentials written with
+// this key are readable by anyone with database access.
+const devEncryptionKey = "3031323334353637383961626364656630313233343536373839616263646566"
 
 func Load() (Config, error) {
 	cfg := Config{
@@ -55,6 +62,7 @@ func Load() (Config, error) {
 		SMTPHost:              getenv("SMTP_HOST", "localhost"),
 		SMTPUser:              os.Getenv("SMTP_USER"),
 		SMTPPassword:          os.Getenv("SMTP_PASSWORD"),
+		EncryptionKey:         os.Getenv("PRIMORA_ENCRYPTION_KEY"),
 	}
 
 	smtpPort, err := strconv.Atoi(getenv("SMTP_PORT", "1025"))
@@ -102,6 +110,13 @@ func Load() (Config, error) {
 	}
 	if cfg.ResendAPIKey == "" && cfg.SMTPHost == "" {
 		missing = append(missing, "RESEND_API_KEY or SMTP_HOST")
+	}
+	if cfg.EncryptionKey == "" {
+		if cfg.Env == "production" {
+			missing = append(missing, "PRIMORA_ENCRYPTION_KEY")
+		} else {
+			cfg.EncryptionKey = devEncryptionKey
+		}
 	}
 	if len(missing) > 0 {
 		return Config{}, errors.New("missing required environment values: " + strings.Join(missing, ", "))

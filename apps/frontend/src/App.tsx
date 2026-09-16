@@ -41,6 +41,7 @@ import {
   CollectionsPage,
   DatabasesPage,
   TelemetryPage,
+  IntegrationsPage,
   LoginPage,
   MembersPage,
   ProjectsPage,
@@ -1629,6 +1630,14 @@ export default function App() {
 
           <Show when={activeView() === "telemetry"}>
             <TelemetryPage
+              projectID={activeProject()?.id}
+              canManage={canUpdateProject()}
+              demoMode={isDemo}
+            />
+          </Show>
+
+          <Show when={activeView() === "integrations"}>
+            <IntegrationsPage
               projectID={activeProject()?.id}
               canManage={canUpdateProject()}
               demoMode={isDemo}

@@ -1286,6 +1286,277 @@ paths:
           description: text/event-stream of TelemetryEvent messages
         "401":
           $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/integrations:
+    get:
+      tags: [Integrations]
+      operationId: listIntegrations
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "200":
+          description: External service integrations for the project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationListResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+    post:
+      tags: [Integrations]
+      operationId: createIntegration
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIntegrationRequest"
+      responses:
+        "201":
+          description: Integration created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Integration"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "409":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/integrations/{integrationID}:
+    delete:
+      tags: [Integrations]
+      operationId: deleteIntegration
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/IntegrationID"
+      responses:
+        "204":
+          description: Integration deleted
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/integrations/{integrationID}/test:
+    post:
+      tags: [Integrations]
+      operationId: testIntegration
+      summary: Health check — HTTP GET against the integration's base URL with stored credentials (~5s timeout). Updates status and last_health_at.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/IntegrationID"
+      responses:
+        "200":
+          description: Connectivity probe result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationTestResult"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/integrations/{integrationID}/analytics:
+    get:
+      tags: [Integrations]
+      operationId: getIntegrationAnalytics
+      summary: Read-only analytics pulled from the integration (Rybbit). The API key never leaves the server.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/IntegrationID"
+        - name: site
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Rybbit site id override; defaults to the integration's configured site, else first accessible site.
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 365
+            default: 30
+      responses:
+        "200":
+          description: Normalized analytics payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationAnalytics"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        "502":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/webhooks:
+    get:
+      tags: [Webhooks]
+      operationId: listWebhooks
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "200":
+          description: Outbound webhooks for the project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookListResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+    post:
+      tags: [Webhooks]
+      operationId: createWebhook
+      summary: Deliveries are POSTed as JSON with X-Primora-Event and X-Primora-Signature (sha256=<HMAC-SHA256 hex of the raw body, keyed by the webhook secret>). If no secret is supplied one is generated and returned once.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWebhookRequest"
+      responses:
+        "201":
+          description: Webhook created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookCreateResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "409":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/webhooks/{webhookID}:
+    patch:
+      tags: [Webhooks]
+      operationId: updateWebhook
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/WebhookID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWebhookRequest"
+      responses:
+        "200":
+          description: Webhook updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookCreateResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+    delete:
+      tags: [Webhooks]
+      operationId: deleteWebhook
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/WebhookID"
+      responses:
+        "204":
+          description: Webhook deleted
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/webhooks/{webhookID}/deliveries:
+    get:
+      tags: [Webhooks]
+      operationId: listWebhookDeliveries
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/WebhookID"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: Recent delivery attempts, newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookDeliveryListResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/webhooks/{webhookID}/test:
+    post:
+      tags: [Webhooks]
+      operationId: testWebhook
+      summary: Queues a webhook.test ping delivery.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/WebhookID"
+      responses:
+        "202":
+          description: Test delivery queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookDelivery"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/deploy-markers:
+    post:
+      tags: [Webhooks]
+      operationId: createDeployMarker
+      summary: Records a deployment marker in the audit log and fires the deploy.marker webhook event.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDeployMarkerRequest"
+      responses:
+        "201":
+          description: Marker recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeployMarker"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
 components:
   securitySchemes:
     bearerAuth:
@@ -1400,6 +1671,20 @@ components:
         type: string
     ConnectionID:
       name: connectionID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IntegrationID:
+      name: integrationID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    WebhookID:
+      name: webhookID
       in: path
       required: true
       schema:
@@ -2530,3 +2815,286 @@ components:
           items:
             $ref: "#/components/schemas/MetricPoint"
       required: [items]
+    Integration:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [rybbit]
+        name:
+          type: string
+        base_url:
+          type: string
+        site_id:
+          type: string
+          description: Connector-specific target (Rybbit site id). Optional.
+        status:
+          type: string
+          enum: [unknown, ok, error]
+        last_health_at:
+          type: string
+          format: date-time
+          nullable: true
+        has_credentials:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+      required: [id, project_id, type, name, base_url, status, has_credentials]
+    CreateIntegrationRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [rybbit]
+        base_url:
+          type: string
+          description: Root URL of the self-hosted instance, e.g. https://analytics.example.com
+        api_key:
+          type: string
+          description: Credential stored encrypted at rest; never returned by any endpoint.
+        site_id:
+          type: string
+      required: [name, type, base_url]
+    IntegrationListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Integration"
+      required: [items]
+    IntegrationTestResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        status_code:
+          type: integer
+        error:
+          type: string
+      required: [ok]
+    RybbitSite:
+      type: object
+      properties:
+        site_id:
+          type: string
+        name:
+          type: string
+        domain:
+          type: string
+      required: [site_id, name]
+    IntegrationAnalytics:
+      type: object
+      properties:
+        integration_id:
+          type: string
+          format: uuid
+        site:
+          $ref: "#/components/schemas/RybbitSite"
+        sites:
+          type: array
+          items:
+            $ref: "#/components/schemas/RybbitSite"
+        overview:
+          type: object
+          properties:
+            sessions:
+              type: number
+            pageviews:
+              type: number
+            users:
+              type: number
+            pages_per_session:
+              type: number
+            bounce_rate:
+              type: number
+            session_duration:
+              type: number
+        series:
+          type: array
+          items:
+            type: object
+            properties:
+              time:
+                type: string
+              sessions:
+                type: number
+              pageviews:
+                type: number
+              users:
+                type: number
+              bounce_rate:
+                type: number
+        top_pages:
+          type: array
+          items:
+            $ref: "#/components/schemas/RybbitMetricItem"
+        top_referrers:
+          type: array
+          items:
+            $ref: "#/components/schemas/RybbitMetricItem"
+        window_days:
+          type: integer
+      required: [integration_id, window_days]
+    RybbitMetricItem:
+      type: object
+      properties:
+        value:
+          type: string
+        count:
+          type: number
+        percentage:
+          type: number
+      required: [value, count]
+    Webhook:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        url:
+          type: string
+        events:
+          type: array
+          items:
+            type: string
+          description: Event filter (issue.created, deploy.marker, webhook.test). Empty means all events.
+        enabled:
+          type: boolean
+        has_secret:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+      required: [id, project_id, url, events, enabled, has_secret]
+    CreateWebhookRequest:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+        secret:
+          type: string
+          description: HMAC key for X-Primora-Signature. Generated when omitted.
+        events:
+          type: array
+          items:
+            type: string
+            enum: [issue.created, deploy.marker, webhook.test]
+        enabled:
+          type: boolean
+      required: [url]
+    UpdateWebhookRequest:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+        secret:
+          type: string
+          description: Replace the signing secret. Omit to keep the current one.
+        events:
+          type: array
+          items:
+            type: string
+            enum: [issue.created, deploy.marker, webhook.test]
+        enabled:
+          type: boolean
+    WebhookCreateResponse:
+      allOf:
+        - $ref: "#/components/schemas/Webhook"
+        - type: object
+          properties:
+            secret:
+              type: string
+              description: Plaintext secret — present only when Primora generated it. Store it; it cannot be recovered.
+    WebhookListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Webhook"
+      required: [items]
+    WebhookDelivery:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        webhook_id:
+          type: string
+          format: uuid
+        event_type:
+          type: string
+        payload:
+          type: object
+        status:
+          type: string
+          enum: [pending, delivered, failed]
+        attempts:
+          type: integer
+        last_status_code:
+          type: integer
+          nullable: true
+        last_error:
+          type: string
+        delivered_at:
+          type: string
+          format: date-time
+          nullable: true
+        next_retry_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+      required: [id, webhook_id, event_type, status, attempts]
+    WebhookDeliveryListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/WebhookDelivery"
+      required: [items]
+    CreateDeployMarkerRequest:
+      type: object
+      properties:
+        version:
+          type: string
+        ref:
+          type: string
+          description: Git SHA, tag or branch being deployed.
+        environment:
+          type: string
+        note:
+          type: string
+    DeployMarker:
+      type: object
+      properties:
+        version:
+          type: string
+        ref:
+          type: string
+        environment:
+          type: string
+        note:
+          type: string
+        recorded_at:
+          type: string
+          format: date-time
+      required: [recorded_at]

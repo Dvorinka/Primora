@@ -173,6 +173,25 @@ func (q *Queries) GetComponentByName(ctx context.Context, arg GetComponentByName
 	return i, err
 }
 
+const hasFingerprintSeen = `-- name: HasFingerprintSeen :one
+SELECT EXISTS(
+  SELECT 1 FROM core.events
+  WHERE project_id = $1 AND fingerprint = $2 AND type = 'error'
+) AS seen
+`
+
+type HasFingerprintSeenParams struct {
+	ProjectID   uuid.UUID `json:"project_id"`
+	Fingerprint string    `json:"fingerprint"`
+}
+
+func (q *Queries) HasFingerprintSeen(ctx context.Context, arg HasFingerprintSeenParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasFingerprintSeen, arg.ProjectID, arg.Fingerprint)
+	var seen bool
+	err := row.Scan(&seen)
+	return seen, err
+}
+
 const insertEvent = `-- name: InsertEvent :one
 INSERT INTO core.events (project_id, component_id, type, severity, message, payload, fingerprint, ts)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)

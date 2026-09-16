@@ -83,15 +83,21 @@ IMS (`~/Desktop/PROG+HTML/IMS`) is discontinued and folded in — same stack
   `primora_telemetry_stats`, `primora_metric_series` in `apps/mcp`.
 - Migration note in IMS repo README → archive, point at Primora.
 
-## Phase 4 — Integrations
+## Phase 4 — Integrations ✅
 
-- **Connector framework** — per-project external services: type, base URL,
-  credentials (encrypted at rest), health check. `core.integrations` table.
-- **Rybbit connector** — user supplies their self-hosted Rybbit URL + API key;
-  Primora pulls site stats into a project **Analytics** page and dashboard
-  widgets. Read-only, no tracking proxy.
-- **Webhooks** — outbound events (issue created, deploy marker) to arbitrary
-  URLs, so Primora can push into other self-hosted tools.
+- ~~**Connector framework**~~ — `core.integrations` (migration 00005): type,
+  base URL, AES-256-GCM-encrypted credentials (`PRIMORA_ENCRYPTION_KEY`),
+  health check (`POST …/test`). `has_credentials` only — secrets never
+  serialized.
+- ~~**Rybbit connector**~~ — self-hosted URL + API key;
+  `GET …/integrations/:id/analytics` normalizes overview/series/top
+  pages/referrers server-side. Integrations page carries the per-connector
+  analytics panel. Read-only, no tracking proxy.
+- ~~**Webhooks**~~ — `core.webhooks` + `core.webhook_deliveries`; events
+  `issue.created` (new fingerprint on ingest), `deploy.marker`
+  (`POST …/deploy-markers`), `webhook.test`. HMAC-SHA256 signature header
+  (`X-Primora-Signature`), in-process dispatcher with backoff retries, HTTPS
+  for public targets (HTTP allowed for private/self-hosted sinks).
 
 ## Phase 5 — Distribution
 

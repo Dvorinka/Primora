@@ -24,17 +24,19 @@ import (
 	"github.com/tdvorak/primora/apps/backend/internal/middleware"
 	"github.com/tdvorak/primora/apps/backend/internal/observability"
 	"github.com/tdvorak/primora/apps/backend/internal/repositories"
+	"github.com/tdvorak/primora/apps/backend/internal/secrets"
 	"github.com/tdvorak/primora/apps/backend/internal/services"
 	"github.com/tdvorak/primora/apps/backend/internal/storage"
 )
 
 type App struct {
-	Config config.Config
-	Router *gin.Engine
-	Logger *slog.Logger
-	DB     *pgxpool.Pool
-	Redis  *redis.Client
-	DBX    *dbx.Client
+	Config   config.Config
+	Router   *gin.Engine
+	Logger   *slog.Logger
+	DB       *pgxpool.Pool
+	Redis    *redis.Client
+	DBX      *dbx.Client
+	Platform *services.PlatformService
 }
 
 func Bootstrap(ctx context.Context) (*App, error) {
@@ -82,20 +84,27 @@ func Bootstrap(ctx context.Context) (*App, error) {
 	}
 	dbxClient := dbx.NewClient(logger, cfg.DBXDataDir)
 	repo := repositories.NewCoreRepository(dbPool)
-	platform := services.NewPlatformService(repo, store, services.NewMailer(cfg), os.Getenv("VITE_APP_URL"), dbxClient, firstPartyDBSeeds(cfg))
+	encryptor, err := secrets.NewEncryptor(cfg.EncryptionKey)
+	if err != nil {
+		return nil, fmt.Errorf("encryption key: %w", err)
+	}
+	platform := services.NewPlatformService(repo, store, services.NewMailer(cfg), os.Getenv("VITE_APP_URL"), dbxClient, firstPartyDBSeeds(cfg), encryptor, logger)
 
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
+	}
+	if cfg.Env != "production" && os.Getenv("PRIMORA_ENCRYPTION_KEY") == "" {
+		logger.Warn("PRIMORA_ENCRYPTION_KEY unset — using the built-in development key")
 	}
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(middleware.RequestID())
 	router.Use(middleware.Logger(logger))
-	
+
 	metrics := observability.NewMetrics()
 	router.Use(middleware.Metrics(metrics))
 	router.Use(middleware.Compression())
-	
+
 	// CORS configuration - update AllowedOrigins for production
 	corsOrigins := []string{cfg.PublicURL}
 	if cfg.Env == "development" {
@@ -104,7 +113,7 @@ func Bootstrap(ctx context.Context) (*App, error) {
 	router.Use(middleware.CORS(middleware.CORSConfig{
 		AllowedOrigins: corsOrigins,
 	}))
-	
+
 	router.Use(middleware.AuthMiddleware{
 		Queries:  repo,
 		Logger:   logger,
@@ -149,12 +158,13 @@ func Bootstrap(ctx context.Context) (*App, error) {
 	handler.Register(router)
 
 	return &App{
-		Config: cfg,
-		Router: router,
-		Logger: logger,
-		DB:     dbPool,
-		Redis:  redisClient,
-		DBX:    dbxClient,
+		Config:   cfg,
+		Router:   router,
+		Logger:   logger,
+		DB:       dbPool,
+		Redis:    redisClient,
+		DBX:      dbxClient,
+		Platform: platform,
 	}, nil
 }
 
@@ -196,6 +206,9 @@ func firstPartyDBSeeds(cfg config.Config) []services.ManagedDBSeed {
 }
 
 func (a *App) Close() error {
+	if a.Platform != nil {
+		a.Platform.Close()
+	}
 	if a.DBX != nil {
 		a.DBX.Close()
 	}

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -22,6 +23,7 @@ import (
 	"github.com/tdvorak/primora/apps/backend/internal/dbx"
 	"github.com/tdvorak/primora/apps/backend/internal/models"
 	"github.com/tdvorak/primora/apps/backend/internal/repositories"
+	"github.com/tdvorak/primora/apps/backend/internal/secrets"
 	"github.com/tdvorak/primora/apps/backend/internal/storage"
 )
 
@@ -33,6 +35,8 @@ type PlatformService struct {
 	dbx            *dbx.Client
 	managedDBSeeds []ManagedDBSeed
 	hub            *EventHub
+	enc            *secrets.Encryptor
+	dispatcher     *WebhookDispatcher
 }
 
 type BootstrapInput struct {
@@ -120,8 +124,8 @@ type CreateCollectionInput struct {
 }
 
 type UpdateCollectionInput struct {
-	Name        *string         `json:"name" validate:"omitempty,min=2"`
-	Description *string         `json:"description"`
+	Name        *string        `json:"name" validate:"omitempty,min=2"`
+	Description *string        `json:"description"`
 	Schema      map[string]any `json:"schema"`
 }
 
@@ -210,8 +214,20 @@ type InvitationSummary struct {
 	Status          string     `json:"status"`
 }
 
-func NewPlatformService(repo *repositories.CoreRepository, store *storage.LocalStore, mailer *Mailer, publicURL string, dbxClient *dbx.Client, managedDBSeeds []ManagedDBSeed) *PlatformService {
-	return &PlatformService{repo: repo, store: store, mailer: mailer, publicURL: publicURL, dbx: dbxClient, managedDBSeeds: managedDBSeeds, hub: NewEventHub()}
+func NewPlatformService(repo *repositories.CoreRepository, store *storage.LocalStore, mailer *Mailer, publicURL string, dbxClient *dbx.Client, managedDBSeeds []ManagedDBSeed, enc *secrets.Encryptor, logger *slog.Logger) *PlatformService {
+	s := &PlatformService{repo: repo, store: store, mailer: mailer, publicURL: publicURL, dbx: dbxClient, managedDBSeeds: managedDBSeeds, hub: NewEventHub(), enc: enc}
+	if enc != nil {
+		s.dispatcher = NewWebhookDispatcher(repo.Queries(), enc, logger)
+		s.dispatcher.Start(context.Background())
+	}
+	return s
+}
+
+// Close stops the webhook dispatcher. Idempotent.
+func (s *PlatformService) Close() {
+	if s.dispatcher != nil {
+		s.dispatcher.Stop()
+	}
 }
 
 func (s *PlatformService) Me(ctx context.Context, actor *models.Actor) (PlatformSummary, error) {

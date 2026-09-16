@@ -1,6 +1,6 @@
 {
   "name": "@primora/mcp",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publishConfig": {
     "access": "public"
   },
@@ -22,7 +22,7 @@
     "zod": "^4.1.5"
   },
   "devDependencies": {
-    "@primora/api-client": "0.3.0",
+    "@primora/api-client": "0.4.0",
     "@types/node": "^24.0.0",
     "esbuild": "^0.27.4",
     "typescript": "^5.9.2"

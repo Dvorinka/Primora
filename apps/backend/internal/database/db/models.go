@@ -242,6 +242,21 @@ type CoreEvent struct {
 	Ts          pgtype.Timestamptz `json:"ts"`
 }
 
+type CoreIntegration struct {
+	ID              uuid.UUID          `json:"id"`
+	ProjectID       uuid.UUID          `json:"project_id"`
+	Type            string             `json:"type"`
+	Name            string             `json:"name"`
+	BaseUrl         string             `json:"base_url"`
+	Config          []byte             `json:"config"`
+	Credentials     []byte             `json:"credentials"`
+	Status          string             `json:"status"`
+	LastHealthAt    pgtype.Timestamptz `json:"last_health_at"`
+	CreatedByUserID pgtype.UUID        `json:"created_by_user_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
 type CoreOrganization struct {
 	ID        uuid.UUID          `json:"id"`
 	Slug      string             `json:"slug"`
@@ -297,4 +312,30 @@ type CoreUser struct {
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 	LastSeenAt    pgtype.Timestamptz `json:"last_seen_at"`
+}
+
+type CoreWebhook struct {
+	ID              uuid.UUID          `json:"id"`
+	ProjectID       uuid.UUID          `json:"project_id"`
+	Url             string             `json:"url"`
+	Secret          []byte             `json:"secret"`
+	Events          []string           `json:"events"`
+	Enabled         bool               `json:"enabled"`
+	CreatedByUserID pgtype.UUID        `json:"created_by_user_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type CoreWebhookDelivery struct {
+	ID             uuid.UUID          `json:"id"`
+	WebhookID      uuid.UUID          `json:"webhook_id"`
+	EventType      string             `json:"event_type"`
+	Payload        []byte             `json:"payload"`
+	Status         string             `json:"status"`
+	Attempts       int32              `json:"attempts"`
+	LastStatusCode *int32             `json:"last_status_code"`
+	LastError      string             `json:"last_error"`
+	DeliveredAt    pgtype.Timestamptz `json:"delivered_at"`
+	NextRetryAt    pgtype.Timestamptz `json:"next_retry_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }

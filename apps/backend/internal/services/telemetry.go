@@ -89,6 +89,7 @@ func (s *PlatformService) IngestEvents(ctx context.Context, actor *models.Actor,
 	projectID := *actor.ProjectID
 
 	var inserted []TelemetryEvent
+	var newIssues []TelemetryEvent
 	err := s.repo.WithTx(ctx, func(q *db.Queries) error {
 		compCache := map[string]*uuid.UUID{}
 		for _, ev := range events {
@@ -136,6 +137,16 @@ func (s *PlatformService) IngestEvents(ctx context.Context, actor *models.Actor,
 			if len(payload) == 0 {
 				payload = json.RawMessage(`{}`)
 			}
+			newFingerprint := false
+			if ev.Type == "error" && fp != "" {
+				seen, err := q.HasFingerprintSeen(ctx, db.HasFingerprintSeenParams{
+					ProjectID:   projectID,
+					Fingerprint: fp,
+				})
+				if err == nil && !seen {
+					newFingerprint = true
+				}
+			}
 			var cid pgtype.UUID
 			if compID != nil {
 				cid = pgtype.UUID{Bytes: *compID, Valid: true}
@@ -168,6 +179,9 @@ func (s *PlatformService) IngestEvents(ctx context.Context, actor *models.Actor,
 				out.ComponentName = ev.Component
 			}
 			inserted = append(inserted, out)
+			if newFingerprint {
+				newIssues = append(newIssues, out)
+			}
 		}
 		return nil
 	})
@@ -177,6 +191,18 @@ func (s *PlatformService) IngestEvents(ctx context.Context, actor *models.Actor,
 	_ = s.repo.Queries().TouchAPIKey(ctx, *actor.APIKeyID)
 	for _, ev := range inserted {
 		s.hub.Broadcast(ev.ProjectID.String(), ev)
+	}
+	// A fresh error fingerprint is a new issue group — notify webhooks.
+	for _, issue := range newIssues {
+		s.dispatchEvent(ctx, projectID, WebhookEventIssueCreated, map[string]any{
+			"fingerprint":    issue.Fingerprint,
+			"message":        issue.Message,
+			"severity":       issue.Severity,
+			"component_id":   issue.ComponentID,
+			"component_name": issue.ComponentName,
+			"event_id":       issue.ID,
+			"first_seen":     issue.TS,
+		})
 	}
 	return len(inserted), nil
 }

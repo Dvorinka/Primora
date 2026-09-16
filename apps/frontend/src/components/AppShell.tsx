@@ -9,6 +9,7 @@ import {
   IconCollections,
   IconDatabases,
   IconTelemetry,
+  IconIntegrations,
   IconAudit,
   IconAuth,
   IconSettings,
@@ -28,6 +29,7 @@ export type ViewType =
   | "collections"
   | "databases"
   | "telemetry"
+  | "integrations"
   | "auth"
   | "audit"
   | "settings";
@@ -43,14 +45,15 @@ const projectNav: NavEntry[] = [
   { id: "dashboard", label: "Overview", icon: IconOverview },
   { id: "databases", label: "Databases", shortLabel: "DBs", icon: IconDatabases },
   { id: "telemetry", label: "Telemetry", shortLabel: "Signals", icon: IconTelemetry },
+  { id: "integrations", label: "Integrations", shortLabel: "Integr.", icon: IconIntegrations },
   { id: "storage", label: "Storage", icon: IconStorage },
   { id: "collections", label: "Collections", icon: IconCollections },
   { id: "auth", label: "Authentication", shortLabel: "Auth", icon: IconAuth },
   { id: "audit", label: "Audit log", shortLabel: "Audit", icon: IconAudit },
 ];
 
-// Instagram-style bottom bar caps at five slots — Collections and Telemetry stay reachable via Menu.
-const bottomNav: NavEntry[] = projectNav.filter((e) => e.id !== "collections" && e.id !== "telemetry");
+// Instagram-style bottom bar caps at five slots — the rest stay reachable via Menu.
+const bottomNav: NavEntry[] = projectNav.filter((e) => !["collections", "telemetry", "integrations"].includes(e.id));
 
 const workspaceNav: NavEntry[] = [
   { id: "projects", label: "Projects", icon: IconProjects },
@@ -88,6 +91,7 @@ const viewTitle: Record<ViewType, string> = {
   collections: "Collections",
   databases: "Databases",
   telemetry: "Telemetry",
+  integrations: "Integrations",
   auth: "Authentication",
   audit: "Audit log",
   settings: "Settings",

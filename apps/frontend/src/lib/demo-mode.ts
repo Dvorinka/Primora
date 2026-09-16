@@ -4,9 +4,11 @@
  */
 
 import {
+  Integration,
   OrganizationInvitation,
   OrganizationMember,
   ProjectMember,
+  WebhookDelivery,
 } from "@primora/api-client";
 import type {
   ApiKey,
@@ -15,7 +17,10 @@ import type {
   BucketObject,
   Collection,
   DBConnection,
+  DeployMarker,
   Document,
+  IntegrationAnalytics,
+  IntegrationTestResult,
   MeResponse,
   MetricPoint,
   OrganizationSummary,
@@ -25,6 +30,8 @@ import type {
   TelemetryEvent,
   TelemetryIssue,
   TelemetryStats,
+  Webhook,
+  WebhookCreateResponse,
 } from "@primora/api-client";
 
 const STORAGE_KEY = "primora_demo_mode";
@@ -420,6 +427,63 @@ const pushAudit = (action: string, resourceType: string, resourceId: string, met
 /* ------------------------------------------------------------------ */
 /* demo service — same call shapes the app expects from the real API  */
 /* ------------------------------------------------------------------ */
+
+const demoRybbitSites = [
+  { site_id: "ryb-site-1", name: "Marketing site", domain: "acme.dev" },
+  { site_id: "ryb-site-2", name: "Docs", domain: "docs.acme.dev" },
+];
+
+const demoIntegrations: Integration[] = [
+  {
+    id: "demo-int-1",
+    project_id: "demo-project-1",
+    type: Integration.type.RYBBIT,
+    name: "rybbit-prod",
+    base_url: "https://analytics.acme.dev",
+    site_id: "ryb-site-1",
+    status: Integration.status.OK,
+    last_health_at: new Date(Date.now() - 5 * 60_000).toISOString(),
+    has_credentials: true,
+    created_at: new Date(Date.now() - 14 * 86_400_000).toISOString(),
+  },
+];
+
+const demoWebhooks: Webhook[] = [
+  {
+    id: "demo-hook-1",
+    project_id: "demo-project-1",
+    url: "https://hooks.acme.dev/primora/issues",
+    events: ["issue.created"],
+    enabled: true,
+    has_secret: true,
+    created_at: new Date(Date.now() - 9 * 86_400_000).toISOString(),
+  },
+];
+
+const demoDeliveries: WebhookDelivery[] = [
+  {
+    id: "demo-del-1",
+    webhook_id: "demo-hook-1",
+    event_type: "issue.created",
+    payload: { event: "issue.created", data: { fingerprint: "9f2a1c", message: "TypeError: x is undefined" } },
+    status: WebhookDelivery.status.DELIVERED,
+    attempts: 1,
+    last_status_code: 200,
+    delivered_at: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+    created_at: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+  },
+  {
+    id: "demo-del-2",
+    webhook_id: "demo-hook-1",
+    event_type: "deploy.marker",
+    payload: { event: "deploy.marker", data: { version: "0.3.0", environment: "production" } },
+    status: WebhookDelivery.status.FAILED,
+    attempts: 3,
+    last_status_code: 503,
+    last_error: "endpoint returned 503",
+    created_at: new Date(Date.now() - 26 * 3_600_000).toISOString(),
+  },
+];
 
 class DemoService {
   private delay(ms = 250) {
@@ -1016,6 +1080,159 @@ class DemoService {
         };
       }),
     };
+  }
+
+  /* ---------------------------------------------------------- */
+  /* integrations + webhooks                                    */
+  /* ---------------------------------------------------------- */
+
+  async listIntegrations(): Promise<{ items: Integration[] }> {
+    await this.delay();
+    return { items: demoIntegrations };
+  }
+
+  async createIntegration(data: {
+    requestBody?: { name?: string; type?: string; base_url?: string; api_key?: string; site_id?: string };
+  }): Promise<Integration> {
+    await this.delay();
+    const item: Integration = {
+      id: `demo-int-${demoIntegrations.length + 1}`,
+      project_id: "demo-project-1",
+      type: Integration.type.RYBBIT,
+      name: data.requestBody?.name ?? "connector",
+      base_url: data.requestBody?.base_url ?? "https://analytics.example.com",
+      site_id: data.requestBody?.site_id || undefined,
+      status: Integration.status.UNKNOWN,
+      has_credentials: !!data.requestBody?.api_key,
+      created_at: new Date().toISOString(),
+    };
+    demoIntegrations.push(item);
+    return item;
+  }
+
+  async deleteIntegration(data: { integrationId?: string }) {
+    await this.delay();
+    const idx = demoIntegrations.findIndex((i) => i.id === data.integrationId);
+    if (idx >= 0) demoIntegrations.splice(idx, 1);
+    return {};
+  }
+
+  async testIntegration(data: { integrationId?: string }): Promise<IntegrationTestResult> {
+    await this.delay();
+    const item = demoIntegrations.find((i) => i.id === data.integrationId);
+    if (item) {
+      item.status = Integration.status.OK;
+      item.last_health_at = new Date().toISOString();
+    }
+    return { ok: true, status_code: 200 };
+  }
+
+  async getIntegrationAnalytics(data: { integrationId?: string; site?: string; days?: number }): Promise<IntegrationAnalytics> {
+    await this.delay();
+    const days = data.days ?? 30;
+    const site = demoRybbitSites.find((s) => s.site_id === data.site) ?? demoRybbitSites[0];
+    return {
+      integration_id: data.integrationId ?? "demo-int-1",
+      site,
+      sites: demoRybbitSites,
+      overview: {
+        sessions: 18_432,
+        pageviews: 61_908,
+        users: 12_077,
+        pages_per_session: 3.4,
+        bounce_rate: 41.2,
+        session_duration: 187,
+      },
+      series: Array.from({ length: days }, (_, i) => ({
+        time: new Date(Date.now() - (days - 1 - i) * 86_400_000).toISOString(),
+        sessions: 480 + Math.round(Math.sin(i / 3) * 120),
+        pageviews: 1600 + Math.round(Math.sin(i / 3) * 500),
+        users: 320 + Math.round(Math.sin(i / 4) * 90),
+        bounce_rate: 38 + Math.sin(i / 5) * 6,
+      })),
+      top_pages: [
+        { value: "/", count: 14_203 },
+        { value: "/pricing", count: 6_811 },
+        { value: "/docs/getting-started", count: 5_902 },
+        { value: "/blog/launch", count: 3_114 },
+      ],
+      top_referrers: [
+        { value: "google.com", count: 7_540 },
+        { value: "news.ycombinator.com", count: 2_307 },
+        { value: "github.com", count: 1_882 },
+      ],
+      window_days: days,
+    };
+  }
+
+  async listWebhooks(): Promise<{ items: Webhook[] }> {
+    await this.delay();
+    return { items: demoWebhooks };
+  }
+
+  async createWebhook(data: {
+    requestBody?: { url?: string; secret?: string; events?: string[]; enabled?: boolean };
+  }): Promise<WebhookCreateResponse> {
+    await this.delay();
+    const generated = !data.requestBody?.secret;
+    const hook: Webhook = {
+      id: `demo-hook-${demoWebhooks.length + 1}`,
+      project_id: "demo-project-1",
+      url: data.requestBody?.url ?? "https://hooks.example.com/primora",
+      events: data.requestBody?.events ?? [],
+      enabled: data.requestBody?.enabled ?? true,
+      has_secret: true,
+      created_at: new Date().toISOString(),
+    };
+    demoWebhooks.push(hook);
+    return { ...hook, secret: generated ? "demo-secret-" + Math.random().toString(36).slice(2, 18) : undefined };
+  }
+
+  async updateWebhook(data: { webhookId?: string; requestBody?: Partial<Webhook> & { secret?: string } }): Promise<WebhookCreateResponse> {
+    await this.delay();
+    const hook = demoWebhooks.find((w) => w.id === data.webhookId);
+    if (hook && data.requestBody) {
+      if (data.requestBody.url !== undefined) hook.url = data.requestBody.url;
+      if (data.requestBody.events !== undefined) hook.events = data.requestBody.events;
+      if (data.requestBody.enabled !== undefined) hook.enabled = data.requestBody.enabled;
+      if (data.requestBody.secret !== undefined) hook.has_secret = true;
+    }
+    return { ...(hook as Webhook) };
+  }
+
+  async deleteWebhook(data: { webhookId?: string }) {
+    await this.delay();
+    const idx = demoWebhooks.findIndex((w) => w.id === data.webhookId);
+    if (idx >= 0) demoWebhooks.splice(idx, 1);
+    return {};
+  }
+
+  async listWebhookDeliveries(data: { webhookId?: string }): Promise<{ items: WebhookDelivery[] }> {
+    await this.delay();
+    return { items: demoDeliveries.filter((d) => d.webhook_id === data.webhookId) };
+  }
+
+  async testWebhook(data: { webhookId?: string }): Promise<WebhookDelivery> {
+    await this.delay();
+    const delivery: WebhookDelivery = {
+      id: `demo-del-${Date.now()}`,
+      webhook_id: data.webhookId ?? "demo-hook-1",
+      event_type: "webhook.test",
+      status: WebhookDelivery.status.DELIVERED,
+      attempts: 1,
+      last_status_code: 200,
+      delivered_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+    };
+    demoDeliveries.unshift(delivery);
+    return delivery;
+  }
+
+  async createDeployMarker(data: {
+    requestBody?: { version?: string; ref?: string; environment?: string; note?: string };
+  }): Promise<DeployMarker> {
+    await this.delay();
+    return { ...(data.requestBody ?? {}), recorded_at: new Date().toISOString() };
   }
 }
 

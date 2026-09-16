@@ -4,12 +4,14 @@ import { z } from "zod";
 
 import {
   CreateBucketRequest,
+  IntegrationsService,
   OpenAPI,
   OrganizationsService,
   PlatformService,
   ProjectsService,
   StorageService,
   TelemetryService,
+  WebhooksService,
 } from "@primora/api-client";
 
 import { configureClient, loadConfig, type McpConfig } from "./config.js";
@@ -69,7 +71,7 @@ async function apiFetch(path: string): Promise<Response> {
   return res;
 }
 
-const server = new McpServer({ name: "primora", version: "0.2.0" });
+const server = new McpServer({ name: "primora", version: "0.4.0" });
 
 server.registerTool(
   "primora_whoami",
@@ -446,6 +448,283 @@ server.registerTool(
     try {
       return ok(
         await TelemetryService.getTelemetryMetricSeries({ projectId: projectId(p), name, window }),
+      );
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+/* ---------------------------------------------------------- */
+/* integrations                                               */
+/* ---------------------------------------------------------- */
+
+const integrationRef = z.string().describe("Integration id (see primora_list_integrations)");
+
+server.registerTool(
+  "primora_list_integrations",
+  {
+    description: "List external service connectors attached to a project",
+    inputSchema: { projectId: z.string().optional() },
+  },
+  async ({ projectId: p }) => {
+    try {
+      return ok(await IntegrationsService.listIntegrations({ projectId: projectId(p) }));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
+  "primora_create_integration",
+  {
+    description:
+      "Attach an external service. Credentials are stored encrypted and never returned.",
+    inputSchema: {
+      name: z.string(),
+      baseUrl: z.string().describe("Root URL of the self-hosted instance"),
+      apiKey: z.string().optional().describe("Stored encrypted; never returned by any endpoint"),
+      siteId: z.string().optional().describe("Connector-specific target (Rybbit site id)"),
+      projectId: z.string().optional(),
+    },
+  },
+  async ({ name, baseUrl, apiKey, siteId, projectId: p }) => {
+    try {
+      return ok(
+        await IntegrationsService.createIntegration({
+          projectId: projectId(p),
+          requestBody: {
+            name,
+            type: "rybbit",
+            base_url: baseUrl,
+            api_key: apiKey,
+            site_id: siteId,
+          },
+        }),
+      );
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
+  "primora_delete_integration",
+  {
+    description: "Remove a connector from the project",
+    inputSchema: { integrationId: integrationRef, projectId: z.string().optional() },
+  },
+  async ({ integrationId, projectId: p }) => {
+    try {
+      await IntegrationsService.deleteIntegration({ projectId: projectId(p), integrationId });
+      return ok({ deleted: integrationId });
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
+  "primora_test_integration",
+  {
+    description: "Run the connector health check against its base URL and update its status",
+    inputSchema: { integrationId: integrationRef, projectId: z.string().optional() },
+  },
+  async ({ integrationId, projectId: p }) => {
+    try {
+      return ok(await IntegrationsService.testIntegration({ projectId: projectId(p), integrationId }));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
+  "primora_integration_analytics",
+  {
+    description:
+      "Normalized analytics from a Rybbit connector — overview, series, top pages and referrers",
+    inputSchema: {
+      integrationId: integrationRef,
+      site: z.string().optional().describe("Rybbit site id override"),
+      days: z.number().int().optional().describe("Lookback window (default 30)"),
+      projectId: z.string().optional(),
+    },
+  },
+  async ({ integrationId, site, days, projectId: p }) => {
+    try {
+      return ok(
+        await IntegrationsService.getIntegrationAnalytics({
+          projectId: projectId(p),
+          integrationId,
+          site,
+          days,
+        }),
+      );
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+/* ---------------------------------------------------------- */
+/* webhooks                                                   */
+/* ---------------------------------------------------------- */
+
+const webhookRef = z.string().describe("Webhook id (see primora_list_webhooks)");
+const webhookEvents = z
+  .array(z.enum(["issue.created", "deploy.marker", "webhook.test"]))
+  .describe("Event filter — empty means every event");
+
+server.registerTool(
+  "primora_list_webhooks",
+  {
+    description: "List outbound webhooks for a project",
+    inputSchema: { projectId: z.string().optional() },
+  },
+  async ({ projectId: p }) => {
+    try {
+      return ok(await WebhooksService.listWebhooks({ projectId: projectId(p) }));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
+  "primora_create_webhook",
+  {
+    description:
+      "Create an outbound webhook. Omit secret to generate one — it is returned once.",
+    inputSchema: {
+      url: z.string().describe("HTTPS endpoint (http allowed only for loopback sinks)"),
+      secret: z.string().optional(),
+      events: webhookEvents.optional(),
+      enabled: z.boolean().optional(),
+      projectId: z.string().optional(),
+    },
+  },
+  async ({ url, secret, events, enabled, projectId: p }) => {
+    try {
+      return ok(
+        await WebhooksService.createWebhook({
+          projectId: projectId(p),
+          requestBody: { url, secret, events, enabled },
+        }),
+      );
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
+  "primora_update_webhook",
+  {
+    description:
+      "Update a webhook — url, event filter, enabled flag, or rotate the secret (empty string regenerates it)",
+    inputSchema: {
+      webhookId: webhookRef,
+      url: z.string().optional(),
+      secret: z.string().optional(),
+      events: webhookEvents.optional(),
+      enabled: z.boolean().optional(),
+      projectId: z.string().optional(),
+    },
+  },
+  async ({ webhookId, url, secret, events, enabled, projectId: p }) => {
+    try {
+      return ok(
+        await WebhooksService.updateWebhook({
+          projectId: projectId(p),
+          webhookId,
+          requestBody: { url, secret, events, enabled },
+        }),
+      );
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
+  "primora_delete_webhook",
+  {
+    description: "Delete a webhook and stop future deliveries",
+    inputSchema: { webhookId: webhookRef, projectId: z.string().optional() },
+  },
+  async ({ webhookId, projectId: p }) => {
+    try {
+      await WebhooksService.deleteWebhook({ projectId: projectId(p), webhookId });
+      return ok({ deleted: webhookId });
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
+  "primora_list_webhook_deliveries",
+  {
+    description: "Recent delivery attempts for a webhook — status, attempts, HTTP code, errors",
+    inputSchema: {
+      webhookId: webhookRef,
+      limit: z.number().int().optional(),
+      projectId: z.string().optional(),
+    },
+  },
+  async ({ webhookId, limit, projectId: p }) => {
+    try {
+      return ok(
+        await WebhooksService.listWebhookDeliveries({
+          projectId: projectId(p),
+          webhookId,
+          limit,
+        }),
+      );
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
+  "primora_test_webhook",
+  {
+    description: "Queue a webhook.test delivery to verify the endpoint and signature",
+    inputSchema: { webhookId: webhookRef, projectId: z.string().optional() },
+  },
+  async ({ webhookId, projectId: p }) => {
+    try {
+      return ok(await WebhooksService.testWebhook({ projectId: projectId(p), webhookId }));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
+  "primora_create_deploy_marker",
+  {
+    description:
+      "Record a deployment (version/ref/environment) and fire the deploy.marker webhook event",
+    inputSchema: {
+      version: z.string().optional(),
+      ref: z.string().optional().describe("Git sha or tag"),
+      environment: z.string().optional(),
+      note: z.string().optional(),
+      projectId: z.string().optional(),
+    },
+  },
+  async ({ version, ref, environment, note, projectId: p }) => {
+    try {
+      if (!version && !ref) throw new Error("pass version or ref");
+      return ok(
+        await WebhooksService.createDeployMarker({
+          projectId: projectId(p),
+          requestBody: { version, ref, environment, note },
+        }),
       );
     } catch (e) {
       return fail(e);

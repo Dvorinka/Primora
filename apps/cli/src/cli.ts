@@ -116,7 +116,7 @@ cli
   .action(cmdAuditList);
 
 cli.help();
-cli.version("0.2.0");
+cli.version("0.4.0");
 
 // cac only matches the first positional token, so "orgs list" cannot be a
 // command name. Fold "group verb" pairs into "group:verb" before parsing —

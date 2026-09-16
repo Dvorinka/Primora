@@ -128,6 +128,7 @@ export const IconMoon = icon(() => (<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 002
 export const IconLayers = icon(() => (<><path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" /></>));
 export const IconZap = icon(() => (<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />));
 export const IconTelemetry = icon(() => (<polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />));
+export const IconIntegrations = icon(() => (<><path d="M9 17H7A5 5 0 0 1 7 7h2" /><path d="M15 7h2a5 5 0 1 1 0 10h-2" /><line x1="8" x2="16" y1="12" y2="12" /></>));
 export const IconClock = icon(() => (<><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></>));
 export const IconLink = icon(() => (<><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" /></>));
 export const IconOrganization = icon(() => (<><rect x="4" y="2" width="16" height="20" rx="2" /><path d="M9 22v-4h6v4" /><path d="M8 6h.01M16 6h.01M12 6h.01M12 10h.01M8 10h.01M16 10h.01M8 14h.01M16 14h.01M12 14h.01" /></>));
