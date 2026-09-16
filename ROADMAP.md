@@ -54,7 +54,7 @@ as REST (pattern already proven in IMS's `internal/app/dbx.go`).
 - **SQL editor** ✅ — query editor with ⌘/Ctrl+Enter, result grid, row detail.
 - **Redis console** ✅ — command input + output history for redis-type
   connections.
-- **Visual overview** — schema graph: tables as nodes, foreign keys as edges.
+- **Visual overview** ✅ — schema graph: tables as nodes, foreign keys as edges.
 - **First-party connections** ✅ — the platform's own Postgres and Dragonfly
   auto-register as connections on every project, so "put Postgres in it and
   it runs Postgres" works out of the box.
