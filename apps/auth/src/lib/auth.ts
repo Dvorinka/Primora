@@ -1,5 +1,5 @@
 import { betterAuth } from "better-auth";
-import { jwt } from "better-auth/plugins";
+import { admin, jwt } from "better-auth/plugins";
 import { getMigrations } from "better-auth/db/migration";
 import { Pool } from "pg";
 
@@ -95,11 +95,22 @@ export const auth = betterAuth({
         },
       },
     }),
+    admin(),
   ],
 });
 
 export async function runAuthMigrations() {
   const migrations = await getMigrations(auth.options);
   await migrations.runMigrations();
+}
+
+/** Bootstrap admins by email — run after migrations so the role column exists. */
+export async function promoteAdminEmails() {
+  const emails = (env.AUTH_ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+  if (emails.length === 0) return;
+  await authPool.query(`update "user" set role = 'admin' where lower(email) = any($1)`, [emails]);
 }
 

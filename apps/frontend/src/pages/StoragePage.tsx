@@ -1,440 +1,547 @@
-import { Show, For, createSignal } from "solid-js";
-import { Button, Card, Input, Select, Badge, Table, EmptyState, Message, Modal, FileInput } from "../components";
-import type { Bucket, BucketObject } from "@primora/api-client";
+import { For, Show, createMemo, createSignal } from "solid-js";
+import type {
+  Bucket,
+  BucketObject,
+  BucketObjectListResponse,
+} from "@primora/api-client";
+import { Badge } from "../components/Badge";
+import { Modal, ModalFooter } from "../components/Modal";
+import { Input, Select } from "../components/Input";
+import {
+  IconPlus,
+  IconStorage,
+  IconFile,
+  IconUpload,
+  IconDownload,
+  IconTrash,
+  IconCopy,
+  IconEdit,
+  IconChevronRight,
+  IconEye,
+  IconLink,
+} from "../components/Icons";
+
+type ObjectPreview =
+  | { kind: "image"; objectURL: string }
+  | { kind: "text"; text: string; truncated: boolean }
+  | { kind: "unsupported"; message: string };
+
+interface BucketInput {
+  name: string;
+  slug: string;
+  visibility: string;
+}
 
 interface StoragePageProps {
   buckets?: Bucket[];
-  objects?: BucketObject[];
+  objects: BucketObject[];
   selectedBucketID?: string;
   selectedObjectKey?: string;
-  bucketInput: { name: string; slug: string; visibility: string };
-  bucketEditInput: { name: string; slug: string; visibility: string };
+  bucketInput: BucketInput;
+  bucketEditInput: BucketInput;
   storageMessage: string;
   storagePending: boolean;
   canUpdateBucket: boolean;
-  objectsPage?: { items: BucketObject[]; total: number; limit: number; offset: number };
-  objectPreview?: any;
-  onBucketInputChange: (field: string, value: string) => void;
-  onBucketEditInputChange: (field: string, value: string) => void;
-  onCreateBucket: (e: SubmitEvent) => void;
-  onUpdateBucket: (e: SubmitEvent) => void;
+  objectsPage?: BucketObjectListResponse;
+  objectPreview?: ObjectPreview;
+  previewLoading?: boolean;
+  renameObjectKey: string;
+  moveDestinationBucketID: string;
+  onBucketInputChange: (field: keyof BucketInput, value: string) => void;
+  onBucketEditInputChange: (field: keyof BucketInput, value: string) => void;
+  onCreateBucket: () => void;
+  onUpdateBucket: () => void;
   onDeleteBucket: () => void;
   onSelectBucket: (id: string) => void;
   onSelectObject: (key: string) => void;
   onUploadObject: (file: File) => void;
   onDeleteObject: (key: string) => void;
   onDownloadObject: (bucketId: string, key: string) => void;
+  onCopyObjectURL: (object: BucketObject) => void;
+  onMoveObject: () => void;
+  onCopyObject: () => void;
+  onRenameObjectKeyChange: (value: string) => void;
+  onMoveDestinationChange: (value: string) => void;
   onObjectPageChange: (offset: number) => void;
   formatBytes: (bytes: number) => string;
-  formatDate: (date?: string | null) => string;
+  formatDate: (value?: string | null) => string;
 }
 
+const OBJECTS_PAGE_SIZE = 25;
+
 export function StoragePage(props: StoragePageProps) {
-  const [showCreateBucketModal, setShowCreateBucketModal] = createSignal(false);
-  const [showUploadModal, setShowUploadModal] = createSignal(false);
-  const [showObjectPreview, setShowObjectPreview] = createSignal(false);
-  const [searchQuery, setSearchQuery] = createSignal("");
-  const [selectedFile, setSelectedFile] = createSignal<File | undefined>();
+  const [createOpen, setCreateOpen] = createSignal(false);
+  const [bucketSettingsOpen, setBucketSettingsOpen] = createSignal(false);
+  const [objectSearch, setObjectSearch] = createSignal("");
+  const [dragging, setDragging] = createSignal(false);
 
-  const filteredBuckets = () => {
-    const query = searchQuery().toLowerCase();
-    if (!query || !props.buckets) return props.buckets || [];
-    return props.buckets.filter(b => 
-      b.name.toLowerCase().includes(query) || 
-      b.slug.toLowerCase().includes(query)
-    );
-  };
+  const activeBucket = createMemo(() =>
+    (props.buckets ?? []).find((b) => b.id === props.selectedBucketID),
+  );
 
-  const handleCreateBucket = (e: SubmitEvent) => {
-    props.onCreateBucket(e);
-    setShowCreateBucketModal(false);
-  };
+  const selectedObject = createMemo(() =>
+    props.objects.find((o) => o.object_key === props.selectedObjectKey),
+  );
 
-  const handleUpload = () => {
-    const file = selectedFile();
-    if (file) {
-      props.onUploadObject(file);
-      setSelectedFile(undefined);
-      setShowUploadModal(false);
-    }
-  };
+  const filteredObjects = createMemo(() => {
+    const q = objectSearch().toLowerCase();
+    if (!q) return props.objects;
+    return props.objects.filter((o) => o.object_key.toLowerCase().includes(q));
+  });
 
-  const getVisibilityBadge = (visibility: string) => {
-    return visibility === 'public' ? 
-      <Badge variant="success">Public</Badge> : 
-      <Badge variant="secondary">Private</Badge>;
+  const pageMeta = () => props.objectsPage;
+  const currentPage = () => Math.floor((pageMeta()?.offset ?? 0) / OBJECTS_PAGE_SIZE) + 1;
+  const totalPages = () =>
+    Math.max(1, Math.ceil((pageMeta()?.total ?? props.objects.length) / OBJECTS_PAGE_SIZE));
+
+  const handleFiles = (files: FileList | null) => {
+    const file = files?.[0];
+    if (file) props.onUploadObject(file);
   };
 
   return (
-    <div class="space-y-6">
-      {/* Header */}
-      <div class="flex items-center justify-between">
+    <div class="page">
+      <div class="page-header">
         <div>
-          <h1 class="text-3xl font-bold text-gray-900">Storage</h1>
-          <p class="text-gray-600 mt-1">Manage buckets and objects</p>
+          <h1 class="page-title">Storage</h1>
+          <p class="page-description">
+            Buckets hold files on your own filesystem — no external object store required.
+          </p>
         </div>
-        <div class="flex gap-3">
-          <Show when={props.selectedBucketID}>
-            <Button variant="secondary" onClick={() => setShowUploadModal(true)}>
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
-              Upload File
-            </Button>
-          </Show>
-          <Button onClick={() => setShowCreateBucketModal(true)}>
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-            </svg>
-            New Bucket
-          </Button>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Buckets List */}
-        <div class="lg:col-span-1 space-y-4">
-          <Card class="p-4">
-            <Input
-              placeholder="Search buckets..."
-              value={searchQuery()}
-              onInput={(e) => setSearchQuery(e.currentTarget.value)}
-              class="w-full"
-            />
-          </Card>
-
-          <Card class="p-4">
-            <h2 class="text-lg font-semibold mb-4">Buckets</h2>
-            <Show
-              when={filteredBuckets().length > 0}
-              fallback={
-                <EmptyState
-                  icon={
-                    <svg class="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 3h4m-4 4h4" />
-                    </svg>
-                  }
-                  title="No buckets"
-                  description="Create a bucket to store files"
-                />
-              }
-            >
-              <div class="space-y-2">
-                <For each={filteredBuckets()}>
-                  {(bucket) => (
-                    <button
-                      onClick={() => props.onSelectBucket(bucket.id)}
-                      class={`w-full text-left p-3 rounded-lg border transition-all ${
-                        props.selectedBucketID === bucket.id
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      <div class="flex items-center justify-between mb-1">
-                        <span class="font-medium text-gray-900">{bucket.name}</span>
-                        {getVisibilityBadge(bucket.visibility)}
-                      </div>
-                      <p class="text-xs text-gray-600">{bucket.slug}</p>
-                      <p class="text-xs text-gray-500 mt-1">
-                        {bucket.object_count} objects • {props.formatBytes(bucket.size_bytes)}
-                      </p>
-                    </button>
-                  )}
-                </For>
-              </div>
-            </Show>
-          </Card>
-
-          {/* Bucket Settings */}
-          <Show when={props.selectedBucketID && props.canUpdateBucket}>
-            <Card class="p-4">
-              <h2 class="text-lg font-semibold mb-4">Bucket Settings</h2>
-              <form class="space-y-3" onSubmit={props.onUpdateBucket}>
-                <Input
-                  label="Name"
-                  value={props.bucketEditInput.name}
-                  onInput={(e) => props.onBucketEditInputChange('name', e.currentTarget.value)}
-                  disabled={props.storagePending}
-                />
-                <Input
-                  label="Slug"
-                  value={props.bucketEditInput.slug}
-                  onInput={(e) => props.onBucketEditInputChange('slug', e.currentTarget.value)}
-                  disabled={props.storagePending}
-                />
-                <Select
-                  label="Visibility"
-                  value={props.bucketEditInput.visibility}
-                  onChange={(e) => props.onBucketEditInputChange('visibility', e.currentTarget.value)}
-                  disabled={props.storagePending}
-                >
-                  <option value="private">Private</option>
-                  <option value="public">Public</option>
-                </Select>
-                <div class="flex flex-col gap-2">
-                  <Button type="submit" variant="primary" size="sm" disabled={props.storagePending}>
-                    Update
-                  </Button>
-                  <Button type="button" variant="danger" size="sm" onClick={props.onDeleteBucket} disabled={props.storagePending}>
-                    Delete Bucket
-                  </Button>
-                </div>
-              </form>
-            </Card>
-          </Show>
-        </div>
-
-        {/* Objects List */}
-        <div class="lg:col-span-2">
-          <Show
-            when={props.selectedBucketID}
-            fallback={
-              <Card class="p-12">
-                <EmptyState
-                  icon={
-                    <svg class="w-16 h-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 3h4m-4 4h4" />
-                    </svg>
-                  }
-                  title="Select a bucket"
-                  description="Choose a bucket from the left to view its contents"
-                />
-              </Card>
-            }
+        <div class="page-actions">
+          <button
+            class="btn btn-primary"
+            onClick={() => setCreateOpen(true)}
+            disabled={!props.canUpdateBucket}
           >
-            <Card>
-              <div class="p-4 border-b border-gray-200">
-                <div class="flex items-center justify-between">
-                  <h2 class="text-lg font-semibold">Objects</h2>
-                  <Button size="sm" onClick={() => setShowUploadModal(true)}>
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                    </svg>
-                    Upload
-                  </Button>
-                </div>
-              </div>
-
-              <Show
-                when={(props.objects?.length ?? 0) > 0}
-                fallback={
-                  <div class="p-12">
-                    <EmptyState
-                      icon={
-                        <svg class="w-16 h-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                        </svg>
-                      }
-                      title="No objects"
-                      description="Upload files to this bucket"
-                      action={
-                        <Button onClick={() => setShowUploadModal(true)}>Upload File</Button>
-                      }
-                    />
-                  </div>
-                }
-              >
-                <Table>
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Size</th>
-                      <th>Type</th>
-                      <th>Modified</th>
-                      <th class="text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <For each={props.objects}>
-                      {(object) => (
-                        <tr class="hover:bg-gray-50">
-                          <td>
-                            <button
-                              onClick={() => {
-                                props.onSelectObject(object.object_key);
-                                setShowObjectPreview(true);
-                              }}
-                              class="flex items-center gap-2 text-left hover:text-blue-600"
-                            >
-                              <svg class="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                              </svg>
-                              <span class="font-medium">{object.object_key}</span>
-                            </button>
-                          </td>
-                          <td class="text-sm text-gray-600">{props.formatBytes(object.size_bytes)}</td>
-                          <td>
-                            <Badge variant="secondary" class="text-xs">
-                              {object.content_type || 'unknown'}
-                            </Badge>
-                          </td>
-                          <td class="text-sm text-gray-600">{props.formatDate(object.updated_at)}</td>
-                          <td class="text-right">
-                            <div class="flex items-center justify-end gap-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => props.onDownloadObject(props.selectedBucketID!, object.object_key)}
-                              >
-                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                </svg>
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => props.onDeleteObject(object.object_key)}
-                              >
-                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </For>
-                  </tbody>
-                </Table>
-
-                {/* Pagination */}
-                <Show when={props.objectsPage && props.objectsPage.total > props.objectsPage.limit}>
-                  <div class="p-4 border-t border-gray-200 flex items-center justify-between">
-                    <p class="text-sm text-gray-600">
-                      Showing {props.objectsPage!.offset + 1} to {Math.min(props.objectsPage!.offset + props.objectsPage!.limit, props.objectsPage!.total)} of {props.objectsPage!.total}
-                    </p>
-                    <div class="flex gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={props.objectsPage!.offset === 0}
-                        onClick={() => props.onObjectPageChange(Math.max(0, props.objectsPage!.offset - props.objectsPage!.limit))}
-                      >
-                        Previous
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={props.objectsPage!.offset + props.objectsPage!.limit >= props.objectsPage!.total}
-                        onClick={() => props.onObjectPageChange(props.objectsPage!.offset + props.objectsPage!.limit)}
-                      >
-                        Next
-                      </Button>
-                    </div>
-                  </div>
-                </Show>
-              </Show>
-            </Card>
-          </Show>
+            <IconPlus class="w-4 h-4" />
+            New bucket
+          </button>
         </div>
       </div>
 
       <Show when={props.storageMessage}>
-        <Message variant="neutral">{props.storageMessage}</Message>
+        <div class="message message-neutral">{props.storageMessage}</div>
       </Show>
 
-      {/* Create Bucket Modal */}
-      <Modal open={showCreateBucketModal()} onClose={() => setShowCreateBucketModal(false)} title="Create New Bucket">
-        <form class="space-y-4" onSubmit={handleCreateBucket}>
+      <div class="storage-grid">
+        {/* Bucket list */}
+        <div class="card card-flush">
+          <div
+            class="card-header"
+            style="padding:1rem 1rem 0.75rem;margin-bottom:0;border-bottom:1px solid var(--border)"
+          >
+            <span class="card-header-title">Buckets</span>
+          </div>
+          <div class="p-1.5">
+            <For
+              each={props.buckets ?? []}
+              fallback={
+                <div class="p-4 text-center">
+                  <p class="text-xs text-text-3">No buckets yet</p>
+                </div>
+              }
+            >
+              {(bucket) => (
+                <button
+                  class={`nav-item w-full ${bucket.id === props.selectedBucketID ? "active" : ""}`}
+                  onClick={() => props.onSelectBucket(bucket.id)}
+                >
+                  <IconStorage class="w-4 h-4" />
+                  <span class="flex-1 truncate">{bucket.name}</span>
+                  <Badge variant={bucket.visibility === "public" ? "success" : "neutral"}>
+                    {bucket.visibility}
+                  </Badge>
+                </button>
+              )}
+            </For>
+          </div>
+        </div>
+
+        {/* Objects */}
+        <div class="card card-flush" style="min-height:28rem">
+          <Show
+            when={activeBucket()}
+            fallback={
+              <div class="empty-state" style="min-height:28rem">
+                <div class="empty-state-icon">
+                  <IconStorage class="w-5 h-5" />
+                </div>
+                <p class="empty-state-title">Select a bucket</p>
+                <p class="empty-state-description">
+                  Choose a bucket on the left to browse and manage its objects.
+                </p>
+              </div>
+            }
+          >
+            <div
+              class="card-header"
+              style="padding:1rem 1.25rem;margin-bottom:0;border-bottom:1px solid var(--border)"
+            >
+              <div class="flex items-center justify-between gap-3 w-full flex-wrap">
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="card-header-title">{activeBucket()!.name}</span>
+                    <Badge variant={activeBucket()!.visibility === "public" ? "success" : "neutral"}>
+                      {activeBucket()!.visibility}
+                    </Badge>
+                  </div>
+                  <span class="card-header-description">
+                    <code>{activeBucket()!.slug}</code> · {pageMeta()?.total ?? props.objects.length} objects
+                  </span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button
+                    class="icon-btn"
+                    title="Bucket settings"
+                    onClick={() => setBucketSettingsOpen(true)}
+                    disabled={!props.canUpdateBucket}
+                  >
+                    <IconEdit class="w-4 h-4" />
+                  </button>
+                  <label class="btn btn-secondary btn-sm" style="cursor:pointer">
+                    <IconUpload class="w-3.5 h-3.5" />
+                    Upload
+                    <input
+                      type="file"
+                      class="hidden"
+                      onChange={(e) => handleFiles(e.currentTarget.files)}
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* drop zone */}
+            <div
+              class={`mx-4 mt-3 rounded-lg border border-dashed px-4 py-3 text-center text-xs transition-colors ${
+                dragging() ? "text-accent" : "text-text-3"
+              }`}
+              style={`border-color:${dragging() ? "var(--accent)" : "var(--border-strong)"};background:${dragging() ? "var(--accent-muted)" : "transparent"}`}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragging(true);
+              }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragging(false);
+                handleFiles(e.dataTransfer?.files ?? null);
+              }}
+            >
+              Drag & drop a file here to upload it to <code>{activeBucket()!.slug}</code>
+            </div>
+
+            <div class="px-4 pt-3">
+              <Input
+                placeholder="Filter objects…"
+                class="input-sm"
+                value={objectSearch()}
+                onInput={(e) => setObjectSearch(e.currentTarget.value)}
+              />
+            </div>
+
+            <div class="table-container mt-1">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Key</th>
+                    <th style="width:1%">Type</th>
+                    <th style="width:1%">Size</th>
+                    <th style="width:1%">Created</th>
+                    <th style="width:1%" />
+                  </tr>
+                </thead>
+                <tbody>
+                  <For
+                    each={filteredObjects()}
+                    fallback={
+                      <tr>
+                        <td colspan={5} class="py-10 text-center text-text-3">
+                          This bucket is empty. Upload your first object.
+                        </td>
+                      </tr>
+                    }
+                  >
+                    {(object) => (
+                      <tr
+                        class={`clickable ${object.object_key === props.selectedObjectKey ? "bg-surface-2" : ""}`}
+                        onClick={() => props.onSelectObject(object.object_key)}
+                      >
+                        <td>
+                          <div class="flex items-center gap-2.5">
+                            <IconFile class="w-4 h-4 text-text-3 flex-shrink-0" />
+                            <span class="font-mono text-xs text-text-1 truncate" style="max-width:22rem">
+                              {object.object_key}
+                            </span>
+                          </div>
+                        </td>
+                        <td class="text-xs text-text-3 whitespace-nowrap">{object.content_type}</td>
+                        <td class="text-xs text-text-2 whitespace-nowrap">{props.formatBytes(object.size_bytes)}</td>
+                        <td class="text-xs text-text-3 whitespace-nowrap">{props.formatDate(object.created_at)}</td>
+                        <td>
+                          <IconChevronRight class="w-4 h-4 text-text-3" />
+                        </td>
+                      </tr>
+                    )}
+                  </For>
+                </tbody>
+              </table>
+            </div>
+
+            <Show when={totalPages() > 1}>
+              <div class="flex items-center justify-between px-4 py-3 border-t" style="border-color:var(--border)">
+                <span class="text-xs text-text-3">
+                  Page {currentPage()} of {totalPages()}
+                </span>
+                <div class="flex gap-1">
+                  <button
+                    class="btn btn-ghost btn-sm"
+                    disabled={currentPage() <= 1}
+                    onClick={() => props.onObjectPageChange((currentPage() - 2) * OBJECTS_PAGE_SIZE)}
+                  >
+                    Previous
+                  </button>
+                  <button
+                    class="btn btn-ghost btn-sm"
+                    disabled={!pageMeta()?.has_more}
+                    onClick={() => props.onObjectPageChange(currentPage() * OBJECTS_PAGE_SIZE)}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </Show>
+          </Show>
+        </div>
+      </div>
+
+      {/* Object inspector */}
+      <Show when={selectedObject()}>
+        <div class="card">
+          <div class="card-header">
+            <div class="flex items-center justify-between w-full gap-3 flex-wrap">
+              <div class="min-w-0">
+                <div class="card-header-title font-mono" style="font-size:0.875rem">
+                  {selectedObject()!.object_key}
+                </div>
+                <div class="card-header-description">
+                  {selectedObject()!.content_type} · {props.formatBytes(selectedObject()!.size_bytes)} ·{" "}
+                  {props.formatDate(selectedObject()!.created_at)}
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <button
+                  class="btn btn-secondary btn-sm"
+                  onClick={() =>
+                    props.onDownloadObject(props.selectedBucketID!, selectedObject()!.object_key)
+                  }
+                >
+                  <IconDownload class="w-3.5 h-3.5" />
+                  Download
+                </button>
+                <Show when={activeBucket()?.visibility === "public"}>
+                  <button
+                    class="btn btn-secondary btn-sm"
+                    onClick={() => props.onCopyObjectURL(selectedObject()!)}
+                  >
+                    <IconLink class="w-3.5 h-3.5" />
+                    Copy URL
+                  </button>
+                </Show>
+                <button
+                  class="btn btn-danger btn-sm"
+                  onClick={() => props.onDeleteObject(selectedObject()!.object_key)}
+                  disabled={!props.canUpdateBucket}
+                >
+                  <IconTrash class="w-3.5 h-3.5" />
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid gap-4 md:grid-cols-2">
+            {/* preview */}
+            <div>
+              <p class="label">Preview</p>
+              <div class="card card-flush flex items-center justify-center" style="min-height:12rem;background:var(--bg-panel)">
+                <Show
+                  when={!props.previewLoading}
+                  fallback={<span class="spinner" />}
+                >
+                  <Show
+                    when={props.objectPreview?.kind === "image"}
+                    fallback={
+                      <Show
+                        when={props.objectPreview?.kind === "text"}
+                        fallback={
+                          <div class="p-6 text-center">
+                            <IconEye class="w-6 h-6 mx-auto text-text-3 mb-2" />
+                            <p class="text-xs text-text-3">
+                              {props.objectPreview?.kind === "unsupported"
+                                ? props.objectPreview.message
+                                : "Select an object to preview"}
+                            </p>
+                          </div>
+                        }
+                      >
+                        <pre class="code-block w-full border-0" style="max-height:20rem;overflow:auto;border-radius:0">
+                          {(props.objectPreview as { kind: "text"; text: string }).text}
+                        </pre>
+                      </Show>
+                    }
+                  >
+                    <img
+                      src={(props.objectPreview as { kind: "image"; objectURL: string }).objectURL}
+                      alt={selectedObject()!.object_key}
+                      style="max-height:20rem;max-width:100%;object-fit:contain"
+                    />
+                  </Show>
+                </Show>
+              </div>
+            </div>
+
+            {/* move/copy */}
+            <Show when={props.canUpdateBucket}>
+              <div>
+                <p class="label">Rename, move or copy</p>
+                <div class="space-y-3">
+                  <Input
+                    label="New object key"
+                    value={props.renameObjectKey}
+                    onInput={(e) => props.onRenameObjectKeyChange(e.currentTarget.value)}
+                  />
+                  <Select
+                    label="Destination bucket"
+                    value={props.moveDestinationBucketID}
+                    onChange={(e) => props.onMoveDestinationChange(e.currentTarget.value)}
+                  >
+                    <For each={props.buckets ?? []}>
+                      {(bucket) => (
+                        <option value={bucket.id}>{bucket.name}</option>
+                      )}
+                    </For>
+                  </Select>
+                  <div class="flex gap-2">
+                    <button class="btn btn-secondary btn-sm" onClick={props.onMoveObject}>
+                      Move / rename
+                    </button>
+                    <button class="btn btn-ghost btn-sm" onClick={props.onCopyObject}>
+                      <IconCopy class="w-3.5 h-3.5" />
+                      Copy
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </Show>
+          </div>
+        </div>
+      </Show>
+
+      {/* Create bucket modal */}
+      <Modal
+        open={createOpen()}
+        onClose={() => setCreateOpen(false)}
+        title="Create bucket"
+        description="Buckets are folders on the server's filesystem with metadata in Postgres."
+      >
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            props.onCreateBucket();
+            setCreateOpen(false);
+          }}
+          class="space-y-4"
+        >
           <Input
-            label="Bucket Name"
-            placeholder="my-bucket"
+            label="Bucket name"
+            placeholder="User avatars"
             value={props.bucketInput.name}
-            onInput={(e) => {
-              const name = e.currentTarget.value;
-              props.onBucketInputChange('name', name);
-              const slug = name.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-');
-              props.onBucketInputChange('slug', slug);
-            }}
-            disabled={props.storagePending}
+            onInput={(e) => props.onBucketInputChange("name", e.currentTarget.value)}
             required
           />
           <Input
-            label="Bucket Slug"
-            placeholder="my-bucket"
+            label="Slug"
+            placeholder="avatars"
             value={props.bucketInput.slug}
-            onInput={(e) => props.onBucketInputChange('slug', e.currentTarget.value)}
-            disabled={props.storagePending}
+            onInput={(e) => props.onBucketInputChange("slug", e.currentTarget.value)}
             required
           />
           <Select
             label="Visibility"
             value={props.bucketInput.visibility}
-            onChange={(e) => props.onBucketInputChange('visibility', e.currentTarget.value)}
-            disabled={props.storagePending}
+            onChange={(e) => props.onBucketInputChange("visibility", e.currentTarget.value)}
           >
-            <option value="private">Private</option>
-            <option value="public">Public</option>
+            <option value="private">private — authenticated download only</option>
+            <option value="public">public — anyone with the URL can download</option>
           </Select>
-          <div class="flex gap-3 justify-end pt-4">
-            <Button type="button" variant="ghost" onClick={() => setShowCreateBucketModal(false)}>
+          <ModalFooter>
+            <button type="button" class="btn btn-ghost" onClick={() => setCreateOpen(false)}>
               Cancel
-            </Button>
-            <Button type="submit" variant="primary" disabled={props.storagePending}>
-              {props.storagePending ? "Creating..." : "Create Bucket"}
-            </Button>
-          </div>
+            </button>
+            <button type="submit" class="btn btn-primary" disabled={props.storagePending}>
+              Create bucket
+            </button>
+          </ModalFooter>
         </form>
       </Modal>
 
-      {/* Upload Modal */}
-      <Modal open={showUploadModal()} onClose={() => setShowUploadModal(false)} title="Upload File">
-        <div class="space-y-4">
-          <FileInput
-            label="Select File"
-            onChange={(file) => setSelectedFile(file)}
-            accept="*/*"
-          />
-          <Show when={selectedFile()}>
-            <div class="p-4 bg-gray-50 rounded-lg">
-              <p class="text-sm font-medium text-gray-900">{selectedFile()!.name}</p>
-              <p class="text-xs text-gray-600 mt-1">
-                {props.formatBytes(selectedFile()!.size)} • {selectedFile()!.type || 'unknown type'}
-              </p>
-            </div>
-          </Show>
-          <div class="flex gap-3 justify-end pt-4">
-            <Button type="button" variant="ghost" onClick={() => setShowUploadModal(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              disabled={!selectedFile() || props.storagePending}
-              onClick={handleUpload}
-            >
-              {props.storagePending ? "Uploading..." : "Upload"}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Object Preview Modal */}
-      <Modal 
-        open={showObjectPreview()} 
-        onClose={() => setShowObjectPreview(false)} 
-        title="Object Preview"
-        size="lg"
+      {/* Bucket settings modal */}
+      <Modal
+        open={bucketSettingsOpen()}
+        onClose={() => setBucketSettingsOpen(false)}
+        title="Bucket settings"
       >
-        <Show when={props.objectPreview}>
-          <div class="space-y-4">
-            <Show when={props.objectPreview.kind === 'image'}>
-              <img src={props.objectPreview.objectURL} alt="Preview" class="w-full rounded-lg" />
-            </Show>
-            <Show when={props.objectPreview.kind === 'text'}>
-              <pre class="p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto text-sm">
-                {props.objectPreview.text}
-              </pre>
-              <Show when={props.objectPreview.truncated}>
-                <p class="text-sm text-yellow-600">Preview truncated. Download to view full content.</p>
-              </Show>
-            </Show>
-            <Show when={props.objectPreview.kind === 'unsupported'}>
-              <div class="text-center p-8">
-                <p class="text-gray-600">{props.objectPreview.message}</p>
-              </div>
-            </Show>
-          </div>
-        </Show>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            props.onUpdateBucket();
+            setBucketSettingsOpen(false);
+          }}
+          class="space-y-4"
+        >
+          <Input
+            label="Bucket name"
+            value={props.bucketEditInput.name}
+            onInput={(e) => props.onBucketEditInputChange("name", e.currentTarget.value)}
+            required
+          />
+          <Input
+            label="Slug"
+            value={props.bucketEditInput.slug}
+            onInput={(e) => props.onBucketEditInputChange("slug", e.currentTarget.value)}
+            required
+          />
+          <Select
+            label="Visibility"
+            value={props.bucketEditInput.visibility}
+            onChange={(e) => props.onBucketEditInputChange("visibility", e.currentTarget.value)}
+          >
+            <option value="private">private</option>
+            <option value="public">public</option>
+          </Select>
+          <ModalFooter align="between">
+            <button
+              type="button"
+              class="btn btn-danger"
+              onClick={() => {
+                setBucketSettingsOpen(false);
+                props.onDeleteBucket();
+              }}
+            >
+              Delete bucket
+            </button>
+            <div class="flex gap-2">
+              <button type="button" class="btn btn-ghost" onClick={() => setBucketSettingsOpen(false)}>
+                Cancel
+              </button>
+              <button type="submit" class="btn btn-primary" disabled={props.storagePending}>
+                Save
+              </button>
+            </div>
+          </ModalFooter>
+        </form>
       </Modal>
     </div>
   );

@@ -1,71 +1,113 @@
 # Primora
 
-Primora is a hybrid monorepo MVP with:
+A self-hosted backend platform for building products — auth, Postgres-backed APIs, object storage, JSON document collections, API keys, and a full audit log behind one dashboard. Inspired by the UX of Appwrite and Supabase, with no hosted tier: your data stays on your hardware.
 
-- `apps/backend`: Go + Gin domain API, migrations, sqlc, local object storage
-- `apps/auth`: Better Auth on Hono with PostgreSQL, JWT minting, email/password, and OAuth wiring
-- `apps/frontend`: **Production-ready SolidJS UI** with comprehensive component library
-- `packages/api-client`: OpenAPI-generated TypeScript client
-- `packages/shared-types`: shared cross-runtime constants
-- `infra`: Nginx reverse proxy and local stack wiring
+```
+Browser ──▶ Nginx ──▶ Frontend (SolidJS + Vite)
+                 ├──▶ Auth service (Better Auth + Hono)
+                 └──▶ API (Go + Gin) ──▶ PostgreSQL
+                                     ──▶ DragonflyDB (Redis-compatible cache)
+                                     ──▶ Local filesystem object storage
+```
 
-## ✨ Frontend Highlights
+## What you get
 
-The Primora frontend features a **world-class, production-ready UI system**:
+- **Organizations & projects** — top-level workspaces containing projects, members, and scoped roles (`owner`/`admin`/`member` org roles, `admin`/`developer`/`viewer` project roles).
+- **Auth** — email/password plus optional GitHub, Google, Discord, and Microsoft OAuth via Better Auth. JWTs minted by the auth service are verified by the Go API against JWKS.
+- **Storage** — S3-style buckets and objects backed by your local filesystem, with public/private visibility and downloadable URLs.
+- **Collections** — schema-flexible JSON documents stored in Postgres JSONB.
+- **API keys** — `pk_live_`/`pk_test_` credentials with prefixes; secrets are shown once.
+- **Audit log** — every mutating request recorded with actor, resource, request ID, and timestamp; CSV/JSON export from the dashboard.
+- **Generated client** — the TypeScript client is generated from `apps/backend/openapi/openapi.yaml`, so the API contract is the source of truth.
+- **Demo mode** — a fully client-side workspace (`?demo=true` or `VITE_DEMO_MODE=true`) for trying the UI without a backend.
 
-- 🎨 **16 Polished Components** - Modal, Tooltip, Dropdown, Progress, Tabs, Toast, and more
-- ♿ **100% Accessible** - WCAG AA compliant with full keyboard navigation
-- 📱 **Mobile-First** - Responsive design optimized for all screen sizes
-- 🚀 **Optimized** - 44.93 KB gzipped bundle with ~850ms build time
-- 🎭 **Dark-First Design** - Refined color palette with signature accent blue
-- 📚 **Fully Documented** - Comprehensive guides and API reference
+## Quick start (Docker)
 
-**See**: `FRONTEND_SUMMARY.md` for quick overview, `FRONTEND_ENHANCEMENTS.md` for details
+Prerequisites: Docker with the Compose plugin.
 
-## Run locally
+```bash
+./scripts/setup.sh          # creates .env, generates secrets, starts the stack
+```
 
-1. Copy `.env.example` to `.env`
-2. Fill `JWT_SECRET`, `BETTER_AUTH_SECRET`, and optional OAuth / Resend keys
-3. Optional: tune throttling with `USER_RATE_LIMIT_PER_MINUTE` and `API_KEY_RATE_LIMIT_PER_MINUTE` (`0` disables each limiter)
-4. Optional: Enable demo mode by setting `VITE_DEMO_MODE=true` in `.env` (allows testing without backend)
-5. Run `docker compose up --build`
-6. Open `http://localhost`
-7. Open `http://localhost/mailpit/` for local email inspection
+or manually:
 
-## Demo Mode
+```bash
+cp .env.example .env        # fill JWT_SECRET and BETTER_AUTH_SECRET
+docker compose up -d --build
+```
 
-Primora includes a fully functional demo mode for testing without a backend:
+Then open `http://localhost`. Mailpit is at `http://localhost/mailpit/` for local email.
 
-**Enable Demo Mode:**
-- Set `VITE_DEMO_MODE=true` in `.env` file (enabled by default on startup)
-- Or visit `http://localhost/?demo=true`
-- Or click "Try Demo Mode" when backend connection fails
-
-**Demo Mode Features:**
-- Complete UI with simulated data
-- 2 organizations, 3 projects, 5 members
-- Storage buckets, API keys, audit logs
-- All CRUD operations work (simulated)
-- Realistic API delays (300ms)
-- Blue banner shows "Demo Mode Active"
-
-**Exit Demo Mode:**
-- Click "Exit Demo" button in the banner
-- Or remove `?demo=true` from URL and refresh
+If ports `5432` or `6379` are already in use on your machine, set `POSTGRES_PORT` and `DRAGONFLY_PORT` in `.env` — only the host bindings change.
 
 ## Verification
 
-- Backend liveness: `http://localhost/api/v1/health/liveness`
-- Backend readiness: `http://localhost/api/v1/health/readiness`
-- Auth health: `http://localhost/auth-health`
-- OpenAPI: `http://localhost/api/v1/openapi.yaml`
-- Project overview (replace ID): `http://localhost/api/v1/projects/{projectID}/overview`
+| Check | Endpoint |
+|---|---|
+| Frontend | `http://localhost/` |
+| Backend liveness | `http://localhost/api/v1/health/liveness` |
+| Backend readiness | `http://localhost/api/v1/health/readiness` |
+| Auth health | `http://localhost/auth-health` |
+| OpenAPI spec | `http://localhost/api/v1/openapi.yaml` |
 
-## Local Quality Checks
+## Local development
 
-- Full gate (tests + typecheck + build + generated drift): `npm run check`
-- Backend tests: `cd apps/backend && go test ./...`
-- Frontend typecheck: `cd apps/frontend && npx tsc -p tsconfig.json --noEmit`
-- Workspace build: `npm run build`
-- Regenerate sqlc: `npm run generate:sqlc`
-- Regenerate API client: `npm run generate:client`
+```bash
+docker compose up -d postgres dragonfly mailpit   # infrastructure only
+cd apps/backend && go run ./cmd/server            # API on :8080
+npm run dev:auth                                  # auth on :3001
+npm run dev:frontend                              # dashboard (Vite)
+```
+
+Point the frontend at the stack by adding to `apps/frontend/.env.local`:
+
+```env
+VITE_API_BASE_URL=http://localhost/api/v1
+VITE_AUTH_BASE_URL=http://localhost/auth
+```
+
+Or skip all of it: `http://localhost:<vite-port>/?demo=true` runs entirely in the browser.
+
+## CLI
+
+```bash
+npm run build --workspace @primora/cli   # → apps/cli/dist/cli.js
+node apps/cli/dist/cli.js login          # or: npx primora login once published
+```
+
+Supports session sign-in (`primora login`) and API-key mode (`primora login --api-key prm_…` or `PRIMORA_API_KEY`). Context lives in `~/.config/primora/config.json`; `primora use` picks org + project interactively. Commands: `orgs`, `projects`, `buckets`, `objects` (list/upload/download/rm), `keys`, `audit list --follow`. Every command accepts `--json`.
+
+## Quality gate
+
+```bash
+npm run check        # backend tests + frontend typecheck + build + generated-code drift check
+npm test             # workspace tests
+npm run generate:sqlc    # regenerate sqlc after changing queries/schema
+npm run generate:client  # regenerate the TS client after changing openapi.yaml
+```
+
+## Repository layout
+
+```
+apps/
+  backend/     Go + Gin API, sqlc, migrations, object storage
+  auth/        Better Auth on Hono (sessions, JWT, OAuth, mail)
+  frontend/    SolidJS + Tailwind dashboard
+  cli/         `primora` CLI — login, context, projects, buckets, objects, keys, audit
+packages/
+  api-client/  OpenAPI-generated TypeScript client (do not hand-edit)
+  shared-types/
+infra/nginx/   Reverse proxy config
+scripts/       setup.sh, verify-production-ready.sh
+```
+
+## Documentation
+
+- [QUICK_START.md](QUICK_START.md) — setup, configuration, troubleshooting
+- [project_backend.md](project_backend.md) / [project_frontend.md](project_frontend.md) — original design specs
+- [CONTRIBUTING.md](CONTRIBUTING.md) — development workflow
+- `apps/backend/openapi/openapi.yaml` — API contract
+
+## License
+
+[MIT](LICENSE)

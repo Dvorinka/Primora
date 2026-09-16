@@ -22,6 +22,9 @@ type gzipWriter struct {
 }
 
 func (g *gzipWriter) Write(data []byte) (int, error) {
+	// Compressed output never matches a Content-Length set by a handler —
+	// drop it so net/http falls back to chunked encoding.
+	g.Header().Del("Content-Length")
 	return g.writer.Write(data)
 }
 

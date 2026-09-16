@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { OpenAPI } from '@primora/api-client';
+import '../api';
 
 describe('API Configuration', () => {
   beforeEach(() => {

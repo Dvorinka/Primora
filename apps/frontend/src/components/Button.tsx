@@ -16,7 +16,7 @@ const variantClasses: Record<ButtonVariant, string> = {
   secondary: "btn-secondary",
   ghost: "btn-ghost",
   danger: "btn-danger",
-  outline: "btn-secondary border border-gray-300",
+  outline: "btn-secondary",
 };
 
 const sizeClasses: Record<ButtonSize, string> = {

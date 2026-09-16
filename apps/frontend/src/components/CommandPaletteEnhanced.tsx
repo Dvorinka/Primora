@@ -1,7 +1,8 @@
 import { Show, For, createSignal, createEffect, onCleanup } from "solid-js";
 import { Portal } from "solid-js/web";
+import { IconSearch } from "./Icons";
 
-interface Command {
+export interface PaletteCommand {
   id: string;
   label: string;
   description?: string;
@@ -12,7 +13,7 @@ interface Command {
 }
 
 interface CommandPaletteEnhancedProps {
-  commands: Command[];
+  commands: PaletteCommand[];
   isOpen: boolean;
   onClose: () => void;
 }
@@ -20,45 +21,40 @@ interface CommandPaletteEnhancedProps {
 export function CommandPaletteEnhanced(props: CommandPaletteEnhancedProps) {
   const [search, setSearch] = createSignal("");
   const [selectedIndex, setSelectedIndex] = createSignal(0);
+  let inputRef: HTMLInputElement | undefined;
 
   const filteredCommands = () => {
-    const query = search().toLowerCase();
+    const query = search().toLowerCase().trim();
     if (!query) return props.commands;
 
-    return props.commands.filter(cmd => {
-      const searchText = `${cmd.label} ${cmd.description || ""} ${cmd.keywords?.join(" ") || ""}`.toLowerCase();
+    return props.commands.filter((cmd) => {
+      const searchText =
+        `${cmd.label} ${cmd.description || ""} ${cmd.keywords?.join(" ") || ""}`.toLowerCase();
       return searchText.includes(query);
     });
   };
 
   const groupedCommands = () => {
-    const commands = filteredCommands();
-    const groups: Record<string, Command[]> = {};
-
-    commands.forEach(cmd => {
+    const groups: Record<string, PaletteCommand[]> = {};
+    for (const cmd of filteredCommands()) {
       const category = cmd.category || "General";
-      if (!groups[category]) {
-        groups[category] = [];
-      }
-      groups[category].push(cmd);
-    });
-
+      (groups[category] ??= []).push(cmd);
+    }
     return groups;
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (!props.isOpen) return;
-
     const commands = filteredCommands();
 
     switch (e.key) {
       case "ArrowDown":
         e.preventDefault();
-        setSelectedIndex(i => Math.min(i + 1, commands.length - 1));
+        setSelectedIndex((i) => Math.min(i + 1, commands.length - 1));
         break;
       case "ArrowUp":
         e.preventDefault();
-        setSelectedIndex(i => Math.max(i - 1, 0));
+        setSelectedIndex((i) => Math.max(i - 1, 0));
         break;
       case "Enter":
         e.preventDefault();
@@ -79,6 +75,7 @@ export function CommandPaletteEnhanced(props: CommandPaletteEnhancedProps) {
       document.addEventListener("keydown", handleKeyDown);
       setSearch("");
       setSelectedIndex(0);
+      queueMicrotask(() => inputRef?.focus());
     }
 
     onCleanup(() => {
@@ -86,84 +83,111 @@ export function CommandPaletteEnhanced(props: CommandPaletteEnhancedProps) {
     });
   });
 
+  createEffect(() => {
+    search();
+    setSelectedIndex(0);
+  });
+
   return (
     <Show when={props.isOpen}>
       <Portal>
-        <div class="fixed inset-0 z-50 flex items-start justify-center pt-20 px-4 animate-fade-in">
-          {/* Backdrop */}
+        <div class="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] px-4 animate-fade-in">
           <div
-            class="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            class="absolute inset-0"
+            style="background:rgba(0,0,0,0.55);backdrop-filter:blur(3px)"
             onClick={props.onClose}
           />
 
-          {/* Command Palette */}
-          <div class="relative w-full max-w-2xl bg-white rounded-xl shadow-2xl animate-scale-in">
-            {/* Search Input */}
-            <div class="p-4 border-b border-gray-200">
-              <div class="flex items-center gap-3">
-                <svg class="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                <input
-                  type="text"
-                  placeholder="Search commands..."
-                  value={search()}
-                  onInput={(e) => setSearch(e.currentTarget.value)}
-                  class="flex-1 bg-transparent border-none outline-none text-lg"
-                  autofocus
-                />
-                <kbd class="px-2 py-1 text-xs bg-gray-100 rounded border border-gray-300">ESC</kbd>
-              </div>
+          <div
+            class="relative w-full animate-scale-in"
+            style="max-width:34rem;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-lg);box-shadow:var(--shadow-overlay);overflow:hidden"
+            role="dialog"
+            aria-label="Command palette"
+          >
+            {/* search */}
+            <div
+              class="flex items-center gap-3 px-4"
+              style="border-bottom:1px solid var(--border);height:3.25rem"
+            >
+              <IconSearch class="w-4 h-4 text-text-3" />
+              <input
+                ref={inputRef}
+                type="text"
+                placeholder="Type a command or search…"
+                value={search()}
+                onInput={(e) => setSearch(e.currentTarget.value)}
+                class="flex-1 bg-transparent border-none outline-none text-sm"
+                style="color:var(--text-1)"
+              />
+              <kbd class="kbd">ESC</kbd>
             </div>
 
-            {/* Commands List */}
-            <div class="max-h-96 overflow-y-auto">
+            {/* results */}
+            <div style="max-height:20rem;overflow-y:auto">
               <Show
-                when={Object.keys(groupedCommands()).length > 0}
+                when={filteredCommands().length > 0}
                 fallback={
-                  <div class="p-8 text-center text-gray-500">
-                    <svg class="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <p>No commands found</p>
+                  <div class="empty-state" style="padding:2.5rem 1.5rem">
+                    <p class="empty-state-title">No results</p>
+                    <p class="empty-state-description">
+                      Nothing matches “{search()}”.
+                    </p>
                   </div>
                 }
               >
                 <For each={Object.entries(groupedCommands())}>
                   {([category, commands]) => (
                     <div>
-                      <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase bg-gray-50">
+                      <div
+                        class="px-4 py-1.5"
+                        style="font-size:0.625rem;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-3)"
+                      >
                         {category}
                       </div>
                       <For each={commands}>
-                        {(command, index) => {
-                          const globalIndex = filteredCommands().indexOf(command);
+                        {(command) => {
+                          const globalIndex = () =>
+                            filteredCommands().indexOf(command);
                           return (
                             <button
-                              class={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                                selectedIndex() === globalIndex
-                                  ? "bg-blue-50 border-l-2 border-blue-500"
-                                  : "hover:bg-gray-50"
-                              }`}
+                              class="w-full flex items-center gap-3 px-4 text-left"
+                              style={`padding-top:0.55rem;padding-bottom:0.55rem;background:${
+                                selectedIndex() === globalIndex()
+                                  ? "var(--accent-muted)"
+                                  : "transparent"
+                              };border:none;cursor:pointer`}
                               onClick={() => {
                                 command.action();
                                 props.onClose();
                               }}
-                              onMouseEnter={() => setSelectedIndex(globalIndex)}
+                              onMouseEnter={() => setSelectedIndex(globalIndex())}
                             >
                               <Show when={command.icon}>
-                                <div class="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-gray-100 rounded-lg">
+                                <span
+                                  class="flex items-center justify-center rounded-md flex-shrink-0"
+                                  style="width:1.75rem;height:1.75rem;background:var(--surface-2);color:var(--text-2)"
+                                >
                                   {command.icon}
-                                </div>
+                                </span>
                               </Show>
-                              <div class="flex-1 min-w-0">
-                                <div class="font-medium text-gray-900">{command.label}</div>
+                              <span class="flex-1 min-w-0">
+                                <span
+                                  class="block truncate"
+                                  style="font-size:0.8125rem;font-weight:500;color:var(--text-1)"
+                                >
+                                  {command.label}
+                                </span>
                                 <Show when={command.description}>
-                                  <div class="text-sm text-gray-600 truncate">{command.description}</div>
+                                  <span
+                                    class="block truncate"
+                                    style="font-size:0.75rem;color:var(--text-3)"
+                                  >
+                                    {command.description}
+                                  </span>
                                 </Show>
-                              </div>
-                              <Show when={selectedIndex() === globalIndex}>
-                                <kbd class="px-2 py-1 text-xs bg-gray-100 rounded border border-gray-300">↵</kbd>
+                              </span>
+                              <Show when={selectedIndex() === globalIndex()}>
+                                <kbd class="kbd">↵</kbd>
                               </Show>
                             </button>
                           );
@@ -175,17 +199,20 @@ export function CommandPaletteEnhanced(props: CommandPaletteEnhancedProps) {
               </Show>
             </div>
 
-            {/* Footer */}
-            <div class="p-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between text-xs text-gray-600">
-              <div class="flex items-center gap-4">
+            {/* footer */}
+            <div
+              class="flex items-center justify-between px-4 text-xs"
+              style="height:2.5rem;border-top:1px solid var(--border);color:var(--text-3)"
+            >
+              <div class="flex items-center gap-3">
                 <span class="flex items-center gap-1">
-                  <kbd class="px-1.5 py-0.5 bg-white rounded border border-gray-300">↑</kbd>
-                  <kbd class="px-1.5 py-0.5 bg-white rounded border border-gray-300">↓</kbd>
-                  Navigate
+                  <kbd class="kbd">↑</kbd>
+                  <kbd class="kbd">↓</kbd>
+                  navigate
                 </span>
                 <span class="flex items-center gap-1">
-                  <kbd class="px-1.5 py-0.5 bg-white rounded border border-gray-300">↵</kbd>
-                  Select
+                  <kbd class="kbd">↵</kbd>
+                  select
                 </span>
               </div>
               <span>{filteredCommands().length} commands</span>

@@ -83,7 +83,7 @@ export function Modal(props: ModalProps) {
 
           {/* Modal content */}
           <div
-            class={`relative w-full ${sizeClasses[size()]} bg-surface-1 border border-border-strong rounded-xl shadow-elevated animate-scale-in ${local.class ?? ""}`}
+            class={`relative w-full ${sizeClasses[size()]} bg-surface border border-border-strong rounded-xl shadow-lg animate-scale-in ${local.class ?? ""}`}
             {...rest}
           >
             {/* Header */}
@@ -91,19 +91,19 @@ export function Modal(props: ModalProps) {
               <div class="flex items-start justify-between p-6 border-b border-border">
                 <div class="flex-1">
                   <Show when={local.title}>
-                    <h2 id="modal-title" class="text-xl font-semibold text-text-primary">
+                    <h2 id="modal-title" class="text-xl font-semibold text-text-1">
                       {local.title}
                     </h2>
                   </Show>
                   <Show when={local.description}>
-                    <p id="modal-description" class="mt-1.5 text-sm text-text-secondary">
+                    <p id="modal-description" class="mt-1.5 text-sm text-text-2">
                       {local.description}
                     </p>
                   </Show>
                 </div>
                 <Show when={showClose()}>
                   <button
-                    class="ml-4 p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors"
+                    class="ml-4 p-2 rounded-lg text-text-3 hover:text-text-1 hover:bg-surface-2 transition-colors"
                     onClick={local.onClose}
                     aria-label="Close modal"
                   >

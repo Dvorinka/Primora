@@ -1,236 +1,294 @@
-import { Show, For, createSignal } from "solid-js";
-import { Button, Card, Input, Textarea, Badge, EmptyState, Message, Modal } from "../components";
+import { For, Show, createSignal } from "solid-js";
 import type { ProjectSummary } from "@primora/api-client";
+import { Badge } from "../components/Badge";
+import { Modal, ModalFooter } from "../components/Modal";
+import { Input, Textarea } from "../components/Input";
+import { IconPlus, IconProjects, IconArrowRight, IconEdit, IconTrash } from "../components/Icons";
+
+interface ProjectInput {
+  name: string;
+  slug: string;
+  description: string;
+}
 
 interface ProjectsPageProps {
   projects: ProjectSummary[];
   selectedProjectID?: string;
-  projectInput: { name: string; slug: string; description: string };
-  projectEditInput: { name: string; slug: string; description: string };
+  projectInput: ProjectInput;
+  projectEditInput: ProjectInput;
   projectMessage: string;
   projectPending: boolean;
   canUpdateProject: boolean;
-  onProjectInputChange: (field: string, value: string) => void;
-  onProjectEditInputChange: (field: string, value: string) => void;
-  onCreateProject: (e: SubmitEvent) => void;
-  onUpdateProject: (e: SubmitEvent) => void;
+  onProjectInputChange: (field: keyof ProjectInput, value: string) => void;
+  onProjectEditInputChange: (field: keyof ProjectInput, value: string) => void;
+  onCreateProject: (event: SubmitEvent) => void;
+  onUpdateProject: (event: SubmitEvent) => void;
   onDeleteProject: () => void;
   onSelectProject: (id: string) => void;
   onNavigateToDashboard: () => void;
 }
 
 export function ProjectsPage(props: ProjectsPageProps) {
-  const [showCreateModal, setShowCreateModal] = createSignal(false);
-  const [searchQuery, setSearchQuery] = createSignal("");
+  const [createOpen, setCreateOpen] = createSignal(false);
+  const [settingsOpen, setSettingsOpen] = createSignal(false);
+  const [confirmDelete, setConfirmDelete] = createSignal(false);
 
-  const filteredProjects = () => {
-    const query = searchQuery().toLowerCase();
-    if (!query) return props.projects;
-    return props.projects.filter(p => 
-      p.name.toLowerCase().includes(query) || 
-      p.slug.toLowerCase().includes(query) ||
-      p.description?.toLowerCase().includes(query)
-    );
+  const activeProject = () =>
+    props.projects.find((p) => p.id === props.selectedProjectID);
+
+  const roleVariant = (role?: string | null) =>
+    role === "admin" ? "primary" : role === "developer" ? "success" : "neutral";
+
+  const handleCreate = async (e: SubmitEvent) => {
+    props.onCreateProject(e);
+    setCreateOpen(false);
   };
 
-  const handleCreateSubmit = (e: SubmitEvent) => {
-    props.onCreateProject(e);
-    setShowCreateModal(false);
+  const handleUpdate = async (e: SubmitEvent) => {
+    props.onUpdateProject(e);
+    setSettingsOpen(false);
   };
 
   return (
-    <div class="space-y-6">
-      {/* Header */}
-      <div class="flex items-center justify-between">
+    <div class="page">
+      <div class="page-header">
         <div>
-          <h1 class="text-3xl font-bold text-gray-900">Projects</h1>
-          <p class="text-gray-600 mt-1">Manage your organization's projects</p>
+          <h1 class="page-title">Projects</h1>
+          <p class="page-description">
+            Projects scope storage, collections, API keys, and members.
+          </p>
         </div>
-        <Button onClick={() => setShowCreateModal(true)}>
-          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-          </svg>
-          New Project
-        </Button>
+        <div class="page-actions">
+          <button class="btn btn-primary" onClick={() => setCreateOpen(true)}>
+            <IconPlus class="w-4 h-4" />
+            New project
+          </button>
+        </div>
       </div>
 
-      {/* Search Bar */}
-      <Card class="p-4">
-        <Input
-          placeholder="Search projects by name, slug, or description..."
-          value={searchQuery()}
-          onInput={(e) => setSearchQuery(e.currentTarget.value)}
-          class="w-full"
-        />
-      </Card>
+      <Show when={props.projectMessage}>
+        <div class="message message-neutral">{props.projectMessage}</div>
+      </Show>
 
-      {/* Projects Grid */}
-      <Show
-        when={filteredProjects().length > 0}
-        fallback={
-          <EmptyState
-            icon={
-              <svg class="w-16 h-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
-            }
-            title="No projects found"
-            description={searchQuery() ? "Try adjusting your search" : "Create your first project to get started"}
-            action={
-              <Show when={!searchQuery()}>
-                <Button onClick={() => setShowCreateModal(true)}>Create Project</Button>
-              </Show>
-            }
-          />
-        }
-      >
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <For each={filteredProjects()}>
-            {(project) => (
-              <Card 
-                class={`p-6 cursor-pointer transition-all hover:shadow-lg hover:border-blue-500 ${
-                  props.selectedProjectID === project.id ? 'border-blue-500 bg-blue-50' : ''
-                }`}
-                onClick={() => {
-                  props.onSelectProject(project.id);
-                  props.onNavigateToDashboard();
-                }}
-              >
-                <div class="flex items-start justify-between mb-4">
-                  <div class="flex-1">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-1">{project.name}</h3>
-                    <Badge variant="secondary" class="text-xs">{project.slug}</Badge>
-                  </div>
-                  <Show when={project.membershipRole}>
-                    <Badge variant={project.membershipRole === 'admin' ? 'primary' : 'secondary'}>
-                      {project.membershipRole}
-                    </Badge>
-                  </Show>
-                </div>
-                
-                <Show when={project.description}>
-                  <p class="text-sm text-gray-600 mb-4 line-clamp-2">{project.description}</p>
-                </Show>
-
-                <div class="flex items-center justify-between pt-4 border-t border-gray-200">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      props.onSelectProject(project.id);
-                      props.onNavigateToDashboard();
-                    }}
-                    class="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                  >
-                    View Dashboard →
-                  </button>
-                  <Show when={project.membershipRole === 'admin'}>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
+      <div class="card card-flush">
+        <Show
+          when={props.projects.length > 0}
+          fallback={
+            <div class="empty-state">
+              <div class="empty-state-icon">
+                <IconProjects class="w-5 h-5" />
+              </div>
+              <p class="empty-state-title">No projects yet</p>
+              <p class="empty-state-description">
+                Create your first project to start storing files, collections and issuing API keys.
+              </p>
+              <button class="btn btn-primary mt-4" onClick={() => setCreateOpen(true)}>
+                <IconPlus class="w-4 h-4" />
+                Create project
+              </button>
+            </div>
+          }
+        >
+          <div class="table-container">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Slug</th>
+                  <th>Role</th>
+                  <th style="width: 1%">Status</th>
+                  <th style="width: 1%" />
+                </tr>
+              </thead>
+              <tbody>
+                <For each={props.projects}>
+                  {(project) => (
+                    <tr
+                      class="clickable"
+                      onClick={() => {
                         props.onSelectProject(project.id);
+                        props.onNavigateToDashboard();
                       }}
-                      class="text-sm text-gray-600 hover:text-gray-700"
                     >
-                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                    </button>
-                  </Show>
-                </div>
-              </Card>
-            )}
-          </For>
+                      <td>
+                        <div class="flex items-center gap-2.5">
+                          <span
+                            class="ctx-icon"
+                            style="display:inline-flex;align-items:center;justify-content:center;width:1.5rem;height:1.5rem;border-radius:6px;background:var(--surface-3);font-size:0.625rem;font-weight:700;color:var(--text-2)"
+                          >
+                            {project.name[0]?.toUpperCase()}
+                          </span>
+                          <div>
+                            <div class="font-medium text-text-1">{project.name}</div>
+                            <Show when={project.description}>
+                              <div class="text-xs text-text-3">{project.description}</div>
+                            </Show>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <code>{project.slug}</code>
+                      </td>
+                      <td>
+                        <Badge variant={roleVariant(project.membershipRole)}>
+                          {project.membershipRole ?? "member"}
+                        </Badge>
+                      </td>
+                      <td>
+                        <Show when={project.id === props.selectedProjectID}>
+                          <Badge variant="primary">
+                            <span class="badge-dot" />
+                            Active
+                          </Badge>
+                        </Show>
+                      </td>
+                      <td>
+                        <IconArrowRight class="w-4 h-4 text-text-3" />
+                      </td>
+                    </tr>
+                  )}
+                </For>
+              </tbody>
+            </table>
+          </div>
+        </Show>
+      </div>
+
+      <Show when={activeProject()}>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-header-title">Project settings</span>
+            <span class="card-header-description">
+              Manage <strong>{activeProject()!.name}</strong>. Renaming changes the API-visible slug.
+            </span>
+          </div>
+          <div class="flex gap-2">
+            <button
+              class="btn btn-secondary"
+              onClick={() => setSettingsOpen(true)}
+              disabled={!props.canUpdateProject}
+            >
+              <IconEdit class="w-4 h-4" />
+              Edit project
+            </button>
+            <button
+              class="btn btn-danger"
+              onClick={() => setConfirmDelete(true)}
+              disabled={!props.canUpdateProject}
+            >
+              <IconTrash class="w-4 h-4" />
+              Delete project
+            </button>
+          </div>
+          <Show when={!props.canUpdateProject}>
+            <p class="label-hint mt-3">You need the admin role to modify this project.</p>
+          </Show>
         </div>
       </Show>
 
-      {/* Selected Project Settings */}
-      <Show when={props.selectedProjectID && props.canUpdateProject}>
-        <Card class="p-6">
-          <h2 class="text-xl font-semibold mb-4">Project Settings</h2>
-          <form class="space-y-4" onSubmit={props.onUpdateProject}>
-            <Input
-              label="Project Name"
-              placeholder="Enter project name"
-              value={props.projectEditInput.name}
-              onInput={(e) => props.onProjectEditInputChange('name', e.currentTarget.value)}
-              disabled={props.projectPending}
-            />
-            <Input
-              label="Project Slug"
-              placeholder="project-slug"
-              value={props.projectEditInput.slug}
-              onInput={(e) => props.onProjectEditInputChange('slug', e.currentTarget.value)}
-              disabled={props.projectPending}
-            />
-            <Textarea
-              label="Description"
-              placeholder="Describe your project..."
-              value={props.projectEditInput.description}
-              onInput={(e) => props.onProjectEditInputChange('description', e.currentTarget.value)}
-              disabled={props.projectPending}
-              rows={3}
-            />
-            <div class="flex gap-3">
-              <Button type="submit" variant="primary" disabled={props.projectPending}>
-                {props.projectPending ? "Updating..." : "Update Project"}
-              </Button>
-              <Button type="button" variant="danger" onClick={props.onDeleteProject} disabled={props.projectPending}>
-                Delete Project
-              </Button>
-            </div>
-          </form>
-          <Show when={props.projectMessage}>
-            <Message variant="neutral" class="mt-4">{props.projectMessage}</Message>
-          </Show>
-        </Card>
-      </Show>
-
-      {/* Create Project Modal */}
-      <Modal open={showCreateModal()} onClose={() => setShowCreateModal(false)} title="Create New Project">
-        <form class="space-y-4" onSubmit={handleCreateSubmit}>
+      {/* Create modal */}
+      <Modal
+        open={createOpen()}
+        onClose={() => setCreateOpen(false)}
+        title="Create project"
+        description="A project groups buckets, collections, API keys and members."
+      >
+        <form onSubmit={handleCreate} class="space-y-4">
           <Input
-            label="Project Name"
-            placeholder="My Awesome Project"
+            label="Project name"
+            placeholder="Production API"
             value={props.projectInput.name}
-            onInput={(e) => {
-              const name = e.currentTarget.value;
-              props.onProjectInputChange('name', name);
-              // Auto-generate slug
-              const slug = name.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-');
-              props.onProjectInputChange('slug', slug);
-            }}
-            disabled={props.projectPending}
+            onInput={(e) => props.onProjectInputChange("name", e.currentTarget.value)}
             required
           />
           <Input
-            label="Project Slug"
-            placeholder="my-awesome-project"
+            label="Slug"
+            placeholder="production-api"
             value={props.projectInput.slug}
-            onInput={(e) => props.onProjectInputChange('slug', e.currentTarget.value)}
-            disabled={props.projectPending}
+            onInput={(e) => props.onProjectInputChange("slug", e.currentTarget.value)}
             required
           />
           <Textarea
-            label="Description (Optional)"
-            placeholder="What is this project about?"
+            label="Description"
+            placeholder="What does this project power?"
             value={props.projectInput.description}
-            onInput={(e) => props.onProjectInputChange('description', e.currentTarget.value)}
-            disabled={props.projectPending}
-            rows={3}
+            onInput={(e) => props.onProjectInputChange("description", e.currentTarget.value)}
           />
-          <div class="flex gap-3 justify-end pt-4">
-            <Button type="button" variant="ghost" onClick={() => setShowCreateModal(false)}>
+          <ModalFooter>
+            <button type="button" class="btn btn-ghost" onClick={() => setCreateOpen(false)}>
               Cancel
-            </Button>
-            <Button type="submit" variant="primary" disabled={props.projectPending}>
-              {props.projectPending ? "Creating..." : "Create Project"}
-            </Button>
-          </div>
+            </button>
+            <button type="submit" class="btn btn-primary" disabled={props.projectPending}>
+              <Show when={props.projectPending} fallback="Create project">
+                <span class="spinner" /> Creating…
+              </Show>
+            </button>
+          </ModalFooter>
         </form>
-        <Show when={props.projectMessage}>
-          <Message variant="neutral" class="mt-4">{props.projectMessage}</Message>
-        </Show>
+      </Modal>
+
+      {/* Edit modal */}
+      <Modal
+        open={settingsOpen()}
+        onClose={() => setSettingsOpen(false)}
+        title="Edit project"
+        description="Update name, slug or description."
+      >
+        <form onSubmit={handleUpdate} class="space-y-4">
+          <Input
+            label="Project name"
+            value={props.projectEditInput.name}
+            onInput={(e) => props.onProjectEditInputChange("name", e.currentTarget.value)}
+            required
+          />
+          <Input
+            label="Slug"
+            value={props.projectEditInput.slug}
+            onInput={(e) => props.onProjectEditInputChange("slug", e.currentTarget.value)}
+            required
+          />
+          <Textarea
+            label="Description"
+            value={props.projectEditInput.description}
+            onInput={(e) => props.onProjectEditInputChange("description", e.currentTarget.value)}
+          />
+          <ModalFooter>
+            <button type="button" class="btn btn-ghost" onClick={() => setSettingsOpen(false)}>
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary" disabled={props.projectPending}>
+              Save changes
+            </button>
+          </ModalFooter>
+        </form>
+      </Modal>
+
+      {/* Delete confirmation */}
+      <Modal
+        open={confirmDelete()}
+        onClose={() => setConfirmDelete(false)}
+        title="Delete project"
+        size="sm"
+      >
+        <p class="text-sm text-text-2">
+          Deleting <strong class="text-text-1">{activeProject()?.name}</strong> permanently removes
+          its buckets, objects, collections, API keys, members and audit history. This cannot be undone.
+        </p>
+        <ModalFooter>
+          <button class="btn btn-ghost" onClick={() => setConfirmDelete(false)}>
+            Cancel
+          </button>
+          <button
+            class="btn btn-danger"
+            onClick={() => {
+              setConfirmDelete(false);
+              props.onDeleteProject();
+            }}
+            disabled={props.projectPending}
+          >
+            Delete permanently
+          </button>
+        </ModalFooter>
       </Modal>
     </div>
   );

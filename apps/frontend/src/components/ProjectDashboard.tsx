@@ -1,178 +1,252 @@
-import { Show, For } from "solid-js";
-import { Card, StatCard, Badge, Button } from "./index";
-import type { ProjectOverview } from "@primora/api-client";
+import { For, Show } from "solid-js";
+import type { AuditLog, ProjectOverview, ProjectSummary } from "@primora/api-client";
+import {
+  IconStorage,
+  IconKey,
+  IconMembers,
+  IconAudit,
+  IconCollections,
+  IconChevronRight,
+} from "./Icons";
 
 interface ProjectDashboardProps {
-  project: { id: string; name: string; slug: string; description?: string };
+  project: ProjectSummary;
   overview?: ProjectOverview;
+  recentAudit?: AuditLog[];
   onNavigate: (view: string) => void;
 }
 
+function formatBytes(bytes?: number): string {
+  if (bytes === undefined || bytes === null) return "0 B";
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unit = -1;
+  do {
+    value /= 1024;
+    unit++;
+  } while (value >= 1024 && unit < units.length - 1);
+  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unit]}`;
+}
+
+function formatRelative(value?: string | null): string {
+  if (!value) return "never";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "never";
+  const diff = Date.now() - date.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function actionTone(action: string): string {
+  if (action.includes("delet") || action.includes("revok") || action.includes("remov"))
+    return "var(--error)";
+  if (action.includes("creat") || action.includes("upload") || action.includes("invit"))
+    return "var(--success)";
+  return "var(--text-3)";
+}
+
 export function ProjectDashboard(props: ProjectDashboardProps) {
-  const stats = () => [
-    {
-      label: "Storage",
-      value: props.overview?.storage_buckets_count ?? 0,
-      unit: "buckets",
-      icon: (
-        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 3h4m-4 4h4" />
-        </svg>
-      ),
-    },
-    {
-      label: "API Keys",
-      value: props.overview?.api_keys_count ?? 0,
-      unit: "keys",
-      icon: (
-        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-        </svg>
-      ),
-    },
+  const overview = () => props.overview;
+
+  const metrics = () => [
     {
       label: "Members",
-      value: props.overview?.project_members_count ?? 0,
-      unit: "users",
-      icon: (
-        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-        </svg>
-      ),
+      icon: IconMembers,
+      value: overview()?.member_count,
+      sub: `${overview()?.pending_invitation_count ?? 0} pending`,
+      view: "members",
     },
     {
-      label: "Audit Logs",
-      value: props.overview?.audit_logs_count ?? 0,
-      unit: "events",
-      icon: (
-        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-        </svg>
-      ),
+      label: "API keys",
+      icon: IconKey,
+      value: overview()?.active_api_key_count,
+      sub: "active credentials",
+      view: "settings",
+    },
+    {
+      label: "Objects",
+      icon: IconStorage,
+      value: overview()?.object_count,
+      sub: `${overview()?.bucket_count ?? 0} buckets · ${formatBytes(overview()?.object_bytes_total)}`,
+      view: "storage",
+    },
+    {
+      label: "Events 24h",
+      icon: IconAudit,
+      value: overview()?.audit_events_24h,
+      sub: `last ${formatRelative(overview()?.last_audit_at)}`,
+      view: "audit",
     },
   ];
 
+  const resources = () => [
+    {
+      title: "Storage",
+      sub: `${overview()?.bucket_count ?? 0} buckets`,
+      icon: IconStorage,
+      view: "storage",
+    },
+    {
+      title: "Collections",
+      sub: "JSON documents",
+      icon: IconCollections,
+      view: "collections",
+    },
+    {
+      title: "Credentials",
+      sub: `${overview()?.active_api_key_count ?? 0} active keys`,
+      icon: IconKey,
+      view: "settings",
+    },
+    {
+      title: "Members",
+      sub: `${overview()?.member_count ?? 0} in project`,
+      icon: IconMembers,
+      view: "members",
+    },
+  ];
+
+  const audit = () => (props.recentAudit ?? []).slice(0, 6);
+
   return (
-    <div class="space-y-6">
-      {/* Project Header */}
-      <div class="flex items-start justify-between">
-        <div>
-          <h1 class="text-2xl font-bold text-gray-900">{props.project.name}</h1>
-          <Show when={props.project.description}>
-            <p class="text-gray-600 mt-1">{props.project.description}</p>
-          </Show>
-          <div class="flex items-center gap-2 mt-2">
-            <Badge variant="secondary">{props.project.slug}</Badge>
-          </div>
+    <div class="page">
+      <div class="page-header">
+        <div style="min-width: 0">
+          <h1 class="page-title">{props.project.name}</h1>
+          <p class="page-description">
+            <code>{props.project.slug}</code>
+            <Show when={props.project.description}>
+              <span style="color: var(--border-strong)">{"  ·  "}</span>
+              {props.project.description}
+            </Show>
+          </p>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-secondary btn-sm" onClick={() => props.onNavigate("settings")}>
+            <IconKey class="w-3.5 h-3.5" />
+            Keys
+          </button>
+          <button class="btn btn-primary btn-sm" onClick={() => props.onNavigate("storage")}>
+            Open storage
+          </button>
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <For each={stats()}>
-          {(stat) => (
-            <Card class="p-6">
-              <div class="flex items-center justify-between">
-                <div>
-                  <p class="text-sm text-gray-600 mb-1">{stat.label}</p>
-                  <p class="text-3xl font-bold text-gray-900">{stat.value}</p>
-                  <p class="text-xs text-gray-500 mt-1">{stat.unit}</p>
-                </div>
-                <div class="text-gray-400">{stat.icon}</div>
+      {/* metric strip — hairline divided, mono numerals */}
+      <div class="metric-strip">
+        <For each={metrics()}>
+          {(m) => (
+            <div
+              class="metric"
+              style="cursor:pointer"
+              onClick={() => props.onNavigate(m.view)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === "Enter" && props.onNavigate(m.view)}
+            >
+              <div class="metric-label">
+                <m.icon />
+                {m.label}
               </div>
-            </Card>
+              <Show
+                when={m.value !== undefined}
+                fallback={<div class="skeleton" style="height:1.75rem;width:2.5rem;margin-top:0.375rem;border-radius:4px" />}
+              >
+                <div class="metric-value">{m.value}</div>
+              </Show>
+              <div class="metric-sub">{m.sub}</div>
+            </div>
           )}
         </For>
       </div>
 
-      {/* Usage Charts */}
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card class="p-6">
-          <h3 class="text-lg font-semibold mb-4">Bandwidth</h3>
-          <div class="h-48 flex items-center justify-center bg-gray-50 rounded-lg">
-            <div class="text-center text-gray-500">
-              <svg class="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-              <p class="text-sm">No data to show</p>
-            </div>
+      <div class="grid gap-8 lg:grid-cols-5" style="align-items: start">
+        {/* recent activity — real audit feed */}
+        <div class="lg:col-span-3" style="min-width: 0">
+          <div class="flex items-center justify-between" style="margin-bottom: 0.75rem">
+            <h2 class="section-title">Recent activity</h2>
+            <button
+              class="btn btn-ghost btn-sm"
+              style="color: var(--text-3)"
+              onClick={() => props.onNavigate("audit")}
+            >
+              All events
+              <IconChevronRight class="w-3.5 h-3.5" />
+            </button>
           </div>
-        </Card>
+          <Show
+            when={audit().length > 0}
+            fallback={
+              <div class="row-list">
+                <div class="row-item">
+                  <div class="row-main">
+                    <div class="row-sub" style="font-family: var(--font-sans)">
+                      No events yet — mutations against this project will appear here.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            }
+          >
+            <div class="row-list">
+              <For each={audit()}>
+                {(event) => (
+                  <div class="row-item">
+                    <span
+                      style={`width:6px;height:6px;border-radius:1.5px;flex-shrink:0;background:${actionTone(event.action)}`}
+                      aria-hidden="true"
+                    />
+                    <div class="row-main">
+                      <div class="row-title mono" style="font-weight:500;font-size:0.75rem">
+                        {event.action}
+                      </div>
+                      <div class="row-sub">
+                        {event.resource_type} · {event.resource_id}
+                      </div>
+                    </div>
+                    <div class="row-trailing">{formatRelative(event.created_at)}</div>
+                  </div>
+                )}
+              </For>
+            </div>
+          </Show>
+        </div>
 
-        <Card class="p-6">
-          <h3 class="text-lg font-semibold mb-4">Requests</h3>
-          <div class="h-48 flex items-center justify-center bg-gray-50 rounded-lg">
-            <div class="text-center text-gray-500">
-              <svg class="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
-              </svg>
-              <p class="text-sm">No data to show</p>
-            </div>
+        {/* resources — hairline rows */}
+        <div class="lg:col-span-2" style="min-width: 0">
+          <h2 class="section-title" style="margin-bottom: 0.75rem">Resources</h2>
+          <div class="row-list">
+            <For each={resources()}>
+              {(r) => (
+                <div
+                  class="row-item clickable"
+                  onClick={() => props.onNavigate(r.view)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => e.key === "Enter" && props.onNavigate(r.view)}
+                >
+                  <span class="row-icon">
+                    <r.icon class="w-4 h-4" />
+                  </span>
+                  <div class="row-main">
+                    <div class="row-title">{r.title}</div>
+                    <div class="row-sub">{r.sub}</div>
+                  </div>
+                  <span class="row-trailing">
+                    <IconChevronRight class="w-3.5 h-3.5" />
+                  </span>
+                </div>
+              )}
+            </For>
           </div>
-        </Card>
+        </div>
       </div>
-
-      {/* Quick Actions */}
-      <Card class="p-6">
-        <h3 class="text-lg font-semibold mb-4">Quick Start</h3>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <button
-            onClick={() => props.onNavigate("storage")}
-            class="p-4 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors text-left"
-          >
-            <div class="flex items-center gap-3 mb-2">
-              <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                <svg class="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 3h4m-4 4h4" />
-                </svg>
-              </div>
-              <h4 class="font-semibold">Create Bucket</h4>
-            </div>
-            <p class="text-sm text-gray-600">Set up storage for your files and assets</p>
-          </button>
-
-          <button
-            onClick={() => props.onNavigate("settings")}
-            class="p-4 border border-gray-200 rounded-lg hover:border-green-500 hover:bg-green-50 transition-colors text-left"
-          >
-            <div class="flex items-center gap-3 mb-2">
-              <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                <svg class="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                </svg>
-              </div>
-              <h4 class="font-semibold">Generate API Key</h4>
-            </div>
-            <p class="text-sm text-gray-600">Create keys to authenticate your apps</p>
-          </button>
-
-          <button
-            onClick={() => props.onNavigate("members")}
-            class="p-4 border border-gray-200 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition-colors text-left"
-          >
-            <div class="flex items-center gap-3 mb-2">
-              <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                <svg class="w-5 h-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                </svg>
-              </div>
-              <h4 class="font-semibold">Invite Members</h4>
-            </div>
-            <p class="text-sm text-gray-600">Add team members to collaborate</p>
-          </button>
-        </div>
-      </Card>
-
-      {/* Documentation Link */}
-      <Card class="p-6 bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200">
-        <div class="flex items-center justify-between">
-          <div>
-            <h3 class="text-lg font-semibold mb-1">Need Help Getting Started?</h3>
-            <p class="text-sm text-gray-600">Check out our documentation and guides</p>
-          </div>
-          <Button variant="outline">View Docs</Button>
-        </div>
-      </Card>
     </div>
   );
 }

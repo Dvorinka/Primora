@@ -1,16 +1,14 @@
-FROM golang:1.24-alpine AS builder
+FROM golang:1.26-alpine AS builder
 WORKDIR /app
 
-RUN apk add --no-cache git build-base
+RUN apk add --no-cache git
 
-# Copy root configs for workspace context
-COPY go.mod go.sum ./
-COPY apps/backend ./apps/backend
-
+# Backend Go module lives in apps/backend
+COPY apps/backend/go.mod apps/backend/go.sum ./
 RUN go mod download
 
-WORKDIR /app/apps/backend
-RUN go build -o /primora-backend ./cmd/server
+COPY apps/backend ./
+RUN CGO_ENABLED=0 go build -o /primora-backend ./cmd/server
 
 FROM alpine:3.21
 WORKDIR /app
@@ -18,8 +16,8 @@ WORKDIR /app
 RUN apk add --no-cache ca-certificates
 
 COPY --from=builder /primora-backend /usr/local/bin/primora-backend
-COPY --from=builder /app/apps/backend/db ./db
-COPY --from=builder /app/apps/backend/openapi ./openapi
+COPY --from=builder /app/db ./db
+COPY --from=builder /app/openapi ./openapi
 
 EXPOSE 8080
 

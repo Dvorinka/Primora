@@ -1,284 +1,350 @@
-import { Show, For, createSignal, createMemo } from "solid-js";
-import { 
-  Button, 
-  Card, 
-  Input, 
-  Textarea, 
-  Badge, 
-  EmptyState, 
-  Message, 
-  Modal, 
-  Table, 
-  DataTable 
-} from "../components";
+import { For, Show, createMemo, createSignal } from "solid-js";
 import type { Collection, Document } from "@primora/api-client";
+import { Badge } from "../components/Badge";
+import { Modal, ModalFooter } from "../components/Modal";
+import { Input, Textarea } from "../components/Input";
+import {
+  IconPlus,
+  IconCollections,
+  IconTrash,
+  IconChevronRight,
+  IconFile,
+} from "../components/Icons";
+
+interface CollectionInput {
+  name: string;
+  slug: string;
+  description: string;
+}
 
 interface CollectionsPageProps {
   collections: Collection[];
   documents: Document[];
   selectedCollectionID?: string;
-  collectionInput: { name: string; slug: string; description: string };
+  collectionInput: CollectionInput;
   collectionMessage: string;
   collectionPending: boolean;
   documentPending: boolean;
   canUpdate: boolean;
-  onCollectionInputChange: (field: string, value: string) => void;
-  onCreateCollection: (e: SubmitEvent) => void;
+  onCollectionInputChange: (field: keyof CollectionInput, value: string) => void;
+  onCreateCollection: (event: SubmitEvent) => void;
   onDeleteCollection: (id: string) => void;
   onSelectCollection: (id: string) => void;
-  onCreateDocument: (data: any) => void;
-  onUpdateDocument: (id: string, data: any) => void;
+  onCreateDocument: (data: Record<string, unknown>) => void;
+  onUpdateDocument: (id: string, data: Record<string, unknown>) => void;
   onDeleteDocument: (id: string) => void;
-  formatDate: (date?: string | null) => string;
+  formatDate: (value?: string | null) => string;
+}
+
+function prettyJson(value: Record<string, unknown>): string {
+  return JSON.stringify(value, null, 2);
 }
 
 export function CollectionsPage(props: CollectionsPageProps) {
-  const [showCreateCollectionModal, setShowCreateCollectionModal] = createSignal(false);
-  const [showDocumentModal, setShowDocumentModal] = createSignal(false);
-  const [editingDocument, setEditingDocument] = createSignal<Document | null>(null);
-  const [documentData, setDocumentData] = createSignal("");
+  const [createOpen, setCreateOpen] = createSignal(false);
+  const [docEditorOpen, setDocEditorOpen] = createSignal(false);
+  const [editingDoc, setEditingDoc] = createSignal<Document | null>(null);
+  const [docJson, setDocJson] = createSignal("{}");
+  const [docError, setDocError] = createSignal("");
 
-  const activeCollection = createMemo(() => 
-    props.collections.find(c => c.id === props.selectedCollectionID)
+  const activeCollection = createMemo(() =>
+    props.collections.find((c) => c.id === props.selectedCollectionID),
   );
 
-  const handleCreateCollection = (e: SubmitEvent) => {
-    props.onCreateCollection(e);
-    setShowCreateCollectionModal(false);
+  const openNewDoc = () => {
+    setEditingDoc(null);
+    setDocJson("{\n  \n}");
+    setDocError("");
+    setDocEditorOpen(true);
   };
 
-  const handleOpenDocumentModal = (doc: Document | null = null) => {
-    setEditingDocument(doc);
-    setDocumentData(doc ? JSON.stringify(doc.data, null, 2) : "{\n  \n}");
-    setShowDocumentModal(true);
+  const openEditDoc = (doc: Document) => {
+    setEditingDoc(doc);
+    setDocJson(prettyJson(doc.data));
+    setDocError("");
+    setDocEditorOpen(true);
   };
 
-  const handleSaveDocument = (e: SubmitEvent) => {
+  const submitDoc = (e: SubmitEvent) => {
     e.preventDefault();
     try {
-      const data = JSON.parse(documentData());
-      if (editingDocument()) {
-        props.onUpdateDocument(editingDocument()!.id, data);
-      } else {
-        props.onCreateDocument(data);
+      const parsed = JSON.parse(docJson());
+      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+        setDocError("Document data must be a JSON object.");
+        return;
       }
-      setShowDocumentModal(false);
-    } catch (err) {
-      alert("Invalid JSON data");
+      const doc = editingDoc();
+      if (doc) {
+        props.onUpdateDocument(doc.id, parsed);
+      } else {
+        props.onCreateDocument(parsed);
+      }
+      setDocEditorOpen(false);
+    } catch {
+      setDocError("Invalid JSON. Check syntax and try again.");
     }
   };
 
   return (
-    <div class="flex flex-col md:flex-row gap-6 h-[calc(100vh-12rem)]">
-      {/* Sidebar: Collections List */}
-      <div class="w-full md:w-64 flex flex-col gap-4">
-        <div class="flex items-center justify-between">
-          <h2 class="text-xl font-bold">Collections</h2>
-          <Button size="sm" onClick={() => setShowCreateCollectionModal(true)}>
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-            </svg>
-          </Button>
+    <div class="page">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Collections</h1>
+          <p class="page-description">
+            Document collections stored in Postgres — schema-flexible records for your app.
+          </p>
         </div>
-        
-        <Card class="flex-1 overflow-y-auto p-2">
-          <Show 
-            when={props.collections.length > 0} 
-            fallback={<p class="text-sm text-gray-500 p-4 text-center">No collections</p>}
+        <div class="page-actions">
+          <button
+            class="btn btn-primary"
+            onClick={() => setCreateOpen(true)}
+            disabled={!props.canUpdate}
           >
-            <div class="space-y-1">
-              <For each={props.collections}>
-                {(collection) => (
-                  <button
-                    onClick={() => props.onSelectCollection(collection.id)}
-                    class={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
-                      props.selectedCollectionID === collection.id 
-                        ? 'bg-blue-50 text-blue-700 font-medium' 
-                        : 'text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    <div class="flex items-center justify-between">
-                      <span>{collection.name}</span>
-                      <Show when={props.selectedCollectionID === collection.id}>
-                        <div class="w-1.5 h-1.5 rounded-full bg-blue-600" />
-                      </Show>
-                    </div>
-                  </button>
-                )}
-              </For>
-            </div>
-          </Show>
-        </Card>
+            <IconPlus class="w-4 h-4" />
+            New collection
+          </button>
+        </div>
       </div>
 
-      {/* Main Content: Documents Table */}
-      <div class="flex-1 flex flex-col gap-4 min-w-0">
-        <Show 
-          when={activeCollection()} 
-          fallback={
-            <Card class="flex-1 flex items-center justify-center p-8">
-              <EmptyState
-                title="No collection selected"
-                description="Select a collection from the sidebar to view its documents"
-                icon={
-                  <svg class="w-12 h-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
-                  </svg>
-                }
-              />
-            </Card>
-          }
-        >
-          <div class="flex items-center justify-between">
-            <div>
-              <h2 class="text-2xl font-bold text-gray-900">{activeCollection()?.name}</h2>
-              <p class="text-sm text-gray-500">{activeCollection()?.slug}</p>
-            </div>
-            <div class="flex gap-2">
-              <Button variant="ghost" size="sm" onClick={() => props.onDeleteCollection(activeCollection()!.id)}>
-                Delete Collection
-              </Button>
-              <Button onClick={() => handleOpenDocumentModal()}>
-                Add Document
-              </Button>
-            </div>
-          </div>
+      <Show when={props.collectionMessage}>
+        <div class="message message-neutral">{props.collectionMessage}</div>
+      </Show>
 
-          <Card class="flex-1 overflow-hidden flex flex-col">
-            <Show 
-              when={props.documents.length > 0} 
+      <div class="grid gap-5" style="grid-template-columns: minmax(0, 17rem) minmax(0, 1fr)">
+        {/* collection list */}
+        <div class="card card-flush">
+          <div
+            class="card-header"
+            style="padding:1rem 1rem 0.75rem;margin-bottom:0;border-bottom:1px solid var(--border)"
+          >
+            <span class="card-header-title">Collections</span>
+          </div>
+          <div class="p-1.5">
+            <For
+              each={props.collections}
               fallback={
-                <div class="flex-1 flex items-center justify-center p-8">
-                  <EmptyState
-                    title="No documents yet"
-                    description="This collection is empty. Add your first document to get started."
-                    action={<Button onClick={() => handleOpenDocumentModal()}>Add Document</Button>}
-                  />
+                <div class="p-4 text-center">
+                  <p class="text-xs text-text-3">No collections yet</p>
                 </div>
               }
             >
-              <div class="overflow-auto">
-                <Table>
-                  <thead>
-                    <tr>
-                      <th class="w-1/3">ID</th>
-                      <th>Data</th>
-                      <th class="w-48">Created At</th>
-                      <th class="w-24 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <For each={props.documents}>
-                      {(doc) => (
-                        <tr class="hover:bg-gray-50">
-                          <td class="font-mono text-xs text-gray-500">{doc.id}</td>
-                          <td>
-                            <div class="max-w-md truncate text-sm">
-                              {JSON.stringify(doc.data)}
-                            </div>
-                          </td>
-                          <td class="text-sm text-gray-500">{props.formatDate(doc.created_at)}</td>
-                          <td class="text-right">
-                            <div class="flex justify-end gap-1">
-                              <button 
-                                onClick={() => handleOpenDocumentModal(doc)}
-                                class="p-1 text-gray-400 hover:text-blue-600 transition-colors"
-                              >
-                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                              </button>
-                              <button 
-                                onClick={() => props.onDeleteDocument(doc.id)}
-                                class="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                              >
-                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </For>
-                  </tbody>
-                </Table>
+              {(collection) => (
+                <button
+                  class={`nav-item w-full ${collection.id === props.selectedCollectionID ? "active" : ""}`}
+                  onClick={() => props.onSelectCollection(collection.id)}
+                >
+                  <IconCollections class="w-4 h-4" />
+                  <span class="flex-1 truncate">{collection.name}</span>
+                  <Show when={props.canUpdate}>
+                    <span
+                      class="icon-btn"
+                      role="button"
+                      title="Delete collection"
+                      aria-label={`Delete ${collection.name}`}
+                      style="width:1.5rem;height:1.5rem"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        props.onDeleteCollection(collection.id);
+                      }}
+                    >
+                      <IconTrash class="w-3.5 h-3.5" />
+                    </span>
+                  </Show>
+                </button>
+              )}
+            </For>
+          </div>
+        </div>
+
+        {/* documents */}
+        <div class="card card-flush" style="min-height:28rem">
+          <Show
+            when={activeCollection()}
+            fallback={
+              <div class="empty-state" style="min-height:28rem">
+                <div class="empty-state-icon">
+                  <IconCollections class="w-5 h-5" />
+                </div>
+                <p class="empty-state-title">Select a collection</p>
+                <p class="empty-state-description">
+                  Choose a collection on the left, or create one to start adding documents.
+                </p>
               </div>
-            </Show>
-          </Card>
-        </Show>
+            }
+          >
+            <div
+              class="card-header"
+              style="padding:1rem 1.25rem;margin-bottom:0;border-bottom:1px solid var(--border)"
+            >
+              <div class="flex items-center justify-between gap-3 w-full">
+                <div class="min-w-0">
+                  <span class="card-header-title">{activeCollection()!.name}</span>
+                  <span class="card-header-description">
+                    <code>{activeCollection()!.slug}</code>
+                    <Show when={activeCollection()!.description}>
+                      {" · "}{activeCollection()!.description}
+                    </Show>
+                  </span>
+                </div>
+                <button
+                  class="btn btn-secondary btn-sm"
+                  onClick={openNewDoc}
+                  disabled={!props.canUpdate}
+                >
+                  <IconPlus class="w-3.5 h-3.5" />
+                  New document
+                </button>
+              </div>
+            </div>
+
+            <div class="table-container">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Document</th>
+                    <th style="width:1%">Updated</th>
+                    <th style="width:1%" />
+                  </tr>
+                </thead>
+                <tbody>
+                  <For
+                    each={props.documents}
+                    fallback={
+                      <tr>
+                        <td colspan={3} class="py-10 text-center text-text-3">
+                          No documents yet. Create one as a JSON object.
+                        </td>
+                      </tr>
+                    }
+                  >
+                    {(doc) => (
+                      <tr class="clickable" onClick={() => openEditDoc(doc)}>
+                        <td>
+                          <div class="flex items-center gap-2.5 min-w-0">
+                            <IconFile class="w-4 h-4 text-text-3 flex-shrink-0" />
+                            <div class="min-w-0">
+                              <div class="font-mono text-xs text-text-1">{doc.id}</div>
+                              <div class="text-xs text-text-3 truncate" style="max-width:30rem">
+                                {JSON.stringify(doc.data)}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td class="text-xs text-text-3 whitespace-nowrap">
+                          {props.formatDate(doc.updated_at)}
+                        </td>
+                        <td>
+                          <IconChevronRight class="w-4 h-4 text-text-3" />
+                        </td>
+                      </tr>
+                    )}
+                  </For>
+                </tbody>
+              </table>
+            </div>
+          </Show>
+        </div>
       </div>
 
-      {/* Create Collection Modal */}
-      <Modal 
-        open={showCreateCollectionModal()} 
-        onClose={() => setShowCreateCollectionModal(false)} 
-        title="Create New Collection"
+      {/* create collection modal */}
+      <Modal
+        open={createOpen()}
+        onClose={() => setCreateOpen(false)}
+        title="Create collection"
+        description="Collections store JSON documents scoped to a project."
       >
-        <form class="space-y-4" onSubmit={handleCreateCollection}>
+        <form onSubmit={props.onCreateCollection} class="space-y-4">
           <Input
-            label="Collection Name"
-            placeholder="Users, Products, etc."
+            label="Collection name"
+            placeholder="Posts"
             value={props.collectionInput.name}
-            onInput={(e) => {
-              const name = e.currentTarget.value;
-              props.onCollectionInputChange('name', name);
-              const slug = name.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-');
-              props.onCollectionInputChange('slug', slug);
-            }}
+            onInput={(e) => props.onCollectionInputChange("name", e.currentTarget.value)}
             required
           />
           <Input
-            label="Collection Slug"
-            placeholder="users"
+            label="Slug"
+            placeholder="posts"
             value={props.collectionInput.slug}
-            onInput={(e) => props.onCollectionInputChange('slug', e.currentTarget.value)}
+            onInput={(e) => props.onCollectionInputChange("slug", e.currentTarget.value)}
             required
           />
-          <Textarea
+          <Input
             label="Description"
-            placeholder="What's in this collection?"
+            placeholder="Optional"
             value={props.collectionInput.description}
-            onInput={(e) => props.onCollectionInputChange('description', e.currentTarget.value)}
-            rows={3}
+            onInput={(e) => props.onCollectionInputChange("description", e.currentTarget.value)}
           />
-          <div class="flex gap-3 justify-end pt-4">
-            <Button type="button" variant="ghost" onClick={() => setShowCreateCollectionModal(false)}>
+          <ModalFooter>
+            <button type="button" class="btn btn-ghost" onClick={() => setCreateOpen(false)}>
               Cancel
-            </Button>
-            <Button type="submit" variant="primary" disabled={props.collectionPending}>
-              {props.collectionPending ? "Creating..." : "Create Collection"}
-            </Button>
-          </div>
+            </button>
+            <button type="submit" class="btn btn-primary" disabled={props.collectionPending}>
+              Create collection
+            </button>
+          </ModalFooter>
         </form>
       </Modal>
 
-      {/* Document Editor Modal */}
-      <Modal 
-        open={showDocumentModal()} 
-        onClose={() => setShowDocumentModal(false)} 
-        title={editingDocument() ? "Edit Document" : "New Document"}
+      {/* document editor modal */}
+      <Modal
+        open={docEditorOpen()}
+        onClose={() => setDocEditorOpen(false)}
+        title={editingDoc() ? "Edit document" : "New document"}
+        description="Documents are arbitrary JSON objects validated against the collection schema when one is set."
+        size="lg"
       >
-        <form class="space-y-4" onSubmit={handleSaveDocument}>
-          <div class="space-y-2">
-            <label class="block text-sm font-medium text-gray-700">JSON Data</label>
-            <div class="font-mono text-sm border rounded-md overflow-hidden bg-gray-50">
-              <textarea
-                value={documentData()}
-                onInput={(e) => setDocumentData(e.currentTarget.value)}
-                class="w-full h-64 p-4 bg-transparent outline-none focus:ring-2 focus:ring-blue-500"
-                spellcheck={false}
-              />
+        <form onSubmit={submitDoc} class="space-y-4">
+          <Show when={editingDoc()}>
+            <div class="flex items-center gap-2 text-xs text-text-3">
+              <Badge variant="neutral"><code class="border-0 bg-transparent p-0">{editingDoc()!.id}</code></Badge>
+              <span>created {props.formatDate(editingDoc()!.created_at)}</span>
             </div>
-          </div>
-          <div class="flex gap-3 justify-end pt-4">
-            <Button type="button" variant="ghost" onClick={() => setShowDocumentModal(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary" disabled={props.documentPending}>
-              {props.documentPending ? "Saving..." : "Save Document"}
-            </Button>
-          </div>
+          </Show>
+          <Textarea
+            label="Document data (JSON)"
+            class="font-mono"
+            style="min-height:16rem;font-size:0.75rem"
+            value={docJson()}
+            onInput={(e) => {
+              setDocJson(e.currentTarget.value);
+              setDocError("");
+            }}
+            spellcheck={false}
+            required
+          />
+          <Show when={docError()}>
+            <div class="message message-error">{docError()}</div>
+          </Show>
+          <ModalFooter align="between">
+            <Show when={editingDoc()} fallback={<span />}>
+              <button
+                type="button"
+                class="btn btn-danger"
+                onClick={() => {
+                  const doc = editingDoc();
+                  if (doc) {
+                    setDocEditorOpen(false);
+                    props.onDeleteDocument(doc.id);
+                  }
+                }}
+                disabled={!props.canUpdate || props.documentPending}
+              >
+                Delete document
+              </button>
+            </Show>
+            <div class="flex gap-2">
+              <button type="button" class="btn btn-ghost" onClick={() => setDocEditorOpen(false)}>
+                Cancel
+              </button>
+              <button
+                type="submit"
+                class="btn btn-primary"
+                disabled={!props.canUpdate || props.documentPending}
+              >
+                {editingDoc() ? "Save changes" : "Create document"}
+              </button>
+            </div>
+          </ModalFooter>
         </form>
       </Modal>
     </div>

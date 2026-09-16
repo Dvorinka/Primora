@@ -40,7 +40,7 @@ export function Tabs(props: TabsProps) {
 
   const getTabClasses = (tab: Tab) => {
     const isActive = activeTab() === tab.id;
-    const base = `${sizeClasses[size()]} font-medium transition-all duration-fast flex items-center gap-2`;
+    const base = `${sizeClasses[size()]} font-medium transition-all duration-150 flex items-center gap-2`;
 
     if (tab.disabled) {
       return `${base} opacity-50 cursor-not-allowed`;
@@ -51,19 +51,19 @@ export function Tabs(props: TabsProps) {
         return `${base} rounded-lg ${
           isActive
             ? "bg-accent text-white shadow-sm"
-            : "text-text-secondary hover:text-text-primary hover:bg-surface-2"
+            : "text-text-2 hover:text-text-1 hover:bg-surface-2"
         }`;
       case "underline":
         return `${base} border-b-2 ${
           isActive
             ? "border-accent text-accent"
-            : "border-transparent text-text-secondary hover:text-text-primary hover:border-border-hover"
+            : "border-transparent text-text-2 hover:text-text-1 hover:border-border-strong"
         }`;
       default:
         return `${base} rounded-lg ${
           isActive
-            ? "bg-surface-2 text-text-primary"
-            : "text-text-secondary hover:text-text-primary hover:bg-surface-1"
+            ? "bg-surface-2 text-text-1"
+            : "text-text-2 hover:text-text-1 hover:bg-surface"
         }`;
     }
   };
@@ -90,7 +90,7 @@ export function Tabs(props: TabsProps) {
               </Show>
               <span>{tab.label}</span>
               <Show when={tab.badge}>
-                <span class="badge-neutral text-2xs">{tab.badge}</span>
+                <span class="badge-neutral text-xs">{tab.badge}</span>
               </Show>
             </button>
           )}

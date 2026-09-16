@@ -92,7 +92,7 @@ export function Tooltip(props: TooltipProps) {
         <Portal>
           <div
             ref={tooltipRef}
-            class="fixed z-50 px-3 py-2 text-xs font-medium text-text-primary bg-surface-3 border border-border-strong rounded-lg shadow-lg animate-fade-in pointer-events-none"
+            class="fixed z-50 px-3 py-2 text-xs font-medium text-text-1 bg-surface-3 border border-border-strong rounded-lg shadow-lg animate-fade-in pointer-events-none"
             style={{
               left: `${position().x}px`,
               top: `${position().y}px`,

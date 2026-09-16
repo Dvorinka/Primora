@@ -101,27 +101,27 @@ export function ToastContainer() {
         aria-atomic="true"
       >
         <For each={toasts()}>
-          {(toast) => {
-            const config = variantConfig[toast.variant];
+          {(item) => {
+            const config = variantConfig[item.variant];
             return (
               <div
                 class={`${config.bg} ${config.border} border rounded-lg shadow-lg p-4 flex gap-3 animate-slide-up pointer-events-auto`}
                 role="alert"
               >
                 <div class={`flex-shrink-0 ${config.text}`}>
-                  {toast.icon ?? config.icon}
+                  {item.icon ?? config.icon}
                 </div>
                 <div class="flex-1 min-w-0">
-                  <Show when={toast.title}>
-                    <p class={`font-semibold text-sm ${config.text}`}>{toast.title}</p>
+                  <Show when={item.title}>
+                    <p class={`font-semibold text-sm ${config.text}`}>{item.title}</p>
                   </Show>
-                  <p class={`text-sm ${toast.title ? "mt-1" : ""} ${config.text}`}>
-                    {toast.message}
+                  <p class={`text-sm ${item.title ? "mt-1" : ""} ${config.text}`}>
+                    {item.message}
                   </p>
                 </div>
                 <button
                   class={`flex-shrink-0 ${config.text} opacity-70 hover:opacity-100 transition-opacity`}
-                  onClick={() => toast.dismiss(toast.id)}
+                  onClick={() => toast.dismiss(item.id)}
                   aria-label="Dismiss notification"
                 >
                   <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

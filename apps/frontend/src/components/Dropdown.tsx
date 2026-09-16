@@ -116,7 +116,7 @@ export function Dropdown(props: DropdownProps) {
         <Portal>
           <div
             ref={menuRef}
-            class="fixed z-50 min-w-[200px] bg-surface-1 border border-border-strong rounded-lg shadow-elevated py-1 animate-scale-in"
+            class="fixed z-50 min-w-[200px] bg-surface border border-border-strong rounded-lg shadow-lg py-1 animate-scale-in"
             style={{
               left: `${position().x}px`,
               top: `${position().y}px`,
@@ -135,7 +135,7 @@ export function Dropdown(props: DropdownProps) {
                         ? "opacity-50 cursor-not-allowed"
                         : item.danger
                           ? "text-error hover:bg-error-muted"
-                          : "text-text-primary hover:bg-surface-2"
+                          : "text-text-1 hover:bg-surface-2"
                     }`}
                     onClick={() => handleItemClick(item)}
                     disabled={item.disabled}

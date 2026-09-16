@@ -108,7 +108,7 @@ export function FileInput(props: FileInputProps) {
       </Show>
       <input
         type="file"
-        class={`input cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-surface-2 file:text-text-secondary hover:file:bg-surface-3 ${local.error ? "border-error" : ""} ${local.class ?? ""}`}
+        class={`input cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-surface-2 file:text-text-2 hover:file:bg-surface-3 ${local.error ? "border-error" : ""} ${local.class ?? ""}`}
         {...rest}
       />
       <Show when={local.error}>

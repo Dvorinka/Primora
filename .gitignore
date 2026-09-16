@@ -27,3 +27,7 @@ infra/postgres
 infra/dragonfly
 infra/mailpit
 
+
+# Generated code-graph artifacts
+graphify-out/
+.playwright-mcp/

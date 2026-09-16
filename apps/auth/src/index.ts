@@ -5,7 +5,7 @@ import { requestId } from "hono/request-id";
 import { HTTPException } from "hono/http-exception";
 import { createClient } from "redis";
 
-import { auth, authPool, runAuthMigrations } from "./lib/auth.js";
+import { auth, authPool, promoteAdminEmails, runAuthMigrations } from "./lib/auth.js";
 import { env } from "./lib/env.js";
 
 const redisClient = createClient({
@@ -19,6 +19,7 @@ try {
 }
 
 await retry("auth_migrations", runAuthMigrations);
+await promoteAdminEmails();
 
 const app = new Hono();
 

@@ -1,6 +1,21 @@
-import { Show, For, createSignal } from "solid-js";
-import { Button, Card, Input, Badge, Table, EmptyState, Message, Modal, Tabs, TabPanel } from "../components";
+import { For, Show, createSignal } from "solid-js";
 import type { ApiKey } from "@primora/api-client";
+import { Badge } from "../components/Badge";
+import { Modal, ModalFooter } from "../components/Modal";
+import { Input } from "../components/Input";
+import {
+  IconPlus,
+  IconKey,
+  IconCopy,
+  IconCheck,
+  IconTrash,
+  IconAlert,
+} from "../components/Icons";
+
+interface OrgInput {
+  name: string;
+  slug: string;
+}
 
 interface SettingsPageProps {
   apiKeys?: ApiKey[];
@@ -8,356 +23,352 @@ interface SettingsPageProps {
   apiKeySecret: string;
   apiKeyMessage: string;
   apiKeyPending: boolean;
-  organizationInput: { name: string; slug: string };
-  organizationEditInput: { name: string; slug: string };
+  organizationInput: OrgInput;
+  organizationEditInput: OrgInput;
   organizationMessage: string;
   canUpdateOrganization: boolean;
   workspacePending: boolean;
+  hasActiveOrganization: boolean;
   onApiKeyNameChange: (name: string) => void;
-  onCreateApiKey: (e: SubmitEvent) => void;
+  onCreateApiKey: () => void;
   onDeleteApiKey: (id: string) => void;
-  onOrganizationInputChange: (field: string, value: string) => void;
-  onOrganizationEditInputChange: (field: string, value: string) => void;
-  onCreateOrganization: (e: SubmitEvent) => void;
-  onUpdateOrganization: (e: SubmitEvent) => void;
+  onOrganizationInputChange: (field: keyof OrgInput, value: string) => void;
+  onOrganizationEditInputChange: (field: keyof OrgInput, value: string) => void;
+  onCreateOrganization: (event: SubmitEvent) => void;
+  onUpdateOrganization: (event: SubmitEvent) => void;
   onDeleteOrganization: () => void;
-  formatDate: (date?: string | null) => string;
+  onDismissSecret: () => void;
+  formatDate: (value?: string | null) => string;
 }
 
 export function SettingsPage(props: SettingsPageProps) {
-  const [activeTab, setActiveTab] = createSignal<'api-keys' | 'organization' | 'general'>('api-keys');
-  const [showCreateKeyModal, setShowCreateKeyModal] = createSignal(false);
-  const [showKeySecret, setShowKeySecret] = createSignal(false);
-  const [copiedKey, setCopiedKey] = createSignal(false);
+  const [tab, setTab] = createSignal<"api-keys" | "organization">("api-keys");
+  const [copied, setCopied] = createSignal(false);
+  const [createOrgOpen, setCreateOrgOpen] = createSignal(false);
+  const [confirmDeleteOrg, setConfirmDeleteOrg] = createSignal(false);
 
-  const handleCreateKey = (e: SubmitEvent) => {
-    props.onCreateApiKey(e);
-    setShowCreateKeyModal(false);
-    setShowKeySecret(true);
+  const copySecret = async () => {
+    try {
+      await navigator.clipboard.writeText(props.apiKeySecret);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard unavailable */
+    }
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedKey(true);
-    setTimeout(() => setCopiedKey(false), 2000);
-  };
+  const activeKeys = () => (props.apiKeys ?? []).filter((k) => !k.revoked_at);
+  const revokedKeys = () => (props.apiKeys ?? []).filter((k) => k.revoked_at);
 
   return (
-    <div class="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 class="text-3xl font-bold text-gray-900">Settings</h1>
-        <p class="text-gray-600 mt-1">Manage API keys, organization, and project settings</p>
+    <div class="page">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Settings</h1>
+          <p class="page-description">
+            API credentials and organization management.
+          </p>
+        </div>
       </div>
 
-      {/* Tabs */}
-      <Tabs
-        tabs={[
-          { id: 'api-keys', label: 'API Keys' },
-          { id: 'organization', label: 'Organization' },
-          { id: 'general', label: 'General' },
-        ]}
-        activeTab={activeTab()}
-        onChange={(id) => setActiveTab(id as any)}
-      />
+      <div class="tabs">
+        <button
+          class={`tab ${tab() === "api-keys" ? "active" : ""}`}
+          onClick={() => setTab("api-keys")}
+        >
+          API keys
+          <span class="nav-badge ml-1.5">{activeKeys().length}</span>
+        </button>
+        <button
+          class={`tab ${tab() === "organization" ? "active" : ""}`}
+          onClick={() => setTab("organization")}
+        >
+          Organization
+        </button>
+      </div>
 
-      {/* API Keys Tab */}
-      <Show when={activeTab() === 'api-keys'}>
-        <div class="space-y-6">
-          <Card class="p-6">
-            <div class="flex items-center justify-between mb-6">
-              <div>
-                <h2 class="text-xl font-semibold">API Keys</h2>
-                <p class="text-sm text-gray-600 mt-1">Manage authentication keys for your project</p>
-              </div>
-              <Button onClick={() => setShowCreateKeyModal(true)}>
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                </svg>
-                Create API Key
-              </Button>
+      {/* ---------------- API keys ---------------- */}
+      <Show when={tab() === "api-keys"}>
+        <Show when={props.apiKeyMessage}>
+          <div class="message message-neutral">{props.apiKeyMessage}</div>
+        </Show>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-header-title">Create API key</span>
+            <span class="card-header-description">
+              Keys authenticate requests with the <code>X-API-Key</code> header. The secret is shown once.
+            </span>
+          </div>
+          <div class="flex items-end gap-2 flex-wrap">
+            <div style="flex:1;min-width:14rem;max-width:24rem">
+              <Input
+                label="Key name"
+                placeholder="Frontend key"
+                value={props.apiKeyName}
+                onInput={(e) => props.onApiKeyNameChange(e.currentTarget.value)}
+              />
             </div>
-
-            <Show
-              when={(props.apiKeys?.length ?? 0) > 0}
-              fallback={
-                <EmptyState
-                  icon={
-                    <svg class="w-16 h-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                    </svg>
-                  }
-                  title="No API keys"
-                  description="Create an API key to authenticate your applications"
-                  action={
-                    <Button onClick={() => setShowCreateKeyModal(true)}>Create API Key</Button>
-                  }
-                />
-              }
+            <button
+              class="btn btn-primary"
+              onClick={props.onCreateApiKey}
+              disabled={props.apiKeyPending || !props.apiKeyName.trim()}
             >
-              <Table>
+              <IconPlus class="w-4 h-4" />
+              Create key
+            </button>
+          </div>
+        </div>
+
+        <div class="card card-flush">
+          <Show
+            when={(props.apiKeys ?? []).length > 0}
+            fallback={
+              <div class="empty-state">
+                <div class="empty-state-icon">
+                  <IconKey class="w-5 h-5" />
+                </div>
+                <p class="empty-state-title">No API keys</p>
+                <p class="empty-state-description">
+                  Create a key to authenticate API requests from your application.
+                </p>
+              </div>
+            }
+          >
+            <div class="table-container">
+              <table class="table">
                 <thead>
                   <tr>
                     <th>Name</th>
-                    <th>Key ID</th>
+                    <th>Prefix</th>
+                    <th>Last used</th>
                     <th>Status</th>
-                    <th>Created</th>
-                    <th>Last Used</th>
-                    <th class="text-right">Actions</th>
+                    <th style="width:1%" />
                   </tr>
                 </thead>
                 <tbody>
-                  <For each={props.apiKeys}>
+                  <For each={props.apiKeys ?? []}>
                     {(key) => (
                       <tr>
-                        <td class="font-medium text-gray-900">{key.name}</td>
+                        <td class="font-medium text-text-1">{key.name}</td>
                         <td>
-                          <code class="text-xs bg-gray-100 px-2 py-1 rounded">
-                            {key.key_id}
-                          </code>
+                          <code>{key.prefix}…</code>
+                        </td>
+                        <td class="text-text-3 text-xs">
+                          {key.last_used_at ? props.formatDate(key.last_used_at) : "Never"}
                         </td>
                         <td>
-                          <Badge variant={key.is_active ? 'success' : 'secondary'}>
-                            {key.is_active ? 'Active' : 'Inactive'}
+                          <Badge variant={key.revoked_at ? "neutral" : "success"}>
+                            <span class="badge-dot" />
+                            {key.revoked_at ? "Revoked" : "Active"}
                           </Badge>
                         </td>
-                        <td class="text-sm text-gray-600">{props.formatDate(key.created_at)}</td>
-                        <td class="text-sm text-gray-600">
-                          {key.last_used_at ? props.formatDate(key.last_used_at) : 'Never'}
-                        </td>
-                        <td class="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => props.onDeleteApiKey(key.id)}
-                            disabled={props.apiKeyPending}
-                          >
-                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </Button>
+                        <td>
+                          <Show when={!key.revoked_at}>
+                            <button
+                              class="icon-btn"
+                              title="Revoke key"
+                              aria-label={`Revoke ${key.name}`}
+                              onClick={() => props.onDeleteApiKey(key.id)}
+                              disabled={props.apiKeyPending}
+                            >
+                              <IconTrash class="w-4 h-4" />
+                            </button>
+                          </Show>
                         </td>
                       </tr>
                     )}
                   </For>
                 </tbody>
-              </Table>
-            </Show>
-          </Card>
-
-          <Card class="p-6 bg-blue-50 border-blue-200">
-            <div class="flex gap-4">
-              <div class="flex-shrink-0">
-                <svg class="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <div>
-                <h3 class="font-semibold text-blue-900 mb-1">Keep your API keys secure</h3>
-                <p class="text-sm text-blue-800">
-                  API keys provide full access to your project. Never share them publicly or commit them to version control.
-                  Store them securely using environment variables or secret management services.
-                </p>
-              </div>
+              </table>
             </div>
-          </Card>
-
-          <Show when={props.apiKeyMessage}>
-            <Message variant="neutral">{props.apiKeyMessage}</Message>
+            <Show when={revokedKeys().length > 0}>
+              <div class="px-4 py-2.5 text-xs text-text-3" style="border-top:1px solid var(--border)">
+                {revokedKeys().length} revoked key{revokedKeys().length === 1 ? "" : "s"} retained for audit.
+              </div>
+            </Show>
           </Show>
         </div>
       </Show>
 
-      {/* Organization Tab */}
-      <Show when={activeTab() === 'organization'}>
-        <div class="space-y-6">
-          <Card class="p-6">
-            <h2 class="text-xl font-semibold mb-4">Organization Settings</h2>
-            <form class="space-y-4" onSubmit={props.onUpdateOrganization}>
-              <Input
-                label="Organization Name"
-                placeholder="My Organization"
-                value={props.organizationEditInput.name}
-                onInput={(e) => props.onOrganizationEditInputChange('name', e.currentTarget.value)}
-                disabled={props.workspacePending || !props.canUpdateOrganization}
-              />
-              <Input
-                label="Organization Slug"
-                placeholder="my-organization"
-                value={props.organizationEditInput.slug}
-                onInput={(e) => props.onOrganizationEditInputChange('slug', e.currentTarget.value)}
-                disabled={props.workspacePending || !props.canUpdateOrganization}
-              />
-              <Show when={props.canUpdateOrganization}>
-                <div class="flex gap-3">
-                  <Button type="submit" variant="primary" disabled={props.workspacePending}>
-                    {props.workspacePending ? "Updating..." : "Update Organization"}
-                  </Button>
-                  <Button type="button" variant="danger" onClick={props.onDeleteOrganization} disabled={props.workspacePending}>
-                    Delete Organization
-                  </Button>
-                </div>
+      {/* ---------------- Organization ---------------- */}
+      <Show when={tab() === "organization"}>
+        <Show when={props.organizationMessage}>
+          <div class="message message-neutral">{props.organizationMessage}</div>
+        </Show>
+
+        <Show when={props.hasActiveOrganization}>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-header-title">Organization settings</span>
+              <span class="card-header-description">
+                Rename the active organization or change its slug.
+              </span>
+            </div>
+            <form onSubmit={props.onUpdateOrganization} class="space-y-4">
+              <div class="grid gap-4 sm:grid-cols-2">
+                <Input
+                  label="Name"
+                  value={props.organizationEditInput.name}
+                  onInput={(e) =>
+                    props.onOrganizationEditInputChange("name", e.currentTarget.value)
+                  }
+                  disabled={!props.canUpdateOrganization}
+                  required
+                />
+                <Input
+                  label="Slug"
+                  value={props.organizationEditInput.slug}
+                  onInput={(e) =>
+                    props.onOrganizationEditInputChange("slug", e.currentTarget.value)
+                  }
+                  disabled={!props.canUpdateOrganization}
+                  required
+                />
+              </div>
+              <div class="flex gap-2">
+                <button
+                  type="submit"
+                  class="btn btn-primary"
+                  disabled={!props.canUpdateOrganization || props.workspacePending}
+                >
+                  Save changes
+                </button>
+              </div>
+              <Show when={!props.canUpdateOrganization}>
+                <p class="label-hint">You need the owner or admin role to edit this organization.</p>
               </Show>
             </form>
-            <Show when={props.organizationMessage}>
-              <Message variant="neutral" class="mt-4">{props.organizationMessage}</Message>
-            </Show>
-          </Card>
+          </div>
+        </Show>
 
-          <Card class="p-6 bg-red-50 border-red-200">
-            <div class="flex gap-4">
-              <div class="flex-shrink-0">
-                <svg class="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-              </div>
-              <div>
-                <h3 class="font-semibold text-red-900 mb-1">Danger Zone</h3>
-                <p class="text-sm text-red-800">
-                  Deleting an organization is permanent and cannot be undone. All projects, members, API keys, buckets, and data will be permanently deleted.
+        <div class="card">
+          <div class="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <span class="card-header-title">New organization</span>
+              <p class="card-header-description mt-1">
+                Organizations are top-level workspaces containing projects and members.
+              </p>
+            </div>
+            <button class="btn btn-secondary" onClick={() => setCreateOrgOpen(true)}>
+              <IconPlus class="w-4 h-4" />
+              Create organization
+            </button>
+          </div>
+        </div>
+
+        <Show when={props.hasActiveOrganization && props.canUpdateOrganization}>
+          <div class="card" style="border-color:rgba(248,113,113,0.35)">
+            <div class="flex items-start gap-3">
+              <span class="icon-btn" style="color:var(--error);cursor:default">
+                <IconAlert class="w-5 h-5" />
+              </span>
+              <div class="flex-1">
+                <span class="card-header-title" style="color:var(--error)">Danger zone</span>
+                <p class="card-header-description mt-1">
+                  Deleting the organization permanently removes all projects, buckets, objects,
+                  members, invitations, API keys and audit history.
                 </p>
+                <button
+                  class="btn btn-danger mt-3"
+                  onClick={() => setConfirmDeleteOrg(true)}
+                  disabled={props.workspacePending}
+                >
+                  <IconTrash class="w-4 h-4" />
+                  Delete organization
+                </button>
               </div>
             </div>
-          </Card>
-        </div>
+          </div>
+        </Show>
       </Show>
 
-      {/* General Tab */}
-      <Show when={activeTab() === 'general'}>
-        <div class="space-y-6">
-          <Card class="p-6">
-            <h2 class="text-xl font-semibold mb-4">General Settings</h2>
-            <div class="space-y-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Theme</label>
-                <select class="input w-full max-w-xs">
-                  <option>Light</option>
-                  <option>Dark</option>
-                  <option>System</option>
-                </select>
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Language</label>
-                <select class="input w-full max-w-xs">
-                  <option>English</option>
-                  <option>Spanish</option>
-                  <option>French</option>
-                  <option>German</option>
-                </select>
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Timezone</label>
-                <select class="input w-full max-w-xs">
-                  <option>UTC</option>
-                  <option>America/New_York</option>
-                  <option>America/Los_Angeles</option>
-                  <option>Europe/London</option>
-                  <option>Asia/Tokyo</option>
-                </select>
-              </div>
+      {/* API key secret modal — shown while App holds a fresh secret */}
+      <Show when={props.apiKeySecret}>
+        <Modal
+          open={true}
+          onClose={props.onDismissSecret}
+          title="API key created"
+          description="Store this secret securely — it will not be shown again."
+          size="sm"
+        >
+          <div class="space-y-4">
+            <div class="code-block break-all select-all" style="user-select:all">
+              {props.apiKeySecret}
             </div>
-          </Card>
-
-          <Card class="p-6">
-            <h2 class="text-xl font-semibold mb-4">Notifications</h2>
-            <div class="space-y-3">
-              <label class="flex items-center gap-3">
-                <input type="checkbox" class="rounded border-gray-300" checked />
-                <div>
-                  <p class="font-medium text-gray-900">Email notifications</p>
-                  <p class="text-sm text-gray-600">Receive email updates about your projects</p>
-                </div>
-              </label>
-              <label class="flex items-center gap-3">
-                <input type="checkbox" class="rounded border-gray-300" checked />
-                <div>
-                  <p class="font-medium text-gray-900">Security alerts</p>
-                  <p class="text-sm text-gray-600">Get notified about security events</p>
-                </div>
-              </label>
-              <label class="flex items-center gap-3">
-                <input type="checkbox" class="rounded border-gray-300" />
-                <div>
-                  <p class="font-medium text-gray-900">Product updates</p>
-                  <p class="text-sm text-gray-600">Stay informed about new features</p>
-                </div>
-              </label>
-            </div>
-          </Card>
-        </div>
+            <button class="btn btn-secondary w-full" onClick={copySecret}>
+              <Show when={copied()} fallback={<IconCopy class="w-4 h-4" />}>
+                <IconCheck class="w-4 h-4" />
+              </Show>
+              {copied() ? "Copied" : "Copy secret"}
+            </button>
+          </div>
+        </Modal>
       </Show>
 
-      {/* Create API Key Modal */}
-      <Modal open={showCreateKeyModal()} onClose={() => setShowCreateKeyModal(false)} title="Create API Key">
-        <form class="space-y-4" onSubmit={handleCreateKey}>
+      {/* create organization modal */}
+      <Modal
+        open={createOrgOpen()}
+        onClose={() => setCreateOrgOpen(false)}
+        title="Create organization"
+      >
+        <form
+          onSubmit={(e) => {
+            props.onCreateOrganization(e);
+            setCreateOrgOpen(false);
+          }}
+          class="space-y-4"
+        >
           <Input
-            label="Key Name"
-            placeholder="Production API Key"
-            value={props.apiKeyName}
-            onInput={(e) => props.onApiKeyNameChange(e.currentTarget.value)}
-            disabled={props.apiKeyPending}
+            label="Organization name"
+            placeholder="Acme Corporation"
+            value={props.organizationInput.name}
+            onInput={(e) => props.onOrganizationInputChange("name", e.currentTarget.value)}
             required
           />
-          <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <p class="text-sm text-yellow-800">
-              <strong>Important:</strong> The API key secret will only be shown once. Make sure to copy and store it securely.
-            </p>
-          </div>
-          <div class="flex gap-3 justify-end pt-4">
-            <Button type="button" variant="ghost" onClick={() => setShowCreateKeyModal(false)}>
+          <Input
+            label="Slug"
+            placeholder="acme-corp"
+            value={props.organizationInput.slug}
+            onInput={(e) => props.onOrganizationInputChange("slug", e.currentTarget.value)}
+            required
+          />
+          <ModalFooter>
+            <button type="button" class="btn btn-ghost" onClick={() => setCreateOrgOpen(false)}>
               Cancel
-            </Button>
-            <Button type="submit" variant="primary" disabled={props.apiKeyPending}>
-              {props.apiKeyPending ? "Creating..." : "Create Key"}
-            </Button>
-          </div>
+            </button>
+            <button type="submit" class="btn btn-primary" disabled={props.workspacePending}>
+              Create organization
+            </button>
+          </ModalFooter>
         </form>
       </Modal>
 
-      {/* API Key Secret Modal */}
-      <Modal open={showKeySecret()} onClose={() => setShowKeySecret(false)} title="API Key Created">
-        <div class="space-y-4">
-          <div class="bg-green-50 border border-green-200 rounded-lg p-4">
-            <p class="text-sm text-green-800 mb-2">
-              <strong>Success!</strong> Your API key has been created.
-            </p>
-          </div>
-          
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">API Key Secret</label>
-            <div class="flex gap-2">
-              <code class="flex-1 p-3 bg-gray-900 text-gray-100 rounded-lg text-sm font-mono break-all">
-                {props.apiKeySecret}
-              </code>
-              <Button
-                variant="outline"
-                onClick={() => copyToClipboard(props.apiKeySecret)}
-              >
-                {copiedKey() ? (
-                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                  </svg>
-                ) : (
-                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                )}
-              </Button>
-            </div>
-          </div>
-
-          <div class="bg-red-50 border border-red-200 rounded-lg p-4">
-            <p class="text-sm text-red-800">
-              <strong>Warning:</strong> This is the only time you'll see this secret. Copy it now and store it securely.
-            </p>
-          </div>
-
-          <div class="flex justify-end pt-4">
-            <Button onClick={() => setShowKeySecret(false)}>
-              I've Saved the Key
-            </Button>
-          </div>
-        </div>
+      {/* delete org confirm */}
+      <Modal
+        open={confirmDeleteOrg()}
+        onClose={() => setConfirmDeleteOrg(false)}
+        title="Delete organization"
+        size="sm"
+      >
+        <p class="text-sm text-text-2">
+          This permanently deletes the organization and everything inside it. This cannot be undone.
+        </p>
+        <ModalFooter>
+          <button class="btn btn-ghost" onClick={() => setConfirmDeleteOrg(false)}>
+            Cancel
+          </button>
+          <button
+            class="btn btn-danger"
+            onClick={() => {
+              setConfirmDeleteOrg(false);
+              props.onDeleteOrganization();
+            }}
+            disabled={props.workspacePending}
+          >
+            Delete permanently
+          </button>
+        </ModalFooter>
       </Modal>
     </div>
   );

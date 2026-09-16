@@ -1,13 +1,12 @@
 // Components barrel export
+export { AppShell, type ViewType } from "./AppShell";
 export { Badge, StatusBadge } from "./Badge";
 export { Button } from "./Button";
 export { Card, CardHeader, CardContent, CardFooter, StatCard } from "./Card";
-export { CommandPalette } from "./CommandPalette";
-export { CommandPaletteEnhanced } from "./CommandPaletteEnhanced";
-export { DataTable } from "./DataTable";
+export { CommandPaletteEnhanced, type PaletteCommand } from "./CommandPaletteEnhanced";
 export { Dropdown } from "./Dropdown";
+export * as Icons from "./Icons";
 export { Input, Textarea, Select, FileInput } from "./Input";
-export { Layout, Sidebar, Header, PageHeader, EmptyState } from "./Layout";
 export { Logo, LogoIcon } from "./Logo";
 export { Message, Loading, Skeleton, SkeletonCard } from "./Message";
 export { Modal, ModalFooter } from "./Modal";
@@ -15,9 +14,9 @@ export { NotificationCenter, addNotification, removeNotification, clearNotificat
 export { OnboardingModal } from "./OnboardingModal";
 export { Progress, CircularProgress, Spinner } from "./Progress";
 export { ProjectDashboard } from "./ProjectDashboard";
-export { Table, DataTable as DataTableOld, Pagination } from "./Table";
+export { Table, DataTable, Pagination } from "./Table";
 export { Tabs, TabPanel } from "./Tabs";
 export { ToastContainer, toast } from "./Toast";
 export { Tooltip } from "./Tooltip";
 export { VirtualList } from "./VirtualList";
-export { NetworkError, DemoBanner } from "./NetworkError";
+export { NetworkError } from "./NetworkError";

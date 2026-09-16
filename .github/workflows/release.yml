@@ -1,0 +1,156 @@
+name: Release
+
+# Triggered by semver tags: git tag v0.3.0 && git push --tags
+# Tag must match the root package.json version.
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  VERSION: ${{ github.ref_name }}
+
+jobs:
+  verify:
+    name: Verify tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check tag matches package version
+        run: |
+          PKG=$(node -p "require('./package.json').version")
+          if [ "v$PKG" != "$VERSION" ]; then
+            echo "tag $VERSION does not match package.json version $PKG"
+            exit 1
+          fi
+
+  images:
+    name: Build + push ${{ matrix.app }}
+    needs: verify
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [backend, auth, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/primora-${{ matrix.app }}:${{ env.VERSION }}
+            ghcr.io/${{ github.repository_owner }}/primora-${{ matrix.app }}:latest
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+
+  cli-binaries:
+    name: Compile ${{ matrix.name }}
+    needs: verify
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: bun-linux-x64, name: linux-x64 }
+          - { target: bun-linux-arm64, name: linux-arm64 }
+          - { target: bun-darwin-x64, name: darwin-x64 }
+          - { target: bun-darwin-arm64, name: darwin-arm64 }
+          - { target: bun-windows-x64, name: windows-x64, ext: .exe }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: npm ci
+      - name: Compile primora + primora-mcp
+        run: |
+          set -e
+          mkdir -p dist-release
+          bun build --compile apps/cli/src/cli.ts --target=${{ matrix.target }} --outfile dist-release/primora-${{ matrix.name }}${{ matrix.ext }}
+          bun build --compile apps/mcp/src/server.ts --target=${{ matrix.target }} --outfile dist-release/primora-mcp-${{ matrix.name }}${{ matrix.ext }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.name }}
+          path: dist-release/
+          if-no-files-found: error
+
+  npm-packages:
+    name: Pack npm tarballs
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - run: |
+          npm run build --workspace @primora/cli
+          npm run build --workspace @primora/mcp
+          mkdir -p dist-release
+          cd apps/cli && npm pack --pack-destination ../../dist-release
+          cd ../mcp && npm pack --pack-destination ../../dist-release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-tarballs
+          path: dist-release/
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release
+    needs: [images, cli-binaries, npm-packages]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "*"
+          merge-multiple: true
+          path: dist-release
+      - name: Extract changelog section
+        run: |
+          awk -v ver="${VERSION#v}" '
+            $0 ~ "^## \\[" ver "\\]" { flag=1; next }
+            /^## \[/ && flag { exit }
+            flag
+          ' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "Release ${VERSION}" > notes.md
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$VERSION" --title "$VERSION" --notes-file notes.md dist-release/*
+
+  npm-publish:
+    name: Publish to npm
+    needs: release
+    runs-on: ubuntu-latest
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npm run build --workspace @primora/cli && npm run build --workspace @primora/mcp
+      - name: Publish @primora/cli + @primora/mcp
+        if: env.NPM_TOKEN != ''
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm publish --workspace @primora/cli --access public
+          npm publish --workspace @primora/mcp --access public
+      - name: Note skipped publish
+        if: env.NPM_TOKEN == ''
+        run: echo "NPM_TOKEN secret not set — tarballs attached to the GitHub release instead."

@@ -76,7 +76,7 @@ export function Table<T extends Record<string, unknown>>(props: TableProps<T>) {
             <tr>
               <td
                 colspan={local.columns.length}
-                class="py-8 text-center text-text-muted"
+                class="py-8 text-center text-text-3"
               >
                 {local.emptyMessage ?? "No data available"}
               </td>
@@ -194,7 +194,7 @@ export function Pagination(props: PaginationProps) {
 
   return (
     <nav class="flex items-center justify-between" aria-label="Pagination">
-      <div class="text-xs text-text-muted">
+      <div class="text-xs text-text-3">
         Page {props.currentPage} of {props.totalPages}
       </div>
       <div class="flex items-center gap-1">
@@ -212,7 +212,7 @@ export function Pagination(props: PaginationProps) {
           <For each={pages()}>
             {(page) =>
               page === "ellipsis" ? (
-                <span class="px-2 text-text-muted">...</span>
+                <span class="px-2 text-text-3">...</span>
               ) : (
                 <button
                   class={`btn-sm ${page === props.currentPage ? "btn-primary" : "btn-ghost"}`}

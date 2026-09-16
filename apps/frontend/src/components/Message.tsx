@@ -78,7 +78,7 @@ export function Loading(props: LoadingProps) {
   const size = () => props.size ?? "md";
 
   return (
-    <div class="flex items-center gap-3 text-text-secondary animate-fade-in">
+    <div class="flex items-center gap-3 text-text-2 animate-fade-in">
       <div class={`${sizeClasses[size()]} spinner`} />
       <Show when={props.text}>
         <span class="text-sm font-medium">{props.text}</span>

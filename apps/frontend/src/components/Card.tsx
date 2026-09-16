@@ -121,11 +121,11 @@ export function StatCard(props: StatCardProps) {
           <p class="stat-label">{props.label}</p>
           <p class="stat-value">{props.value}</p>
           <Show when={props.description}>
-            <p class="text-xs text-text-muted mt-1.5 leading-relaxed">{props.description}</p>
+            <p class="text-xs text-text-3 mt-1.5 leading-relaxed">{props.description}</p>
           </Show>
         </div>
         <Show when={props.icon}>
-          <div class="text-text-muted opacity-40 group-hover:opacity-60 transition-opacity">{props.icon}</div>
+          <div class="text-text-3 opacity-40 group-hover:opacity-60 transition-opacity">{props.icon}</div>
         </Show>
       </div>
       <Show when={props.trend && props.trendValue}>
@@ -135,7 +135,7 @@ export function StatCard(props: StatCardProps) {
               ? "text-success"
               : props.trend === "down"
                 ? "text-error"
-                : "text-text-muted"
+                : "text-text-3"
           }`}
         >
           <Show when={props.trend === "up"}>

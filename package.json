@@ -12,7 +12,7 @@
     "dev:auth": "npm run dev --workspace @primora/auth",
     "dev:frontend": "npm run dev --workspace @primora/frontend",
     "generate:client": "npm run generate --workspace @primora/api-client",
-    "generate:sqlc": "cd apps/backend && go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0 generate",
+    "generate:sqlc": "cd apps/backend && go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.29.0 generate",
     "test:backend": "cd apps/backend && go test ./...",
     "typecheck:frontend": "cd apps/frontend && npx tsc -p tsconfig.json --noEmit",
     "check:generated": "npm run generate:sqlc && npm run generate:client && git diff --exit-code -- apps/backend/internal/database/db packages/api-client/src/generated",

@@ -44,8 +44,8 @@ export function Progress(props: ProgressProps) {
     <div class={`w-full ${local.class ?? ""}`} {...rest}>
       <Show when={local.showLabel || local.label}>
         <div class="flex items-center justify-between mb-2">
-          <span class="text-xs font-medium text-text-secondary">{local.label ?? "Progress"}</span>
-          <span class="text-xs font-medium text-text-primary">{Math.round(percentage())}%</span>
+          <span class="text-xs font-medium text-text-2">{local.label ?? "Progress"}</span>
+          <span class="text-xs font-medium text-text-1">{Math.round(percentage())}%</span>
         </div>
       </Show>
       <div
@@ -115,15 +115,15 @@ export function CircularProgress(props: CircularProgressProps) {
           stroke={colorMap[variant()]}
           stroke-width={strokeWidth()}
           fill="none"
-          stroke-dasharray={circumference()}
-          stroke-dashoffset={offset()}
+          stroke-dasharray={`${circumference()}`}
+          stroke-dashoffset={`${offset()}`}
           stroke-linecap="round"
           class="transition-all duration-300 ease-out"
         />
       </svg>
       <Show when={props.showLabel}>
         <div class="absolute inset-0 flex items-center justify-center">
-          <span class="text-sm font-semibold text-text-primary">
+          <span class="text-sm font-semibold text-text-1">
             {Math.round(percentage())}%
           </span>
         </div>

@@ -1,385 +1,435 @@
-import { Show, For, createSignal } from "solid-js";
-import { Button, Card, Input, Select, Badge, Table, EmptyState, Message, Modal, Tabs, TabPanel } from "../components";
-import type { OrganizationMember, OrganizationInvitation, ProjectMember } from "@primora/api-client";
+import { For, Show, createMemo, createSignal } from "solid-js";
+import type {
+  OrganizationInvitation,
+  OrganizationMember,
+  ProjectMember,
+} from "@primora/api-client";
+import { Badge } from "../components/Badge";
+import { Modal, ModalFooter } from "../components/Modal";
+import { Input, Select } from "../components/Input";
+import {
+  IconPlus,
+  IconMembers,
+  IconTrash,
+  IconMail,
+} from "../components/Icons";
+
+interface InvitationInput {
+  email: string;
+  orgRole: string;
+  attachProject: boolean;
+  projectRole: string;
+}
 
 interface MembersPageProps {
   organizationMembers?: OrganizationMember[];
   organizationInvitations?: OrganizationInvitation[];
   projectMembers?: ProjectMember[];
-  invitationInput: {
-    email: string;
-    orgRole: string;
-    attachProject: boolean;
-    projectRole: string;
-  };
+  invitationInput: InvitationInput;
   inviteMessage: string;
   memberMessage: string;
   invitationPending: boolean;
   membersPending: boolean;
   canManageMembers: boolean;
   hasActiveProject: boolean;
-  onInvitationInputChange: (field: string, value: any) => void;
-  onSendInvitation: (e: SubmitEvent) => void;
+  onInvitationInputChange: (field: keyof InvitationInput, value: string | boolean) => void;
+  onSendInvitation: (event: SubmitEvent) => void;
   onRevokeInvitation: (id: string) => void;
-  onRemoveMember: (id: string, type: 'org' | 'project') => void;
-  onUpdateMemberRole: (id: string, role: string, type: 'org' | 'project') => void;
+  onRemoveMember: (id: string, type: "org" | "project") => void;
+  onUpdateMemberRole: (id: string, role: string, type: "org" | "project") => void;
+}
+
+const orgRoles = ["owner", "admin", "member"] as const;
+const projectRoles = ["admin", "developer", "viewer"] as const;
+
+function roleVariant(role: string): "primary" | "success" | "warning" | "neutral" {
+  switch (role) {
+    case "owner":
+      return "primary";
+    case "admin":
+      return "success";
+    case "developer":
+      return "warning";
+    default:
+      return "neutral";
+  }
+}
+
+function initials(name?: string, email?: string): string {
+  const src = name || email || "?";
+  return src
+    .split(/[\s@.]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((s) => s[0]?.toUpperCase())
+    .join("");
+}
+
+function formatDate(value?: string | null): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 export function MembersPage(props: MembersPageProps) {
-  const [showInviteModal, setShowInviteModal] = createSignal(false);
-  const [activeTab, setActiveTab] = createSignal<'organization' | 'project'>('organization');
-  const [searchQuery, setSearchQuery] = createSignal("");
+  const [tab, setTab] = createSignal<"org" | "project">("org");
+  const [inviteOpen, setInviteOpen] = createSignal(false);
+  const [query, setQuery] = createSignal("");
 
-  const filteredOrgMembers = () => {
-    const query = searchQuery().toLowerCase();
-    if (!query || !props.organizationMembers) return props.organizationMembers || [];
-    return props.organizationMembers.filter(m => 
-      m.user_name?.toLowerCase().includes(query) || 
-      m.user_email?.toLowerCase().includes(query)
+  const filteredOrgMembers = createMemo(() => {
+    const q = query().toLowerCase();
+    const list = props.organizationMembers ?? [];
+    if (!q) return list;
+    return list.filter(
+      (m) =>
+        m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q),
     );
-  };
+  });
 
-  const filteredProjectMembers = () => {
-    const query = searchQuery().toLowerCase();
-    if (!query || !props.projectMembers) return props.projectMembers || [];
-    return props.projectMembers.filter(m => 
-      m.user_name?.toLowerCase().includes(query) || 
-      m.user_email?.toLowerCase().includes(query)
+  const filteredProjectMembers = createMemo(() => {
+    const q = query().toLowerCase();
+    const list = props.projectMembers ?? [];
+    if (!q) return list;
+    return list.filter(
+      (m) =>
+        m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q),
     );
-  };
+  });
 
-  const handleInviteSubmit = (e: SubmitEvent) => {
+  const pendingInvitations = createMemo(() =>
+    (props.organizationInvitations ?? []).filter((i) => i.status === "pending"),
+  );
+
+  const handleInvite = (e: SubmitEvent) => {
     props.onSendInvitation(e);
-    setShowInviteModal(false);
+    setInviteOpen(false);
   };
 
-  const getRoleBadgeVariant = (role: string) => {
-    switch (role) {
-      case 'owner': return 'primary';
-      case 'admin': return 'success';
-      default: return 'secondary';
-    }
-  };
+  const MemberRow = (p: {
+    member: OrganizationMember | ProjectMember;
+    type: "org" | "project";
+    roles: readonly string[];
+  }) => (
+    <tr>
+      <td>
+        <div class="flex items-center gap-2.5">
+          <span
+            class="avatar"
+            style="width:1.75rem;height:1.75rem;font-size:0.625rem"
+          >
+            {initials(p.member.name, p.member.email)}
+          </span>
+          <div>
+            <div class="font-medium text-text-1">{p.member.name || "Unnamed"}</div>
+            <div class="text-xs text-text-3">{p.member.email}</div>
+          </div>
+        </div>
+      </td>
+      <td>
+        <Badge variant={p.member.email_verified ? "success" : "warning"}>
+          <span class="badge-dot" />
+          {p.member.email_verified ? "Verified" : "Unverified"}
+        </Badge>
+      </td>
+      <td>
+        <Show
+          when={props.canManageMembers}
+          fallback={<Badge variant={roleVariant(p.member.role)}>{p.member.role}</Badge>}
+        >
+          <select
+            class="select input-sm"
+            style="width:8.5rem"
+            value={p.member.role}
+            onChange={(e) =>
+              props.onUpdateMemberRole(p.member.user_id, e.currentTarget.value, p.type)
+            }
+            disabled={props.membersPending}
+            aria-label={`Role for ${p.member.email}`}
+          >
+            <For each={p.roles}>
+              {(role) => <option value={role}>{role}</option>}
+            </For>
+          </select>
+        </Show>
+      </td>
+      <td class="text-text-3">{formatDate(p.member.joined_at)}</td>
+      <td style="width:1%">
+        <Show when={props.canManageMembers}>
+          <button
+            class="icon-btn"
+            title="Remove member"
+            aria-label={`Remove ${p.member.email}`}
+            onClick={() => props.onRemoveMember(p.member.user_id, p.type)}
+            disabled={props.membersPending}
+          >
+            <IconTrash class="w-4 h-4" />
+          </button>
+        </Show>
+      </td>
+    </tr>
+  );
 
   return (
-    <div class="space-y-6">
-      {/* Header */}
-      <div class="flex items-center justify-between">
+    <div class="page">
+      <div class="page-header">
         <div>
-          <h1 class="text-3xl font-bold text-gray-900">Team Members</h1>
-          <p class="text-gray-600 mt-1">Manage organization and project access</p>
+          <h1 class="page-title">Members</h1>
+          <p class="page-description">
+            Organization members share workspace access; project members get scoped roles.
+          </p>
         </div>
-        <Show when={props.canManageMembers}>
-          <Button onClick={() => setShowInviteModal(true)}>
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-            </svg>
-            Invite Member
-          </Button>
-        </Show>
+        <div class="page-actions">
+          <button
+            class="btn btn-primary"
+            onClick={() => setInviteOpen(true)}
+            disabled={!props.canManageMembers}
+          >
+            <IconPlus class="w-4 h-4" />
+            Invite member
+          </button>
+        </div>
       </div>
 
-      {/* Tabs */}
-      <Tabs
-        tabs={[
-          { id: 'organization', label: 'Organization Members' },
-          { id: 'project', label: 'Project Members', disabled: !props.hasActiveProject },
-        ]}
-        activeTab={activeTab()}
-        onChange={(id) => setActiveTab(id as 'organization' | 'project')}
-      />
+      <Show when={props.inviteMessage}>
+        <div class="message message-info">{props.inviteMessage}</div>
+      </Show>
+      <Show when={props.memberMessage}>
+        <div class="message message-neutral">{props.memberMessage}</div>
+      </Show>
 
-      {/* Search Bar */}
-      <Card class="p-4">
+      <div class="flex items-center justify-between gap-3 flex-wrap">
+        <div class="tabs">
+          <button
+            class={`tab ${tab() === "org" ? "active" : ""}`}
+            onClick={() => setTab("org")}
+          >
+            Organization
+            <span class="nav-badge ml-1.5">{(props.organizationMembers ?? []).length}</span>
+          </button>
+          <button
+            class={`tab ${tab() === "project" ? "active" : ""}`}
+            onClick={() => setTab("project")}
+            disabled={!props.hasActiveProject}
+          >
+            Project
+            <span class="nav-badge ml-1.5">{(props.projectMembers ?? []).length}</span>
+          </button>
+        </div>
         <Input
-          placeholder="Search members by name or email..."
-          value={searchQuery()}
-          onInput={(e) => setSearchQuery(e.currentTarget.value)}
-          class="w-full"
+          placeholder="Filter members…"
+          value={query()}
+          onInput={(e) => setQuery(e.currentTarget.value)}
+          class="input-sm"
+          style="width:14rem"
         />
-      </Card>
+      </div>
 
-      {/* Organization Members Tab */}
-      <Show when={activeTab() === 'organization'}>
-        <div class="space-y-6">
-          {/* Pending Invitations */}
-          <Show when={(props.organizationInvitations?.length ?? 0) > 0}>
-            <Card class="p-6">
-              <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
-                <svg class="w-5 h-5 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Pending Invitations
-              </h2>
-              <div class="space-y-3">
-                <For each={props.organizationInvitations}>
-                  {(invitation) => (
-                    <div class="flex items-center justify-between p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                      <div class="flex-1">
-                        <p class="font-medium text-gray-900">{invitation.email}</p>
-                        <div class="flex items-center gap-2 mt-1">
-                          <Badge variant="secondary">{invitation.org_role}</Badge>
-                          <Show when={invitation.project_id}>
-                            <Badge variant="secondary">Project: {invitation.project_role}</Badge>
-                          </Show>
-                          <span class="text-xs text-gray-500">
-                            Invited {new Date(invitation.created_at).toLocaleDateString()}
-                          </span>
-                        </div>
-                      </div>
-                      <Show when={props.canManageMembers}>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => props.onRevokeInvitation(invitation.id)}
-                          disabled={props.invitationPending}
-                        >
-                          Revoke
-                        </Button>
-                      </Show>
-                    </div>
-                  )}
-                </For>
-              </div>
-            </Card>
-          </Show>
-
-          {/* Members List */}
-          <Card>
-            <Show
-              when={filteredOrgMembers().length > 0}
-              fallback={
-                <div class="p-12">
-                  <EmptyState
-                    icon={
-                      <svg class="w-16 h-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                      </svg>
-                    }
-                    title="No members found"
-                    description={searchQuery() ? "Try adjusting your search" : "Invite team members to collaborate"}
-                  />
+      <div class="card card-flush">
+        <Show when={tab() === "org"}>
+          <Show
+            when={filteredOrgMembers().length > 0}
+            fallback={
+              <div class="empty-state">
+                <div class="empty-state-icon">
+                  <IconMembers class="w-5 h-5" />
                 </div>
-              }
-            >
-              <Table>
+                <p class="empty-state-title">No members found</p>
+                <p class="empty-state-description">
+                  Invite teammates to collaborate on this organization.
+                </p>
+              </div>
+            }
+          >
+            <div class="table-container">
+              <table class="table">
                 <thead>
                   <tr>
                     <th>Member</th>
+                    <th>Email</th>
                     <th>Role</th>
                     <th>Joined</th>
-                    <th class="text-right">Actions</th>
+                    <th style="width:1%" />
                   </tr>
                 </thead>
                 <tbody>
                   <For each={filteredOrgMembers()}>
-                    {(member) => (
-                      <tr>
-                        <td>
-                          <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-semibold">
-                              {member.user_name?.charAt(0).toUpperCase() ?? '?'}
-                            </div>
-                            <div>
-                              <p class="font-medium text-gray-900">{member.user_name}</p>
-                              <p class="text-sm text-gray-600">{member.user_email}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td>
-                          <Show
-                            when={props.canManageMembers && member.role !== 'owner'}
-                            fallback={<Badge variant={getRoleBadgeVariant(member.role)}>{member.role}</Badge>}
-                          >
-                            <Select
-                              value={member.role}
-                              onChange={(e) => props.onUpdateMemberRole(member.user_id, e.currentTarget.value, 'org')}
-                              disabled={props.membersPending}
-                              class="w-32"
-                            >
-                              <option value="member">Member</option>
-                              <option value="admin">Admin</option>
-                              <option value="owner">Owner</option>
-                            </Select>
-                          </Show>
-                        </td>
-                        <td class="text-sm text-gray-600">
-                          {new Date(member.created_at).toLocaleDateString()}
-                        </td>
-                        <td class="text-right">
-                          <Show when={props.canManageMembers && member.role !== 'owner'}>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => props.onRemoveMember(member.user_id, 'org')}
-                              disabled={props.membersPending}
-                            >
-                              Remove
-                            </Button>
-                          </Show>
-                        </td>
-                      </tr>
-                    )}
+                    {(member) => <MemberRow member={member} type="org" roles={orgRoles} />}
                   </For>
                 </tbody>
-              </Table>
-            </Show>
-          </Card>
-        </div>
-      </Show>
+              </table>
+            </div>
+          </Show>
+        </Show>
 
-      {/* Project Members Tab */}
-      <Show when={activeTab() === 'project'}>
-        <Card>
+        <Show when={tab() === "project"}>
           <Show
             when={filteredProjectMembers().length > 0}
             fallback={
-              <div class="p-12">
-                <EmptyState
-                  icon={
-                    <svg class="w-16 h-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                    </svg>
-                  }
-                  title="No project members"
-                  description="Add members to this project to collaborate"
-                />
+              <div class="empty-state">
+                <div class="empty-state-icon">
+                  <IconMembers class="w-5 h-5" />
+                </div>
+                <p class="empty-state-title">No project members</p>
+                <p class="empty-state-description">
+                  Invite someone with a project role to grant scoped access.
+                </p>
               </div>
             }
           >
-            <Table>
+            <div class="table-container">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Member</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Joined</th>
+                    <th style="width:1%" />
+                  </tr>
+                </thead>
+                <tbody>
+                  <For each={filteredProjectMembers()}>
+                    {(member) => (
+                      <MemberRow member={member} type="project" roles={projectRoles} />
+                    )}
+                  </For>
+                </tbody>
+              </table>
+            </div>
+          </Show>
+        </Show>
+      </div>
+
+      <Show when={pendingInvitations().length > 0}>
+        <div class="card card-flush">
+          <div class="card-header" style="padding:1.25rem 1.25rem 1rem;margin-bottom:0;border-bottom:1px solid var(--border)">
+            <span class="card-header-title">Pending invitations</span>
+            <span class="card-header-description">
+              Invites that have been sent but not yet accepted.
+            </span>
+          </div>
+          <div class="table-container">
+            <table class="table">
               <thead>
                 <tr>
-                  <th>Member</th>
-                  <th>Role</th>
-                  <th>Added</th>
-                  <th class="text-right">Actions</th>
+                  <th>Email</th>
+                  <th>Org role</th>
+                  <th>Project role</th>
+                  <th>Expires</th>
+                  <th style="width:1%" />
                 </tr>
               </thead>
               <tbody>
-                <For each={filteredProjectMembers()}>
-                  {(member) => (
+                <For each={pendingInvitations()}>
+                  {(inv) => (
                     <tr>
                       <td>
-                        <div class="flex items-center gap-3">
-                          <div class="w-10 h-10 rounded-full bg-gradient-to-br from-green-500 to-teal-500 flex items-center justify-center text-white font-semibold">
-                            {member.user_name?.charAt(0).toUpperCase() ?? '?'}
-                          </div>
-                          <div>
-                            <p class="font-medium text-gray-900">{member.user_name}</p>
-                            <p class="text-sm text-gray-600">{member.user_email}</p>
-                          </div>
+                        <div class="flex items-center gap-2.5">
+                          <span class="avatar" style="width:1.75rem;height:1.75rem;font-size:0.625rem;background:var(--surface-3);color:var(--text-2);border-color:var(--border)">
+                            <IconMail class="w-3.5 h-3.5" />
+                          </span>
+                          <span class="font-medium text-text-1">{inv.email}</span>
                         </div>
                       </td>
                       <td>
-                        <Show
-                          when={props.canManageMembers}
-                          fallback={<Badge variant={getRoleBadgeVariant(member.role)}>{member.role}</Badge>}
-                        >
-                          <Select
-                            value={member.role}
-                            onChange={(e) => props.onUpdateMemberRole(member.user_id, e.currentTarget.value, 'project')}
-                            disabled={props.membersPending}
-                            class="w-32"
-                          >
-                            <option value="viewer">Viewer</option>
-                            <option value="developer">Developer</option>
-                            <option value="admin">Admin</option>
-                          </Select>
+                        <Badge variant={roleVariant(inv.org_role)}>{inv.org_role}</Badge>
+                      </td>
+                      <td>
+                        <Show when={inv.project_role} fallback={<span class="text-text-3">—</span>}>
+                          <Badge variant="neutral">
+                            {inv.project_role}
+                            <Show when={inv.project_name}> · {inv.project_name}</Show>
+                          </Badge>
                         </Show>
                       </td>
-                      <td class="text-sm text-gray-600">
-                        {new Date(member.created_at).toLocaleDateString()}
-                      </td>
-                      <td class="text-right">
+                      <td class="text-text-3">{formatDate(inv.expires_at)}</td>
+                      <td>
                         <Show when={props.canManageMembers}>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => props.onRemoveMember(member.user_id, 'project')}
-                            disabled={props.membersPending}
+                          <button
+                            class="btn btn-ghost btn-sm"
+                            onClick={() => props.onRevokeInvitation(inv.id)}
+                            disabled={props.invitationPending}
                           >
-                            Remove
-                          </Button>
+                            Revoke
+                          </button>
                         </Show>
                       </td>
                     </tr>
                   )}
                 </For>
               </tbody>
-            </Table>
-          </Show>
-        </Card>
+            </table>
+          </div>
+        </div>
       </Show>
 
-      <Show when={props.memberMessage}>
-        <Message variant="neutral">{props.memberMessage}</Message>
-      </Show>
-
-      {/* Invite Modal */}
-      <Modal open={showInviteModal()} onClose={() => setShowInviteModal(false)} title="Invite Team Member">
-        <form class="space-y-4" onSubmit={handleInviteSubmit}>
+      {/* Invite modal */}
+      <Modal
+        open={inviteOpen()}
+        onClose={() => setInviteOpen(false)}
+        title="Invite member"
+        description="Send an email invitation with an organization role, optionally scoped to the active project."
+      >
+        <form onSubmit={handleInvite} class="space-y-4">
           <Input
-            label="Email Address"
+            label="Email address"
             type="email"
-            placeholder="colleague@example.com"
+            placeholder="teammate@example.com"
             value={props.invitationInput.email}
-            onInput={(e) => props.onInvitationInputChange('email', e.currentTarget.value)}
-            disabled={props.invitationPending}
+            onInput={(e) => props.onInvitationInputChange("email", e.currentTarget.value)}
             required
           />
-          
           <Select
-            label="Organization Role"
+            label="Organization role"
             value={props.invitationInput.orgRole}
-            onChange={(e) => props.onInvitationInputChange('orgRole', e.currentTarget.value)}
-            disabled={props.invitationPending}
+            onChange={(e) => props.onInvitationInputChange("orgRole", e.currentTarget.value)}
           >
-            <option value="member">Member</option>
-            <option value="admin">Admin</option>
+            <For each={orgRoles}>
+              {(role) => <option value={role}>{role}</option>}
+            </For>
           </Select>
-
           <Show when={props.hasActiveProject}>
-            <div class="flex items-center gap-2">
+            <label class="flex items-center gap-2.5 text-sm text-text-2 cursor-pointer">
               <input
                 type="checkbox"
-                id="attachProject"
+                class="checkbox"
                 checked={props.invitationInput.attachProject}
-                onChange={(e) => props.onInvitationInputChange('attachProject', e.currentTarget.checked)}
-                disabled={props.invitationPending}
-                class="rounded border-gray-300"
+                onChange={(e) =>
+                  props.onInvitationInputChange("attachProject", e.currentTarget.checked)
+                }
               />
-              <label for="attachProject" class="text-sm text-gray-700">
-                Add to current project
-              </label>
-            </div>
-
+              Also grant access to the active project
+            </label>
             <Show when={props.invitationInput.attachProject}>
               <Select
-                label="Project Role"
+                label="Project role"
                 value={props.invitationInput.projectRole}
-                onChange={(e) => props.onInvitationInputChange('projectRole', e.currentTarget.value)}
-                disabled={props.invitationPending}
+                onChange={(e) =>
+                  props.onInvitationInputChange("projectRole", e.currentTarget.value)
+                }
               >
-                <option value="viewer">Viewer</option>
-                <option value="developer">Developer</option>
-                <option value="admin">Admin</option>
+                <For each={projectRoles}>
+                  {(role) => <option value={role}>{role}</option>}
+                </For>
               </Select>
             </Show>
           </Show>
-
-          <div class="flex gap-3 justify-end pt-4">
-            <Button type="button" variant="ghost" onClick={() => setShowInviteModal(false)}>
+          <ModalFooter>
+            <button type="button" class="btn btn-ghost" onClick={() => setInviteOpen(false)}>
               Cancel
-            </Button>
-            <Button type="submit" variant="primary" disabled={props.invitationPending}>
-              {props.invitationPending ? "Sending..." : "Send Invitation"}
-            </Button>
-          </div>
+            </button>
+            <button type="submit" class="btn btn-primary" disabled={props.invitationPending}>
+              <Show when={props.invitationPending} fallback="Send invitation">
+                <span class="spinner" /> Sending…
+              </Show>
+            </button>
+          </ModalFooter>
         </form>
-        <Show when={props.inviteMessage}>
-          <Message variant="neutral" class="mt-4">{props.inviteMessage}</Message>
-        </Show>
       </Modal>
     </div>
   );

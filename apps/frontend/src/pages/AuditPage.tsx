@@ -1,298 +1,241 @@
-import { Show, For } from "solid-js";
-import { Button, Card, Input, Select, Badge, Table, EmptyState } from "../components";
-import type { AuditLog } from "@primora/api-client";
+import { For, Show, createSignal } from "solid-js";
+import type { AuditLog, AuditLogListResponse } from "@primora/api-client";
+import { Badge } from "../components/Badge";
+import { Input, Select } from "../components/Input";
+import { IconAudit, IconRefresh, IconDownload } from "../components/Icons";
 
 interface AuditPageProps {
-  auditLogs?: AuditLog[];
+  auditLogs: AuditLog[];
   auditSearch: string;
   auditAction: string;
   auditOffset: number;
-  auditPage?: { items: AuditLog[]; total: number; limit: number; offset: number };
+  auditPage?: AuditLogListResponse;
   onAuditSearchChange: (value: string) => void;
   onAuditActionChange: (value: string) => void;
   onAuditPageChange: (offset: number) => void;
   onRefreshAudit: () => void;
-  formatDate: (date?: string | null) => string;
+  formatDate: (value?: string | null) => string;
+}
+
+const PAGE_SIZE = 25;
+
+const ACTION_OPTIONS = [
+  "",
+  "project.created",
+  "project.updated",
+  "project.deleted",
+  "bucket.created",
+  "bucket.updated",
+  "bucket.deleted",
+  "object.uploaded",
+  "object.updated",
+  "object.deleted",
+  "api_key.created",
+  "api_key.revoked",
+  "member.invited",
+  "member.role_updated",
+  "member.removed",
+  "collection.created",
+  "collection.deleted",
+  "document.created",
+  "document.updated",
+  "document.deleted",
+];
+
+function actionVariant(action: string): "success" | "error" | "primary" | "warning" | "neutral" {
+  if (action.includes("delete") || action.includes("revoke") || action.includes("remove")) {
+    return "error";
+  }
+  if (action.includes("create") || action.includes("upload") || action.includes("invite")) {
+    return "success";
+  }
+  if (action.includes("update") || action.includes("role")) {
+    return "primary";
+  }
+  return "neutral";
+}
+
+function exportLogs(logs: AuditLog[], format: "json" | "csv") {
+  let content: string;
+  let mime: string;
+  let ext: string;
+
+  if (format === "csv") {
+    const header = "id,created_at,action,resource_type,resource_id,request_id";
+    const rows = logs.map((l) =>
+      [l.id, l.created_at, l.action, l.resource_type, l.resource_id, l.request_id]
+        .map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`)
+        .join(","),
+    );
+    content = [header, ...rows].join("\n");
+    mime = "text/csv";
+    ext = "csv";
+  } else {
+    content = JSON.stringify(logs, null, 2);
+    mime = "application/json";
+    ext = "json";
+  }
+
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `audit-log-${new Date().toISOString().slice(0, 10)}.${ext}`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export function AuditPage(props: AuditPageProps) {
-  const getActionBadgeVariant = (action: string) => {
-    if (action.includes('create')) return 'success';
-    if (action.includes('delete')) return 'danger';
-    if (action.includes('update')) return 'primary';
-    return 'secondary';
-  };
+  const [expandedId, setExpandedId] = createSignal<string | null>(null);
 
-  const getActionIcon = (action: string) => {
-    if (action.includes('create')) {
-      return (
-        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-        </svg>
-      );
-    }
-    if (action.includes('delete')) {
-      return (
-        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-        </svg>
-      );
-    }
-    if (action.includes('update')) {
-      return (
-        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-        </svg>
-      );
-    }
-    return (
-      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    );
-  };
-
-  const formatResourceType = (type: string) => {
-    return type.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-  };
+  const total = () => props.auditPage?.total ?? props.auditLogs.length;
+  const currentPage = () => Math.floor(props.auditOffset / PAGE_SIZE) + 1;
+  const totalPages = () => Math.max(1, Math.ceil(total() / PAGE_SIZE));
 
   return (
-    <div class="space-y-6">
-      {/* Header */}
-      <div class="flex items-center justify-between">
+    <div class="page">
+      <div class="page-header">
         <div>
-          <h1 class="text-3xl font-bold text-gray-900">Audit Logs</h1>
-          <p class="text-gray-600 mt-1">Track all activities and changes in your project</p>
+          <h1 class="page-title">Audit log</h1>
+          <p class="page-description">
+            Every mutating request against this project, recorded with request IDs.
+          </p>
         </div>
-        <Button variant="secondary" onClick={props.onRefreshAudit}>
-          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          Refresh
-        </Button>
+        <div class="page-actions">
+          <button class="btn btn-ghost" onClick={props.onRefreshAudit}>
+            <IconRefresh class="w-4 h-4" />
+            Refresh
+          </button>
+          <button class="btn btn-secondary" onClick={() => exportLogs(props.auditLogs, "csv")}>
+            <IconDownload class="w-4 h-4" />
+            CSV
+          </button>
+          <button class="btn btn-secondary" onClick={() => exportLogs(props.auditLogs, "json")}>
+            <IconDownload class="w-4 h-4" />
+            JSON
+          </button>
+        </div>
       </div>
 
-      {/* Filters */}
-      <Card class="p-4">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="flex items-center gap-3 flex-wrap">
+        <div style="flex:1;min-width:14rem;max-width:24rem">
           <Input
-            placeholder="Search by resource, actor, or details..."
+            placeholder="Search by resource, action or request ID…"
+            class="input-sm"
             value={props.auditSearch}
             onInput={(e) => props.onAuditSearchChange(e.currentTarget.value)}
           />
-          <Select
-            value={props.auditAction}
-            onChange={(e) => props.onAuditActionChange(e.currentTarget.value)}
-          >
-            <option value="">All Actions</option>
-            <option value="create">Create</option>
-            <option value="update">Update</option>
-            <option value="delete">Delete</option>
-            <option value="upload">Upload</option>
-            <option value="download">Download</option>
-          </Select>
         </div>
-      </Card>
-
-      {/* Stats Cards */}
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card class="p-4">
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-              <svg class="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-            </div>
-            <div>
-              <p class="text-2xl font-bold text-gray-900">{props.auditPage?.total ?? 0}</p>
-              <p class="text-sm text-gray-600">Total Events</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card class="p-4">
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-              <svg class="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-              </svg>
-            </div>
-            <div>
-              <p class="text-2xl font-bold text-gray-900">
-                {props.auditLogs?.filter(log => log.action.includes('create')).length ?? 0}
-              </p>
-              <p class="text-sm text-gray-600">Creates</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card class="p-4">
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <svg class="w-5 h-5 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-            </div>
-            <div>
-              <p class="text-2xl font-bold text-gray-900">
-                {props.auditLogs?.filter(log => log.action.includes('update')).length ?? 0}
-              </p>
-              <p class="text-sm text-gray-600">Updates</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card class="p-4">
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-              <svg class="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </div>
-            <div>
-              <p class="text-2xl font-bold text-gray-900">
-                {props.auditLogs?.filter(log => log.action.includes('delete')).length ?? 0}
-              </p>
-              <p class="text-sm text-gray-600">Deletes</p>
-            </div>
-          </div>
-        </Card>
+        <Select
+          class="input-sm"
+          style="width:14rem"
+          value={props.auditAction}
+          onChange={(e) => props.onAuditActionChange(e.currentTarget.value)}
+          aria-label="Filter by action"
+        >
+          <option value="">All actions</option>
+          <For each={ACTION_OPTIONS.slice(1)}>
+            {(action) => <option value={action}>{action}</option>}
+          </For>
+        </Select>
+        <span class="text-xs text-text-3 ml-auto">
+          {total()} event{total() === 1 ? "" : "s"}
+        </span>
       </div>
 
-      {/* Audit Logs Table */}
-      <Card>
+      <div class="card card-flush">
         <Show
-          when={(props.auditLogs?.length ?? 0) > 0}
+          when={props.auditLogs.length > 0}
           fallback={
-            <div class="p-12">
-              <EmptyState
-                icon={
-                  <svg class="w-16 h-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                  </svg>
-                }
-                title="No audit logs"
-                description={props.auditSearch || props.auditAction ? "No logs match your filters" : "Activity will appear here as you use the platform"}
-              />
+            <div class="empty-state">
+              <div class="empty-state-icon">
+                <IconAudit class="w-5 h-5" />
+              </div>
+              <p class="empty-state-title">No audit events</p>
+              <p class="empty-state-description">
+                Actions on this project — uploads, key creation, member changes — will appear here.
+              </p>
             </div>
           }
         >
-          <div class="overflow-x-auto">
-            <Table>
+          <div class="table-container">
+            <table class="table">
               <thead>
                 <tr>
-                  <th>Timestamp</th>
-                  <th>Action</th>
+                  <th>Event</th>
                   <th>Resource</th>
-                  <th>Actor</th>
-                  <th>Details</th>
+                  <th>Request</th>
+                  <th style="width:1%">Time</th>
                 </tr>
               </thead>
               <tbody>
                 <For each={props.auditLogs}>
                   {(log) => (
-                    <tr class="hover:bg-gray-50">
-                      <td class="text-sm text-gray-600 whitespace-nowrap">
-                        {props.formatDate(log.created_at)}
-                      </td>
-                      <td>
-                        <div class="flex items-center gap-2">
-                          <Badge variant={getActionBadgeVariant(log.action)} class="flex items-center gap-1">
-                            {getActionIcon(log.action)}
-                            {log.action}
-                          </Badge>
-                        </div>
-                      </td>
-                      <td>
-                        <div>
-                          <p class="font-medium text-gray-900">{formatResourceType(log.resource_type)}</p>
-                          <Show when={log.resource_id}>
-                            <code class="text-xs text-gray-500">{log.resource_id}</code>
-                          </Show>
-                        </div>
-                      </td>
-                      <td>
-                        <div class="flex items-center gap-2">
-                          <div class="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-xs font-semibold">
-                            {log.actor_name?.charAt(0).toUpperCase() ?? '?'}
-                          </div>
-                          <div>
-                            <p class="text-sm font-medium text-gray-900">{log.actor_name}</p>
-                            <p class="text-xs text-gray-500">{log.actor_email}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td>
-                        <Show when={log.details}>
-                          <details class="text-sm">
-                            <summary class="cursor-pointer text-blue-600 hover:text-blue-700">
-                              View details
-                            </summary>
-                            <pre class="mt-2 p-2 bg-gray-50 rounded text-xs overflow-x-auto">
-                              {JSON.stringify(log.details, null, 2)}
+                    <>
+                      <tr
+                        class="clickable"
+                        onClick={() =>
+                          setExpandedId(expandedId() === log.id ? null : log.id)
+                        }
+                      >
+                        <td>
+                          <Badge variant={actionVariant(log.action)}>{log.action}</Badge>
+                        </td>
+                        <td>
+                          <span class="text-text-2">{log.resource_type}</span>{" "}
+                          <code class="text-xs">{log.resource_id}</code>
+                        </td>
+                        <td>
+                          <code class="text-xs text-text-3">{log.request_id}</code>
+                        </td>
+                        <td class="text-xs text-text-3 whitespace-nowrap">
+                          {props.formatDate(log.created_at)}
+                        </td>
+                      </tr>
+                      <Show when={expandedId() === log.id && Object.keys(log.metadata ?? {}).length > 0}>
+                        <tr>
+                          <td colspan={4} style="background:var(--bg-panel);padding:0.75rem 1.25rem">
+                            <pre class="code-block" style="border:0;padding:0;background:transparent">
+                              {JSON.stringify(log.metadata, null, 2)}
                             </pre>
-                          </details>
-                        </Show>
-                      </td>
-                    </tr>
+                          </td>
+                        </tr>
+                      </Show>
+                    </>
                   )}
                 </For>
               </tbody>
-            </Table>
+            </table>
           </div>
 
-          {/* Pagination */}
-          <Show when={props.auditPage && props.auditPage.total > props.auditPage.limit}>
-            <div class="p-4 border-t border-gray-200 flex items-center justify-between">
-              <p class="text-sm text-gray-600">
-                Showing {props.auditPage!.offset + 1} to {Math.min(props.auditPage!.offset + props.auditPage!.limit, props.auditPage!.total)} of {props.auditPage!.total}
-              </p>
-              <div class="flex gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={props.auditPage!.offset === 0}
-                  onClick={() => props.onAuditPageChange(Math.max(0, props.auditPage!.offset - props.auditPage!.limit))}
+          <Show when={totalPages() > 1}>
+            <div
+              class="flex items-center justify-between px-4 py-3"
+              style="border-top:1px solid var(--border)"
+            >
+              <span class="text-xs text-text-3">
+                Page {currentPage()} of {totalPages()}
+              </span>
+              <div class="flex gap-1">
+                <button
+                  class="btn btn-ghost btn-sm"
+                  disabled={currentPage() <= 1}
+                  onClick={() => props.onAuditPageChange((currentPage() - 2) * PAGE_SIZE)}
                 >
                   Previous
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={props.auditPage!.offset + props.auditPage!.limit >= props.auditPage!.total}
-                  onClick={() => props.onAuditPageChange(props.auditPage!.offset + props.auditPage!.limit)}
+                </button>
+                <button
+                  class="btn btn-ghost btn-sm"
+                  disabled={!props.auditPage?.has_more}
+                  onClick={() => props.onAuditPageChange(currentPage() * PAGE_SIZE)}
                 >
                   Next
-                </Button>
+                </button>
               </div>
             </div>
           </Show>
         </Show>
-      </Card>
-
-      {/* Export Section */}
-      <Card class="p-6 bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200">
-        <div class="flex items-center justify-between">
-          <div>
-            <h3 class="text-lg font-semibold mb-1">Export Audit Logs</h3>
-            <p class="text-sm text-gray-600">Download audit logs for compliance and analysis</p>
-          </div>
-          <div class="flex gap-2">
-            <Button variant="outline">
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              Export CSV
-            </Button>
-            <Button variant="outline">
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              Export JSON
-            </Button>
-          </div>
-        </div>
-      </Card>
+      </div>
     </div>
   );
 }

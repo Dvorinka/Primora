@@ -1,10 +1,12 @@
 import { createAuthClient } from "better-auth/solid";
+import { adminClient } from "better-auth/client/plugins";
 
 // Use full URL for dev mode, relative path for production
 const baseURL = import.meta.env.VITE_AUTH_BASE_URL ?? "http://localhost/auth";
 
 export const authClient = createAuthClient({
   baseURL,
+  plugins: [adminClient()],
 });
 
 export async function fetchApiToken() {
