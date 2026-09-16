@@ -125,6 +125,94 @@ Follow-ups:
 - Desktop bundle signing + auto-updater — unsigned artifacts today; add when
   distribution matures.
 
+## Phase 6 — Production hardening (v0.6.0)
+
+The v1 feature surface is essentially complete; what remains is the
+difference between "works" and "safe to run other people's data". Roughly
+three-quarters of the distance is travelled — this phase is the rest.
+
+Foundations already in place: liveness/readiness probes with dependency
+checks, per-key and per-user rate limiting, CORS locked to `PUBLIC_URL`,
+AES-256-GCM credential encryption (`PRIMORA_ENCRYPTION_KEY` enforced in
+production), audit log on mutations, org/project roles, SMTP + Resend in
+the auth service, migrations on boot, single-command compose deploy,
+release pipeline with images + binaries + desktop bundles.
+
+### Security
+
+- **Graceful shutdown** — `router.Run()` drops in-flight requests on every
+  deploy. Switch to `http.Server` + `signal.NotifyContext` with a ~10s
+  drain.
+- **Security headers** — add `X-Frame-Options`, `Referrer-Policy`,
+  `Permissions-Policy`, and a baseline CSP at the nginx/frontend layer.
+- **TLS story** — shipped nginx vhost is HTTP-only. Document a reverse
+  proxy (Caddy/Traefik) in front for production; optionally ship a
+  TLS-ready vhost with cert volume mounts. Don't embed a cert manager.
+- **Scoped API keys** — `prm_…` keys are full-project-access today. Add a
+  `scopes` column (`ingest`, `read`, `write`, `admin`) and enforce in the
+  auth middleware.
+- **Dev-surface isolation** — mailpit is proxied at `/mailpit/` in the
+  single compose file. Move dev services to `docker-compose.dev.yml` so a
+  production deploy cannot expose it.
+- **Auth brute-force** — verify Better Auth's built-in throttling covers
+  login/signup; add IP backoff if it doesn't.
+- **Setup ergonomics** — `setup.sh` should generate
+  `PRIMORA_ENCRYPTION_KEY` (`openssl rand -hex 32`) rather than leaving it
+  to the operator.
+
+### Reliability & operations
+
+- **Backups + restore runbook** — `pg_dump` of `core.*`, storage-root
+  archive, cron/timer example, and a documented restore path. The restore
+  must be tested, not just the dump.
+- **Retention** — telemetry events, audit log, and webhook deliveries grow
+  unbounded. Per-project retention settings + a sweeper job.
+- **Platform metrics export** — internal counters exist (surfaced in
+  readiness); expose `/metrics` for Prometheus scraping.
+- **Production compose profile** — healthchecks on every service, restart
+  policies, pinned versions for dependencies (dragonfly is on `latest`).
+- **Upgrade runbook** — today it's `git pull && compose up -d`. Document
+  the safe order (backup → pull → migrate-on-boot → verify) and rollback.
+
+### Correctness
+
+- **Pagination audit** — every list endpoint must paginate; verify the
+  heaviest (audit, events, webhook deliveries) can't return unbounded
+  rows.
+- **DB-to-DB links** — the one open Phase 2 item: DBX transfer between two
+  saved connections.
+- **External object storage** — files live under `BACKEND_STORAGE_ROOT`
+  on local disk. Acceptable for single-node self-hosting; document the
+  constraint or add an S3-compatible backend behind the storage service.
+
+### Testing
+
+- **E2E smoke in CI** — `ci.yml` runs unit tests; add a compose-up job
+  exercising health, signup/login, project create, and ingest → issue
+  created. Six Go test files + one frontend file is thin for a platform.
+- **Migration tests** — goose up/down against a scratch database in CI.
+- **Load sanity** — one `k6`/`vegeta` script against ingest + a hot read
+  path; publish numbers, don't promise scale.
+
+### Distribution
+
+- **arm64 images** — releases build amd64 only; ARM VPS/Pi can't pull. Add
+  `platforms: linux/amd64,linux/arm64` to the buildx steps.
+- Carried forward from Phase 5 follow-ups: macOS/Windows bundle
+  verification, signing + auto-updater.
+- Optional: SBOM + provenance attestation on release images.
+
+### Docs
+
+- **Self-host guide** — TLS, SMTP, backups, upgrade, and env reference in
+  one place. `scripts/verify-production-ready.sh` already points at
+  `DEPLOYMENT_GUIDE.md` / `PRODUCTION_READINESS.md`, which don't exist —
+  write them or fix the script.
+
+**v1.0 bar:** every Security item done, a restore test actually run, E2E
+smoke green in CI, and the upgrade runbook followed once on a real
+upgrade. Docs site revisited here, not before.
+
 ---
 
 ## What is deliberately out of scope
