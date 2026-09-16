@@ -4,7 +4,14 @@ All notable changes to Primora. Format follows [Keep a Changelog](https://keepac
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-16
+
 ### Added
+
+- **Desktop app** (`apps/desktop`) — Tauri 2 thin shell for Linux/Windows/macOS. First run shows a connect screen asking for the deployment URL (validated, stored in `~/.config/dev.tdvorak.primora/config.json`); the webview then renders the same SolidJS bundle the server serves. System-tray icon (Show / Change Server / Quit), close-to-tray, single-instance. No embedded backend or database — the self-hosted model is preserved.
+- **PWA support** — `vite-plugin-pwa` generates a Workbox service worker and `manifest.webmanifest` in every frontend build. The app shell (JS/CSS/icons/index.html) is precached; `/api`, `/auth`, and `/mailpit` are `NetworkOnly` and excluded from the SPA navigation fallback; Google Fonts assets are cached for a year. Installability icons (192/512/maskable + apple-touch-icon) rasterized from the existing SVG mark.
+- **Install prompt** — `PwaInstallBanner` captures `beforeinstallprompt` and offers an in-app install action inside the shell; dismissal persists in `localStorage`.
+- **Desktop release artifacts** — `release.yml` gains a `desktop` job (ubuntu/macos/windows matrix) producing AppImage/deb/rpm, dmg, and msi/nsis bundles, attached to the GitHub Release alongside the existing images and CLI binaries.
 
 - **Connector framework** — `core.integrations` (migration 00005) stores per-project external services with type, base URL, `has_credentials` flag, health status/`last_health_at`. Credentials are AES-256-GCM encrypted at rest (`PRIMORA_ENCRYPTION_KEY`, hex/base64, 32 bytes; dev fallback outside production) and are never serialized to the client. Endpoints under `/projects/:id/integrations`: list, create, delete, `POST …/test` (5s health check against the base URL with stored credentials).
 - **Rybbit connector** — `GET …/integrations/:id/analytics` proxies a self-hosted Rybbit instance server-side (`/api/organizations` site discovery, `/api/sites/:site/overview`, time series, top pages/referrers) and returns a normalized shape. The API key never leaves the server; read-only, no tracking proxy. Site selection via `?site=` or the integration's configured `site_id`.

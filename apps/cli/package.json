@@ -1,6 +1,6 @@
 {
   "name": "@primora/cli",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Primora command-line client",
   "type": "module",
   "bin": {
@@ -23,7 +23,7 @@
     "picocolors": "^1.1.1"
   },
   "devDependencies": {
-    "@primora/api-client": "0.4.0",
+    "@primora/api-client": "0.5.0",
     "@types/node": "^24.0.0",
     "esbuild": "^0.27.4",
     "typescript": "^5.9.2"

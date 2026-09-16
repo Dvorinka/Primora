@@ -99,18 +99,23 @@ IMS (`~/Desktop/PROG+HTML/IMS`) is discontinued and folded in — same stack
   (`X-Primora-Signature`), in-process dispatcher with backoff retries, HTTPS
   for public targets (HTTP allowed for private/self-hosted sinks).
 
-## Phase 5 — Distribution
+## Phase 5 — Distribution ✅
 
-- **Desktop app** — Tauri 2 shell (Linux/Windows/macOS). Thin client: asks for
-  the deployment URL on first run, renders the same SolidJS bundle, keeps a
-  system-tray presence. No embedded stack — self-hosted model preserved.
-- **Phone** — PWA (manifest, service worker, install prompt) first; native
-  shells via Capacitor only if push notifications become a requirement.
-- **Versioning** — `v0.x` minor-per-phase until API surface stabilizes,
-  `v1.0.0` when Phase 3 lands. Every release: GitHub Release notes +
-  tagged images + CLI binaries.
-- **Docs site** — README stays canonical; a docs/ folder or site once the API
-  settles.
+- ~~**Desktop app**~~ — `apps/desktop`, a Tauri 2 shell (Linux/Windows/macOS).
+  Thin client: asks for the deployment URL on first run, renders the same
+  SolidJS bundle, keeps a system-tray presence (Show / Change Server / Quit,
+  close-to-tray, single-instance). No embedded stack — self-hosted model
+  preserved.
+- ~~**Phone**~~ — PWA shipped: `manifest.webmanifest` + Workbox service worker
+  precache the shell (`/api`, `/auth`, `/mailpit` stay `NetworkOnly`), plus an
+  in-app install banner on `beforeinstallprompt`. Native shells via Capacitor
+  remain deferred until push notifications are a real requirement.
+- ~~**Versioning**~~ — `v0.x` minor-per-phase until the API surface stabilizes.
+  Release pipeline (Phase 1) now also ships desktop bundles: tag → GitHub
+  Release notes + ghcr.io images + CLI/MCP binaries + desktop installers.
+- **Docs site** — deferred on purpose. README stays canonical; the OpenAPI
+  contract is the machine-readable source. The API still changes every phase —
+  a docs site now would document a moving target. Revisit when `v1.0.0` lands.
 
 ---
 

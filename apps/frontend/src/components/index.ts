@@ -13,6 +13,7 @@ export { Modal, ModalFooter } from "./Modal";
 export { NotificationCenter, addNotification, removeNotification, clearNotifications, notify } from "./NotificationCenter";
 export { OnboardingModal } from "./OnboardingModal";
 export { Progress, CircularProgress, Spinner } from "./Progress";
+export { PwaInstallBanner } from "./PwaInstallBanner";
 export { ProjectDashboard } from "./ProjectDashboard";
 export { Table, DataTable, Pagination } from "./Table";
 export { Tabs, TabPanel } from "./Tabs";

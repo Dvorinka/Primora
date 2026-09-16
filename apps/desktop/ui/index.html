@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Primora</title>
+    <link rel="icon" type="image/svg+xml" href="icon.svg" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="card">
+      <img src="icon.svg" class="logo" alt="" />
+      <h1>Primora</h1>
+      <p class="sub">Connect to your self-hosted deployment.</p>
+      <form id="form">
+        <input
+          id="url"
+          type="text"
+          inputmode="url"
+          placeholder="https://primora.example.com"
+          autocomplete="off"
+          spellcheck="false"
+          autofocus
+        />
+        <button type="submit" id="go">Connect</button>
+      </form>
+      <p id="err" class="err" hidden></p>
+      <p class="hint">The desktop app renders the console served by your own server. Nothing is hosted by us.</p>
+    </main>
+
+    <script type="module">
+      const tauri = window.__TAURI__;
+      const form = document.getElementById("form");
+      const input = document.getElementById("url");
+      const button = document.getElementById("go");
+      const err = document.getElementById("err");
+
+      const fail = (msg) => {
+        err.textContent = msg;
+        err.hidden = false;
+        button.disabled = false;
+        button.textContent = "Connect";
+      };
+
+      if (!tauri) {
+        fail("This page is meant to run inside the Primora desktop app.");
+      } else {
+        // A saved deployment URL means "skip the form" on every launch.
+        const saved = await tauri.core.invoke("get_server_url").catch(() => null);
+        if (saved) location.replace(saved);
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        err.hidden = true;
+        button.disabled = true;
+        button.textContent = "Checking…";
+
+        let url = input.value.trim();
+        if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+
+        try {
+          await tauri.core.invoke("set_server_url", { url });
+        } catch (e) {
+          fail(String(e));
+          return;
+        }
+
+        // Reachability probe — opaque (no-cors), so it proves the host answers,
+        // not that it is a Primora deployment. A wrong-but-alive URL is recoverable
+        // via the tray menu's "Change server".
+        try {
+          await fetch(url, { mode: "no-cors", signal: AbortSignal.timeout(8000) });
+        } catch {
+          fail("Server did not respond. Check the URL and that the deployment is up.");
+          return;
+        }
+
+        location.replace(url);
+      });
+    </script>
+  </body>
+</html>

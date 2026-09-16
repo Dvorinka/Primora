@@ -1,6 +1,6 @@
 {
   "name": "@primora/frontend",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,8 +10,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@primora/api-client": "0.4.0",
-    "@primora/shared-types": "0.4.0",
+    "@primora/api-client": "0.5.0",
+    "@primora/shared-types": "0.5.0",
     "better-auth": "^1.5.6",
     "solid-js": "^1.9.12"
   },
@@ -26,6 +26,7 @@
     "tailwindcss": "^3.4.17",
     "typescript": "^5.9.2",
     "vite": "^8.0.3",
+    "vite-plugin-pwa": "^1.3.0",
     "vite-plugin-solid": "^2.11.8",
     "vitest": "^3.2.4"
   }

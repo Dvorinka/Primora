@@ -16,7 +16,7 @@ Browser ──▶ Nginx ──▶ Frontend (SolidJS + Vite)
 - **Auth** — email/password plus optional GitHub, Google, Discord, and Microsoft OAuth via Better Auth. JWTs minted by the auth service are verified by the Go API against JWKS.
 - **Storage** — S3-style buckets and objects backed by your local filesystem, with public/private visibility and downloadable URLs.
 - **Collections** — schema-flexible JSON documents stored in Postgres JSONB.
-- **API keys** — `pk_live_`/`pk_test_` credentials with prefixes; secrets are shown once.
+- **API keys** — `prm_<prefix>_<secret>` credentials; secrets are shown once.
 - **Audit log** — every mutating request recorded with actor, resource, request ID, and timestamp; CSV/JSON export from the dashboard.
 - **Generated client** — the TypeScript client is generated from `apps/backend/openapi/openapi.yaml`, so the API contract is the source of truth.
 - **Demo mode** — a fully client-side workspace (`?demo=true` or `VITE_DEMO_MODE=true`) for trying the UI without a backend.
@@ -77,6 +77,17 @@ node apps/cli/dist/cli.js login          # or: npx primora login once published
 
 Supports session sign-in (`primora login`) and API-key mode (`primora login --api-key prm_…` or `PRIMORA_API_KEY`). Context lives in `~/.config/primora/config.json`; `primora use` picks org + project interactively. Commands: `orgs`, `projects`, `buckets`, `objects` (list/upload/download/rm), `keys`, `audit list --follow`. Every command accepts `--json`.
 
+## Desktop & phone
+
+- **Desktop** — `apps/desktop` is a Tauri 2 shell (Linux/Windows/macOS). First
+  run asks for your deployment URL, then renders the same dashboard in a
+  webview with a system-tray presence. Nothing is bundled; your server does the
+  work. See [apps/desktop/README.md](apps/desktop/README.md).
+- **Phone / PWA** — the dashboard ships a web manifest and service worker.
+  Open your deployment in a mobile browser and "Add to Home Screen"; the shell
+  is precached, API traffic always goes to the network. Chromium desktop
+  browsers get an in-app install banner.
+
 ## Quality gate
 
 ```bash
@@ -94,6 +105,8 @@ apps/
   auth/        Better Auth on Hono (sessions, JWT, OAuth, mail)
   frontend/    SolidJS + Tailwind dashboard
   cli/         `primora` CLI — login, context, projects, buckets, objects, keys, audit
+  mcp/         `@primora/mcp` — MCP stdio server exposing `primora_*` tools
+  desktop/     Tauri 2 shell — connects to a deployment URL, tray presence
 packages/
   api-client/  OpenAPI-generated TypeScript client (do not hand-edit)
   shared-types/

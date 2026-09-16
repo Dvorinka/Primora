@@ -5,6 +5,7 @@ WORKDIR /app
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY apps/auth/package.json ./apps/auth/package.json
 COPY apps/cli/package.json ./apps/cli/package.json
+COPY apps/desktop/package.json ./apps/desktop/package.json
 COPY apps/frontend/package.json ./apps/frontend/package.json
 COPY apps/mcp/package.json ./apps/mcp/package.json
 COPY packages/api-client/package.json ./packages/api-client/package.json

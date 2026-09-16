@@ -31,6 +31,7 @@ import {
   NetworkError,
   OnboardingModal,
   ProjectDashboard,
+  PwaInstallBanner,
   type PaletteCommand,
   type ViewType,
 } from "./components";
@@ -1500,6 +1501,7 @@ export default function App() {
         <Show when={platformMessage()}>
           <div class="message message-neutral mb-5">{platformMessage()}</div>
         </Show>
+        <PwaInstallBanner />
 
         <Show
           when={platform() || isDemo}

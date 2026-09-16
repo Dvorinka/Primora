@@ -18,8 +18,14 @@ bin
 
 # Build artifacts
 apps/frontend/dist
+apps/frontend/dev-dist
 apps/auth/dist
 packages/api-client/generated
+dist-release
+
+# Rust / Tauri
+apps/desktop/src-tauri/target
+apps/desktop/src-tauri/gen/schemas
 
 # Runtime data
 infra/data

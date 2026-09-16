@@ -84,6 +84,42 @@ jobs:
           path: dist-release/
           if-no-files-found: error
 
+  desktop:
+    name: Desktop bundle (${{ matrix.name }})
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-22.04, name: linux }
+          - { os: macos-latest, name: macos }
+          - { os: windows-latest, name: windows }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - name: Install Linux webview dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+      - name: Build Tauri bundles
+        run: npm run bundle --workspace @primora/desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.name }}
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/**/*.AppImage
+            apps/desktop/src-tauri/target/release/bundle/**/*.deb
+            apps/desktop/src-tauri/target/release/bundle/**/*.rpm
+            apps/desktop/src-tauri/target/release/bundle/**/*.dmg
+            apps/desktop/src-tauri/target/release/bundle/**/*.msi
+            apps/desktop/src-tauri/target/release/bundle/**/*.exe
+          if-no-files-found: error
+
   npm-packages:
     name: Pack npm tarballs
     needs: verify
@@ -108,7 +144,7 @@ jobs:
 
   release:
     name: GitHub Release
-    needs: [images, cli-binaries, npm-packages]
+    needs: [images, cli-binaries, desktop, npm-packages]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

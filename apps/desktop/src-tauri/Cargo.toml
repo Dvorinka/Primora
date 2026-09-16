@@ -1,0 +1,19 @@
+[package]
+name = "primora-desktop"
+version = "0.5.0"
+edition = "2021"
+description = "Primora desktop shell — thin client for a self-hosted Primora deployment"
+license = "MIT"
+
+[lib]
+name = "primora_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
