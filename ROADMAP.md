@@ -17,7 +17,7 @@ Design docs: [project_backend.md](project_backend.md) · [project_frontend.md](p
 - Docker Compose stack, nginx proxy, OpenAPI-generated client
 - MIT license, CONTRIBUTING, SECURITY, rewritten README/QUICK_START
 
-## Phase 1 — Surface area & release plumbing
+## Phase 1 — Surface area & release plumbing ✅
 
 Everything an operator touches that isn't in the box yet.
 
