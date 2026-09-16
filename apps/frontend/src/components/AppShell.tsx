@@ -7,6 +7,7 @@ import {
   IconMembers,
   IconStorage,
   IconCollections,
+  IconDatabases,
   IconAudit,
   IconAuth,
   IconSettings,
@@ -24,6 +25,7 @@ export type ViewType =
   | "members"
   | "storage"
   | "collections"
+  | "databases"
   | "auth"
   | "audit"
   | "settings";
@@ -37,14 +39,15 @@ interface NavEntry {
 
 const projectNav: NavEntry[] = [
   { id: "dashboard", label: "Overview", icon: IconOverview },
+  { id: "databases", label: "Databases", shortLabel: "DBs", icon: IconDatabases },
   { id: "storage", label: "Storage", icon: IconStorage },
   { id: "collections", label: "Collections", icon: IconCollections },
   { id: "auth", label: "Authentication", shortLabel: "Auth", icon: IconAuth },
   { id: "audit", label: "Audit log", shortLabel: "Audit", icon: IconAudit },
 ];
 
-// Instagram-style bottom bar caps at five slots — Audit stays reachable via Menu.
-const bottomNav = projectNav.slice(0, 4);
+// Instagram-style bottom bar caps at five slots — Collections and Audit stay reachable via Menu.
+const bottomNav: NavEntry[] = projectNav.filter((e) => e.id !== "collections");
 
 const workspaceNav: NavEntry[] = [
   { id: "projects", label: "Projects", icon: IconProjects },
@@ -80,6 +83,7 @@ const viewTitle: Record<ViewType, string> = {
   members: "Members",
   storage: "Storage",
   collections: "Collections",
+  databases: "Databases",
   auth: "Authentication",
   audit: "Audit log",
   settings: "Settings",

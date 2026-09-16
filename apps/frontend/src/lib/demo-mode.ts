@@ -14,6 +14,7 @@ import type {
   Bucket,
   BucketObject,
   Collection,
+  DBConnection,
   Document,
   MeResponse,
   OrganizationSummary,
@@ -322,6 +323,52 @@ let documents: Document[] = [
     updated_at: ago(5),
   },
 ];
+
+let dbConnections: DBConnection[] = [
+  {
+    id: "dbc-1",
+    project_id: "proj-1",
+    name: "platform-postgres",
+    db_type: "postgres",
+    host: "postgres",
+    port: 5432,
+    database: "primora",
+    username: "primora",
+    ssl: null,
+    is_managed: true,
+    has_password: true,
+  },
+  {
+    id: "dbc-2",
+    project_id: "proj-1",
+    name: "platform-dragonfly",
+    db_type: "redis",
+    host: "dragonfly",
+    port: 6379,
+    database: "",
+    username: "",
+    ssl: null,
+    is_managed: true,
+    has_password: false,
+  },
+];
+
+const demoTables = ["users", "projects", "api_keys", "audit_logs", "buckets"];
+
+const demoColumns: Record<string, string[][]> = {
+  users: [
+    ["id", "uuid", "NO", "PK"],
+    ["email", "text", "NO", "UNIQUE"],
+    ["name", "text", "YES", ""],
+    ["created_at", "timestamptz", "NO", ""],
+  ],
+  projects: [
+    ["id", "uuid", "NO", "PK"],
+    ["organization_id", "uuid", "NO", "FK"],
+    ["name", "text", "NO", ""],
+    ["slug", "text", "NO", "UNIQUE"],
+  ],
+};
 
 const pushAudit = (action: string, resourceType: string, resourceId: string, metadata: Record<string, unknown> = {}) => {
   auditLogs = [
@@ -715,6 +762,101 @@ class DemoService {
   }
 
   async bootstrapPlatform() { await this.delay(); return {}; }
+
+  /* ---- databases (DBX) ---- */
+
+  async getDbxStatus() {
+    await this.delay();
+    return { available: true, command: "dbx-mcp" };
+  }
+
+  async listDbConnections() {
+    await this.delay();
+    return { items: dbConnections };
+  }
+
+  async createDbConnection(data: { requestBody?: { name?: string; db_type?: string; host?: string; port?: number; database?: string; username?: string; password?: string; ssl?: boolean } }) {
+    await this.delay();
+    const req = data.requestBody ?? {};
+    const conn: DBConnection = {
+      id: `dbc-${Date.now()}`,
+      project_id: "proj-1",
+      name: req.name ?? "connection",
+      db_type: req.db_type ?? "postgres",
+      host: req.host ?? "",
+      port: req.port ?? null,
+      database: req.database ?? "",
+      username: req.username ?? "",
+      ssl: req.ssl ?? null,
+      is_managed: false,
+      has_password: !!req.password,
+    };
+    dbConnections = [...dbConnections, conn];
+    pushAudit("db_connection.created", "db_connection", conn.id);
+    return conn;
+  }
+
+  async deleteDbConnection(data: { connectionId?: string }) {
+    await this.delay();
+    dbConnections = dbConnections.filter((c) => c.id !== data.connectionId);
+    pushAudit("db_connection.deleted", "db_connection", data.connectionId ?? "");
+    return {};
+  }
+
+  async testDbConnection() {
+    await this.delay();
+    return { ok: true };
+  }
+
+  async listDbDatabases() {
+    await this.delay();
+    return { databases: ["primora", "postgres"] };
+  }
+
+  async listDbTables() {
+    await this.delay();
+    return {
+      tables: demoTables.map((t) => ({ name: t, kind: "BASE TABLE" })),
+    };
+  }
+
+  async describeDbTable(data: { table?: string }) {
+    await this.delay();
+    return {
+      table: {
+        columns: ["Column", "Type", "Nullable", "Key"],
+        rows: demoColumns[data.table ?? ""] ?? [
+          ["id", "uuid", "NO", "PK"],
+          ["created_at", "timestamptz", "NO", ""],
+        ],
+      },
+    };
+  }
+
+  async getDbSchemaContext() {
+    await this.delay();
+    return { context: "## users\nType: BASE TABLE\n- id uuid NOT NULL PK\n- email text NOT NULL" };
+  }
+
+  async executeDbQuery() {
+    await this.delay();
+    return {
+      table: {
+        columns: ["id", "email", "created_at"],
+        rows: [
+          ["a4f3…", "demo@primora.dev", "2024-01-01 00:00:00"],
+          ["b8c1…", "alice@example.com", "2024-01-02 00:00:00"],
+        ],
+        note: "2 rows in 4ms (demo)",
+      },
+    };
+  }
+
+  async executeDbRedisCommand(data: { requestBody?: { command?: string } }) {
+    await this.delay();
+    const cmd = data.requestBody?.command ?? "";
+    return { output: cmd.trim().toUpperCase() === "PING" ? "PONG" : "OK" };
+  }
 }
 
 export const demoService = new DemoService();

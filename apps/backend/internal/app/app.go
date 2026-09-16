@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,6 +19,7 @@ import (
 	"github.com/tdvorak/primora/apps/backend/internal/auth"
 	"github.com/tdvorak/primora/apps/backend/internal/config"
 	"github.com/tdvorak/primora/apps/backend/internal/database"
+	"github.com/tdvorak/primora/apps/backend/internal/dbx"
 	"github.com/tdvorak/primora/apps/backend/internal/handlers"
 	"github.com/tdvorak/primora/apps/backend/internal/middleware"
 	"github.com/tdvorak/primora/apps/backend/internal/observability"
@@ -30,6 +34,7 @@ type App struct {
 	Logger *slog.Logger
 	DB     *pgxpool.Pool
 	Redis  *redis.Client
+	DBX    *dbx.Client
 }
 
 func Bootstrap(ctx context.Context) (*App, error) {
@@ -75,8 +80,9 @@ func Bootstrap(ctx context.Context) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	dbxClient := dbx.NewClient(logger, cfg.DBXDataDir)
 	repo := repositories.NewCoreRepository(dbPool)
-	platform := services.NewPlatformService(repo, store, services.NewMailer(cfg), os.Getenv("VITE_APP_URL"))
+	platform := services.NewPlatformService(repo, store, services.NewMailer(cfg), os.Getenv("VITE_APP_URL"), dbxClient, firstPartyDBSeeds(cfg))
 
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -148,6 +154,7 @@ func Bootstrap(ctx context.Context) (*App, error) {
 		Logger: logger,
 		DB:     dbPool,
 		Redis:  redisClient,
+		DBX:    dbxClient,
 	}, nil
 }
 
@@ -157,7 +164,41 @@ func (a *App) Run() error {
 	return a.Router.Run(address)
 }
 
+// firstPartyDBSeeds turns the platform's own Postgres and Dragonfly URLs into
+// managed connection seeds registered on every project.
+func firstPartyDBSeeds(cfg config.Config) []services.ManagedDBSeed {
+	var seeds []services.ManagedDBSeed
+	if u, err := url.Parse(cfg.DatabaseURL); err == nil && u.Hostname() != "" {
+		cfg2 := services.DBConnectionConfig{
+			Host:     u.Hostname(),
+			Database: strings.TrimPrefix(u.Path, "/"),
+			Username: u.User.Username(),
+		}
+		if p, ok := u.User.Password(); ok {
+			cfg2.Password = p
+		}
+		if port, err := strconv.Atoi(u.Port()); err == nil {
+			cfg2.Port = &port
+		}
+		seeds = append(seeds, services.ManagedDBSeed{Name: "platform-postgres", DBType: "postgres", Config: cfg2})
+	}
+	if u, err := url.Parse(cfg.DragonflyURL); err == nil && u.Hostname() != "" {
+		cfg2 := services.DBConnectionConfig{Host: u.Hostname()}
+		if p, ok := u.User.Password(); ok {
+			cfg2.Password = p
+		}
+		if port, err := strconv.Atoi(u.Port()); err == nil {
+			cfg2.Port = &port
+		}
+		seeds = append(seeds, services.ManagedDBSeed{Name: "platform-dragonfly", DBType: "redis", Config: cfg2})
+	}
+	return seeds
+}
+
 func (a *App) Close() error {
+	if a.DBX != nil {
+		a.DBX.Close()
+	}
 	if a.Redis != nil {
 		if err := a.Redis.Close(); err != nil {
 			return fmt.Errorf("close redis: %w", err)

@@ -200,6 +200,18 @@ type CoreCollection struct {
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
+type CoreDbConnection struct {
+	ID              uuid.UUID          `json:"id"`
+	ProjectID       uuid.UUID          `json:"project_id"`
+	Name            string             `json:"name"`
+	DbType          string             `json:"db_type"`
+	Config          []byte             `json:"config"`
+	IsManaged       bool               `json:"is_managed"`
+	CreatedByUserID pgtype.UUID        `json:"created_by_user_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
 type CoreDocument struct {
 	ID              uuid.UUID          `json:"id"`
 	CollectionID    uuid.UUID          `json:"collection_id"`

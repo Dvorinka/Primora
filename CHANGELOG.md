@@ -2,6 +2,16 @@
 
 All notable changes to Primora. Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow [SemVer](https://semver.org/).
 
+## [0.3.0] - 2026-09-16
+
+### Added
+
+- **Databases (DBX integration)** — the Go backend keeps `dbx-mcp` as a persistent stdio subprocess (`internal/dbx`, lazy start, one retry on failure) and exposes its tools as REST under `/projects/:id/db-connections/*` (list/create/delete/test, databases, tables, describe, schema context, SQL query, Redis command). DBX tool/subprocess failures surface as 502.
+- **Connection registry** — `core.db_connections` (migration 00003). Credentials are stored server-side and never serialized to the browser (`has_password` flag only). Non-default `ssl`, `driver_profile` supported.
+- **First-party connections** — `platform-postgres` and `platform-dragonfly` auto-register on every project (derived from `DATABASE_URL`/`DRAGONFLY_URL`) and cannot be deleted (409 `managed_connection`).
+- **Databases page** — SolidJS view with connection list, database/schema/table browser, column inspector, SQL editor (⌘/Ctrl+Enter), result grid with row-detail modal, and a Redis console. Demo mode stubs included.
+- **Backend image now Debian-based** — `dbx-mcp` requires glibc; the Dockerfile installs the pinned `packages-v0.4.88` release with SHA256 verification.
+
 ## [0.2.0] - 2026-09-15
 
 ### Added

@@ -12,6 +12,7 @@ tags:
   - name: Projects
   - name: Storage
   - name: Collections
+  - name: Databases
 paths:
   /health/liveness:
     get:
@@ -829,6 +830,244 @@ paths:
       responses:
         "204":
           description: Document deleted
+  /db/status:
+    get:
+      tags: [Databases]
+      operationId: getDbxStatus
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        "200":
+          description: DBX subprocess availability
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DBXStatus"
+  /projects/{projectID}/db-connections:
+    get:
+      tags: [Databases]
+      operationId: listDbConnections
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "200":
+          description: Saved database connections for the project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DBConnectionListResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+    post:
+      tags: [Databases]
+      operationId: createDbConnection
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDBConnectionRequest"
+      responses:
+        "201":
+          description: Connection created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DBConnection"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "409":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/db-connections/{connectionID}:
+    delete:
+      tags: [Databases]
+      operationId: deleteDbConnection
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/ConnectionID"
+      responses:
+        "204":
+          description: Connection deleted
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        "409":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/db-connections/{connectionID}/test:
+    post:
+      tags: [Databases]
+      operationId: testDbConnection
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/ConnectionID"
+      responses:
+        "200":
+          description: Connectivity probe result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DBConnectionTestResult"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/db-connections/{connectionID}/databases:
+    get:
+      tags: [Databases]
+      operationId: listDbDatabases
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/ConnectionID"
+      responses:
+        "200":
+          description: Databases reachable through the connection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DBDatabaseListResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        "502":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/db-connections/{connectionID}/tables:
+    get:
+      tags: [Databases]
+      operationId: listDbTables
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/ConnectionID"
+        - $ref: "#/components/parameters/DatabaseQuery"
+        - $ref: "#/components/parameters/SchemaQuery"
+      responses:
+        "200":
+          description: Tables, views, or collections in the connection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DBTableListResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        "502":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/db-connections/{connectionID}/describe:
+    get:
+      tags: [Databases]
+      operationId: describeDbTable
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/ConnectionID"
+        - $ref: "#/components/parameters/TableQuery"
+        - $ref: "#/components/parameters/DatabaseQuery"
+        - $ref: "#/components/parameters/SchemaQuery"
+      responses:
+        "200":
+          description: Column definitions for a table
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DBDescribeResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        "502":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/db-connections/{connectionID}/schema:
+    get:
+      tags: [Databases]
+      operationId: getDbSchemaContext
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/ConnectionID"
+        - $ref: "#/components/parameters/DatabaseQuery"
+        - $ref: "#/components/parameters/SchemaQuery"
+      responses:
+        "200":
+          description: Compact schema context for the connection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DBSchemaContextResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        "502":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/db-connections/{connectionID}/query:
+    post:
+      tags: [Databases]
+      operationId: executeDbQuery
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/ConnectionID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DBQueryRequest"
+      responses:
+        "200":
+          description: Query result (at most 100 rows)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DBQueryResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        "502":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/db-connections/{connectionID}/redis:
+    post:
+      tags: [Databases]
+      operationId: executeDbRedisCommand
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/ConnectionID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DBRedisRequest"
+      responses:
+        "200":
+          description: Redis command output
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DBRedisResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        "502":
+          $ref: "#/components/responses/ErrorResponse"
 components:
   securitySchemes:
     bearerAuth:
@@ -931,6 +1170,31 @@ components:
     ObjectKey:
       name: objectKey
       in: path
+      required: true
+      schema:
+        type: string
+    ConnectionID:
+      name: connectionID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DatabaseQuery:
+      name: database
+      in: query
+      required: false
+      schema:
+        type: string
+    SchemaQuery:
+      name: schema
+      in: query
+      required: false
+      schema:
+        type: string
+    TableQuery:
+      name: table
+      in: query
       required: true
       schema:
         type: string
@@ -1611,3 +1875,171 @@ components:
               items:
                 $ref: "#/components/schemas/Document"
           required: [items]
+    DBXStatus:
+      type: object
+      properties:
+        available:
+          type: boolean
+        command:
+          type: string
+        reason:
+          type: string
+        install:
+          type: string
+      required: [available]
+    DBConnection:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        db_type:
+          type: string
+        host:
+          type: string
+        port:
+          type: integer
+          nullable: true
+        database:
+          type: string
+        username:
+          type: string
+        ssl:
+          type: boolean
+          nullable: true
+        is_managed:
+          type: boolean
+        has_password:
+          type: boolean
+      required: [id, project_id, name, db_type, host, is_managed, has_password]
+    CreateDBConnectionRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        db_type:
+          type: string
+          enum: [postgres, mysql, sqlite, redis, mongodb, sqlserver, duckdb, clickhouse, cassandra]
+        host:
+          type: string
+        port:
+          type: integer
+        database:
+          type: string
+        username:
+          type: string
+        password:
+          type: string
+        ssl:
+          type: boolean
+        driver_profile:
+          type: string
+      required: [name, db_type, host]
+    DBConnectionListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DBConnection"
+      required: [items]
+    DBConnectionTestResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        error:
+          type: string
+      required: [ok]
+    DBObject:
+      type: object
+      properties:
+        name:
+          type: string
+        kind:
+          type: string
+      required: [name, kind]
+    DBMDTable:
+      type: object
+      properties:
+        columns:
+          type: array
+          items:
+            type: string
+        rows:
+          type: array
+          items:
+            type: array
+            items:
+              type: string
+        note:
+          type: string
+      required: [columns, rows]
+    DBDatabaseListResponse:
+      type: object
+      properties:
+        databases:
+          type: array
+          items:
+            type: string
+        raw:
+          type: string
+      required: [databases]
+    DBTableListResponse:
+      type: object
+      properties:
+        tables:
+          type: array
+          items:
+            $ref: "#/components/schemas/DBObject"
+        table:
+          $ref: "#/components/schemas/DBMDTable"
+        raw:
+          type: string
+    DBDescribeResponse:
+      type: object
+      properties:
+        table:
+          $ref: "#/components/schemas/DBMDTable"
+        raw:
+          type: string
+    DBSchemaContextResponse:
+      type: object
+      properties:
+        context:
+          type: string
+      required: [context]
+    DBQueryRequest:
+      type: object
+      properties:
+        sql:
+          type: string
+        database:
+          type: string
+      required: [sql]
+    DBQueryResponse:
+      type: object
+      properties:
+        table:
+          $ref: "#/components/schemas/DBMDTable"
+        raw:
+          type: string
+    DBRedisRequest:
+      type: object
+      properties:
+        command:
+          type: string
+        db:
+          type: integer
+      required: [command]
+    DBRedisResponse:
+      type: object
+      properties:
+        output:
+          type: string
+      required: [output]

@@ -25,6 +25,7 @@ type Querier interface {
 	CreateBucket(ctx context.Context, arg CreateBucketParams) (CoreBucket, error)
 	CreateBucketObject(ctx context.Context, arg CreateBucketObjectParams) (CoreBucketObject, error)
 	CreateCollection(ctx context.Context, arg CreateCollectionParams) (CoreCollection, error)
+	CreateDBConnection(ctx context.Context, arg CreateDBConnectionParams) (CoreDbConnection, error)
 	CreateDocument(ctx context.Context, arg CreateDocumentParams) (CoreDocument, error)
 	CreateInvitation(ctx context.Context, arg CreateInvitationParams) (CoreProjectInvitation, error)
 	CreateOrganization(ctx context.Context, arg CreateOrganizationParams) (CoreOrganization, error)
@@ -32,6 +33,7 @@ type Querier interface {
 	DeleteBucketByID(ctx context.Context, id uuid.UUID) (CoreBucket, error)
 	DeleteBucketObjectByKey(ctx context.Context, arg DeleteBucketObjectByKeyParams) (CoreBucketObject, error)
 	DeleteCollection(ctx context.Context, arg DeleteCollectionParams) error
+	DeleteDBConnection(ctx context.Context, arg DeleteDBConnectionParams) (CoreDbConnection, error)
 	DeleteDocument(ctx context.Context, arg DeleteDocumentParams) error
 	DeleteOrganizationByID(ctx context.Context, id uuid.UUID) (CoreOrganization, error)
 	DeletePendingInvitationByIDForOrganization(ctx context.Context, arg DeletePendingInvitationByIDForOrganizationParams) (CoreProjectInvitation, error)
@@ -42,6 +44,8 @@ type Querier interface {
 	GetBucketObjectByKey(ctx context.Context, arg GetBucketObjectByKeyParams) (CoreBucketObject, error)
 	GetCollectionByID(ctx context.Context, id uuid.UUID) (CoreCollection, error)
 	GetCollectionBySlug(ctx context.Context, arg GetCollectionBySlugParams) (CoreCollection, error)
+	GetDBConnectionByID(ctx context.Context, id uuid.UUID) (CoreDbConnection, error)
+	GetDBConnectionByName(ctx context.Context, arg GetDBConnectionByNameParams) (CoreDbConnection, error)
 	GetDocumentByID(ctx context.Context, arg GetDocumentByIDParams) (CoreDocument, error)
 	GetInvitationByIDForOrganization(ctx context.Context, arg GetInvitationByIDForOrganizationParams) (CoreProjectInvitation, error)
 	GetInvitationByTokenHash(ctx context.Context, tokenHash string) (CoreProjectInvitation, error)
@@ -57,6 +61,7 @@ type Querier interface {
 	ListBucketsForOrganization(ctx context.Context, organizationID uuid.UUID) ([]uuid.UUID, error)
 	ListBucketsForProject(ctx context.Context, arg ListBucketsForProjectParams) ([]CoreBucket, error)
 	ListCollections(ctx context.Context, projectID uuid.UUID) ([]CoreCollection, error)
+	ListDBConnections(ctx context.Context, projectID uuid.UUID) ([]CoreDbConnection, error)
 	ListDocuments(ctx context.Context, arg ListDocumentsParams) ([]CoreDocument, error)
 	ListInvitationsForOrganization(ctx context.Context, organizationID uuid.UUID) ([]ListInvitationsForOrganizationRow, error)
 	ListOrganizationMembers(ctx context.Context, organizationID uuid.UUID) ([]ListOrganizationMembersRow, error)

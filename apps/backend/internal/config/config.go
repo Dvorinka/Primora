@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -14,6 +15,7 @@ type Config struct {
 	DatabaseURL           string
 	DragonflyURL          string
 	StorageRoot           string
+	DBXDataDir            string
 	AuthInternalBaseURL   string
 	PublicURL             string
 	UserRateLimitPerMin   int
@@ -40,6 +42,7 @@ func Load() (Config, error) {
 		DatabaseURL:           os.Getenv("DATABASE_URL"),
 		DragonflyURL:          getenv("DRAGONFLY_URL", "redis://localhost:6379/0"),
 		StorageRoot:           getenv("BACKEND_STORAGE_ROOT", "./tmp/storage"),
+		DBXDataDir:            os.Getenv("DBX_DATA_DIR"),
 		AuthInternalBaseURL:   getenv("AUTH_INTERNAL_BASE_URL", "http://auth:3001"),
 		PublicURL:             getenv("VITE_APP_URL", "http://localhost"),
 		UserRateLimitPerMin:   240,
@@ -102,6 +105,10 @@ func Load() (Config, error) {
 	}
 	if len(missing) > 0 {
 		return Config{}, errors.New("missing required environment values: " + strings.Join(missing, ", "))
+	}
+
+	if cfg.DBXDataDir == "" {
+		cfg.DBXDataDir = filepath.Join(cfg.StorageRoot, "dbx")
 	}
 
 	return cfg, nil

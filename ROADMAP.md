@@ -46,14 +46,16 @@ in a 25 MB MCP server. Primora does not embed DBX; the Go backend keeps
 `@dbx-app/mcp-server` as a persistent stdio subprocess and exposes its tools
 as REST (pattern already proven in IMS's `internal/app/dbx.go`).
 
-- **Connection registry** — per-project saved connections (Postgres, MySQL,
+- **Connection registry** ✅ — per-project saved connections (Postgres, MySQL,
   SQLite, Redis, MongoDB, …). Credentials stored server-side, never sent to
   the browser. `core.db_connections` table + endpoints.
-- **Databases page** — connection list → database/schema/table browser →
+- **Databases page** ✅ — connection list → database/schema/table browser →
   column/type/key inspector.
-- **SQL editor** — query editor with ⌘/Ctrl+Enter, result grid, row detail.
+- **SQL editor** ✅ — query editor with ⌘/Ctrl+Enter, result grid, row detail.
+- **Redis console** ✅ — command input + output history for redis-type
+  connections.
 - **Visual overview** — schema graph: tables as nodes, foreign keys as edges.
-- **First-party connections** — the platform's own Postgres and Dragonfly
+- **First-party connections** ✅ — the platform's own Postgres and Dragonfly
   auto-register as connections on every project, so "put Postgres in it and
   it runs Postgres" works out of the box.
 - **DB-to-DB links** — DBX data transfer between two saved connections

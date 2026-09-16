@@ -63,6 +63,24 @@ export const IconCollections = icon(() => (
   </>
   ));
 
+export const IconDatabases = icon(() => (
+    <>
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <path d="M3 9h18" />
+    <path d="M9 9v12" />
+    <path d="M15 9v12" />
+  </>
+  ));
+
+export const IconTerminal = icon(() => (
+    <>
+    <polyline points="4 17 10 11 4 5" />
+    <line x1="12" y1="19" x2="20" y2="19" />
+  </>
+  ));
+
+export const IconPlay = icon(() => (<polygon points="6 3 20 12 6 21 6 3" />));
+
 export const IconAuth = icon(() => (
   <>
     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />

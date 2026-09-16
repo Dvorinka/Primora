@@ -19,16 +19,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	db "github.com/tdvorak/primora/apps/backend/internal/database/db"
+	"github.com/tdvorak/primora/apps/backend/internal/dbx"
 	"github.com/tdvorak/primora/apps/backend/internal/models"
 	"github.com/tdvorak/primora/apps/backend/internal/repositories"
 	"github.com/tdvorak/primora/apps/backend/internal/storage"
 )
 
 type PlatformService struct {
-	repo      *repositories.CoreRepository
-	store     *storage.LocalStore
-	mailer    *Mailer
-	publicURL string
+	repo           *repositories.CoreRepository
+	store          *storage.LocalStore
+	mailer         *Mailer
+	publicURL      string
+	dbx            *dbx.Client
+	managedDBSeeds []ManagedDBSeed
 }
 
 type BootstrapInput struct {
@@ -206,8 +209,8 @@ type InvitationSummary struct {
 	Status          string     `json:"status"`
 }
 
-func NewPlatformService(repo *repositories.CoreRepository, store *storage.LocalStore, mailer *Mailer, publicURL string) *PlatformService {
-	return &PlatformService{repo: repo, store: store, mailer: mailer, publicURL: publicURL}
+func NewPlatformService(repo *repositories.CoreRepository, store *storage.LocalStore, mailer *Mailer, publicURL string, dbxClient *dbx.Client, managedDBSeeds []ManagedDBSeed) *PlatformService {
+	return &PlatformService{repo: repo, store: store, mailer: mailer, publicURL: publicURL, dbx: dbxClient, managedDBSeeds: managedDBSeeds}
 }
 
 func (s *PlatformService) Me(ctx context.Context, actor *models.Actor) (PlatformSummary, error) {
