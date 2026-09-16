@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
@@ -395,6 +396,93 @@ func (s *PlatformService) ExecuteDBXQuery(ctx context.Context, actor *models.Act
 		return map[string]any{"table": t}, nil
 	}
 	return map[string]any{"raw": text}, nil
+}
+
+// dbxIdent guards identifiers interpolated into introspection SQL — the
+// graph queries are built as strings, so only plain names are allowed.
+var dbxIdent = regexp.MustCompile(`^[A-Za-z0-9_]+$`)
+
+func safeIdent(s string) (string, bool) {
+	if s == "" || !dbxIdent.MatchString(s) {
+		return "", false
+	}
+	return s, true
+}
+
+// foreignKeySQL returns a dialect-appropriate FK introspection query.
+// The result columns are always: schema, table, column, ref_schema, ref_table, ref_column.
+func foreignKeySQL(dbType, schema, database string) (string, string) {
+	sch, schOK := safeIdent(schema)
+	db, _ := safeIdent(database)
+	switch dbType {
+	case "postgres", "sqlserver", "duckdb":
+		q := `SELECT kcu.table_schema, kcu.table_name, kcu.column_name,
+       ccu.table_schema AS ref_schema, ccu.table_name AS ref_table, ccu.column_name AS ref_column
+FROM information_schema.table_constraints tc
+JOIN information_schema.key_column_usage kcu
+  ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema AND tc.table_name = kcu.table_name
+JOIN information_schema.constraint_column_usage ccu
+  ON tc.constraint_name = ccu.constraint_name AND tc.table_schema = ccu.table_schema
+WHERE tc.constraint_type = 'FOREIGN KEY'
+  AND kcu.table_schema NOT IN ('pg_catalog', 'information_schema')`
+		if schOK {
+			q += ` AND kcu.table_schema = '` + sch + `'`
+		}
+		return q, db
+	case "mysql":
+		where := "kcu.REFERENCED_TABLE_NAME IS NOT NULL"
+		if schOK {
+			where += ` AND kcu.TABLE_SCHEMA = '` + sch + `'`
+		} else {
+			where += " AND kcu.TABLE_SCHEMA = DATABASE()"
+		}
+		return `SELECT kcu.TABLE_SCHEMA, kcu.TABLE_NAME, kcu.COLUMN_NAME,
+       kcu.REFERENCED_TABLE_SCHEMA, kcu.REFERENCED_TABLE_NAME, kcu.REFERENCED_COLUMN_NAME
+FROM information_schema.KEY_COLUMN_USAGE kcu WHERE ` + where, db
+	case "sqlite":
+		return `SELECT '' AS table_schema, m.name AS table_name, p."from" AS column_name,
+       '' AS ref_schema, p."table" AS ref_table, p."to" AS ref_column
+FROM sqlite_master m JOIN pragma_foreign_key_list(m.name) p ON 1 = 1
+WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%'`, db
+	default:
+		return "", ""
+	}
+}
+
+// ListDBXForeignKeys returns FK edges for the schema graph. Introspection
+// only — read role is enough even though it rides dbx_execute_query.
+func (s *PlatformService) ListDBXForeignKeys(ctx context.Context, actor *models.Actor, projectID, connectionID uuid.UUID, database, schema string) (map[string]any, error) {
+	row, err := s.connForTool(ctx, actor, projectID, connectionID, false)
+	if err != nil {
+		return nil, err
+	}
+	query, dbArg := foreignKeySQL(row.DbType, schema, database)
+	if query == "" {
+		return map[string]any{"edges": []map[string]string{}, "note": "schema graph not supported for " + row.DbType}, nil
+	}
+	args := map[string]any{"connection_name": dbxConnectionName(projectID, row.Name), "sql": query}
+	if dbArg != "" {
+		args["database"] = dbArg
+	}
+	text, err := s.dbx.Call(ctx, "dbx_execute_query", args)
+	if err != nil {
+		return nil, err
+	}
+	t, _ := dbx.ParseMDTable(text)
+	if t == nil {
+		return map[string]any{"edges": []map[string]string{}, "raw": text}, nil
+	}
+	edges := make([]map[string]string, 0, len(t.Rows))
+	for _, r := range t.Rows {
+		if len(r) < 6 {
+			continue
+		}
+		edges = append(edges, map[string]string{
+			"schema": r[0], "table": r[1], "column": r[2],
+			"ref_schema": r[3], "ref_table": r[4], "ref_column": r[5],
+		})
+	}
+	return map[string]any{"edges": edges}, nil
 }
 
 func (s *PlatformService) ExecuteDBXRedis(ctx context.Context, actor *models.Actor, projectID, connectionID uuid.UUID, command string, dbIndex *int) (map[string]any, error) {

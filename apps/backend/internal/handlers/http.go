@@ -79,6 +79,7 @@ func (h *HTTPHandler) Register(router *gin.Engine) {
 	api.GET("/projects/:projectID/db-connections/:connectionID/tables", h.dbxTables)
 	api.GET("/projects/:projectID/db-connections/:connectionID/describe", h.dbxDescribe)
 	api.GET("/projects/:projectID/db-connections/:connectionID/schema", h.dbxSchema)
+	api.GET("/projects/:projectID/db-connections/:connectionID/foreign-keys", h.dbxForeignKeys)
 	api.POST("/projects/:projectID/db-connections/:connectionID/query", h.dbxQuery)
 	api.POST("/projects/:projectID/db-connections/:connectionID/redis", h.dbxRedis)
 	api.GET("/buckets/:bucketID/objects", h.listObjects)

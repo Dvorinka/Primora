@@ -3,6 +3,7 @@ import {
   DatabasesService,
   CreateDBConnectionRequest,
   type DBConnection,
+  type DBForeignKeyEdge,
   type DBMDTable,
   type DBObject,
   type DBQueryResponse,
@@ -29,7 +30,7 @@ interface DatabasesPageProps {
   demoMode: boolean;
 }
 
-type WorkspaceTab = "browse" | "query" | "console";
+type WorkspaceTab = "browse" | "query" | "graph" | "console";
 
 interface ConnForm {
   name: string;
@@ -108,6 +109,126 @@ function ResultTable(props: { table: DBMDTable; onRow?: (row: string[]) => void 
   );
 }
 
+/* SchemaGraph renders tables on a circle with FK edges as curved paths. */
+function SchemaGraph(props: {
+  nodes: string[];
+  edges: DBForeignKeyEdge[];
+  onPick: (table: string) => void;
+}) {
+  const W = 760;
+  const H = 460;
+  const cx = W / 2;
+  const cy = H / 2;
+  const [hover, setHover] = createSignal<string>();
+
+  const positions = createMemo(() => {
+    const m = new Map<string, { x: number; y: number }>();
+    const n = props.nodes.length;
+    const r = Math.min(195, Math.max(120, n * 18));
+    props.nodes.forEach((name, i) => {
+      const a = (i / n) * 2 * Math.PI - Math.PI / 2;
+      m.set(name, { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) });
+    });
+    return m;
+  });
+
+  const adjacent = (e: DBForeignKeyEdge) =>
+    !!hover() && (e.table === hover() || e.ref_table === hover());
+
+  const nodeW = (name: string) => Math.max(72, name.length * 7.2 + 20);
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} class="w-full" style="display:block" role="img" aria-label="Schema graph">
+      <defs>
+        <marker
+          id="fk-arrow"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="7"
+          markerHeight="7"
+          orient="auto-start-reverse"
+        >
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--text-3)" />
+        </marker>
+      </defs>
+      <For each={props.edges}>
+        {(e) => {
+          const a = () => positions().get(e.table);
+          const b = () => positions().get(e.ref_table);
+          const path = () => {
+            const pa = a();
+            const pb = b();
+            if (!pa || !pb) return "";
+            if (e.table === e.ref_table) {
+              return `M ${pa.x - 10} ${pa.y - 12} C ${pa.x - 34} ${pa.y - 46} ${pa.x + 34} ${pa.y - 46} ${pa.x + 10} ${pa.y - 12}`;
+            }
+            const mx = (pa.x + pb.x) / 2;
+            const my = (pa.y + pb.y) / 2;
+            const bx = mx + (my - cy) * 0.18;
+            const by = my - (mx - cx) * 0.18;
+            // pull the endpoint back to the node border so the arrow sits on it
+            const dx = pb.x - bx;
+            const dy = pb.y - by;
+            const len = Math.hypot(dx, dy) || 1;
+            const ex = pb.x - (dx / len) * (nodeW(e.ref_table) / 2 + 6);
+            const ey = pb.y - (dy / len) * 18;
+            return `M ${pa.x} ${pa.y} Q ${bx} ${by} ${ex} ${ey}`;
+          };
+          return (
+            <Show when={a() && b()}>
+              <path
+                d={path()}
+                fill="none"
+                stroke={adjacent(e) ? "var(--accent)" : "var(--border-strong)"}
+                stroke-width={adjacent(e) ? 2 : 1.2}
+                marker-end="url(#fk-arrow)"
+                opacity={hover() && !adjacent(e) ? 0.2 : 0.9}
+              >
+                <title>{`${e.table}.${e.column} → ${e.ref_table}.${e.ref_column}`}</title>
+              </path>
+            </Show>
+          );
+        }}
+      </For>
+      <For each={props.nodes}>
+        {(name) => {
+          const p = () => positions().get(name)!;
+          const w = () => nodeW(name);
+          return (
+            <g
+              transform={`translate(${p().x - w() / 2}, ${p().y - 13})`}
+              style="cursor:pointer"
+              onMouseEnter={() => setHover(name)}
+              onMouseLeave={() => setHover(undefined)}
+              onClick={() => props.onPick(name)}
+            >
+              <rect
+                width={w()}
+                height="26"
+                rx="6"
+                fill={hover() === name ? "var(--accent-muted)" : "var(--surface-2)"}
+                stroke={hover() === name ? "var(--accent)" : "var(--border-strong)"}
+                stroke-width="1"
+              />
+              <text
+                x={w() / 2}
+                y="17"
+                text-anchor="middle"
+                font-size="11"
+                font-family="monospace"
+                fill={hover() === name ? "var(--accent)" : "var(--text-1)"}
+              >
+                {name}
+              </text>
+            </g>
+          );
+        }}
+      </For>
+    </svg>
+  );
+}
+
 export function DatabasesPage(props: DatabasesPageProps) {
   const [status, setStatus] = createSignal<DBXStatus | null>(null);
   const [conns, setConns] = createSignal<DBConnection[]>([]);
@@ -126,6 +247,11 @@ export function DatabasesPage(props: DatabasesPageProps) {
   const [browseBusy, setBrowseBusy] = createSignal(false);
   const [described, setDescribed] = createSignal<{ name: string; table?: DBMDTable; raw?: string }>();
   const [describeBusy, setDescribeBusy] = createSignal(false);
+
+  const [edges, setEdges] = createSignal<DBForeignKeyEdge[]>([]);
+  const [edgesNote, setEdgesNote] = createSignal("");
+  const [graphBusy, setGraphBusy] = createSignal(false);
+  const [graphKey, setGraphKey] = createSignal("");
 
   const [sql, setSql] = createSignal("SELECT 1;");
   const [queryResult, setQueryResult] = createSignal<DBQueryResponse>();
@@ -195,6 +321,9 @@ export function DatabasesPage(props: DatabasesPageProps) {
     setDescribed(undefined);
     setQueryResult(undefined);
     setConsoleLog([]);
+    setEdges([]);
+    setEdgesNote("");
+    setGraphKey("");
     const conn = conns().find((c) => c.id === id);
     if (!conn) return;
     if (!sqlish(conn.db_type)) {
@@ -241,6 +370,42 @@ export function DatabasesPage(props: DatabasesPageProps) {
       setDescribeBusy(false);
     }
   };
+
+  const loadGraph = async () => {
+    const conn = active();
+    if (!conn) return;
+    const key = `${conn.id}|${selectedDB()}|${appliedSchema()}`;
+    if (graphKey() === key) return;
+    setGraphBusy(true);
+    setError("");
+    try {
+      if (!tables()) {
+        await loadTables(conn, selectedDB(), appliedSchema());
+      }
+      const r = await svc(props.demoMode).listDbForeignKeys({
+        projectId: props.projectID!,
+        connectionId: conn.id,
+        database: selectedDB() || undefined,
+        schema: appliedSchema() || undefined,
+      });
+      setEdges(r.edges ?? []);
+      setEdgesNote(r.note ?? r.raw ?? "");
+      setGraphKey(key);
+    } catch (e) {
+      setError(err(e));
+    } finally {
+      setGraphBusy(false);
+    }
+  };
+
+  const graphNodes = createMemo(() => {
+    const names = new Set<string>((tables() ?? []).map((t) => t.name));
+    for (const e of edges()) {
+      names.add(e.table);
+      names.add(e.ref_table);
+    }
+    return [...names].sort();
+  });
 
   const runQuery = async () => {
     const conn = active();
@@ -490,6 +655,15 @@ export function DatabasesPage(props: DatabasesPageProps) {
                 >
                   Query
                 </button>
+                <button
+                  class={`btn btn-ghost btn-sm ${tab() === "graph" ? "text-accent" : ""}`}
+                  onClick={() => {
+                    setTab("graph");
+                    void loadGraph();
+                  }}
+                >
+                  Graph
+                </button>
               </Show>
               <Show when={!sqlish(active()!.db_type)}>
                 <button class="btn btn-ghost btn-sm text-accent">
@@ -605,6 +779,36 @@ export function DatabasesPage(props: DatabasesPageProps) {
                     {(t) => <ResultTable table={t()} />}
                   </Show>
                 </div>
+              </Show>
+            </Show>
+
+            {/* schema graph tab */}
+            <Show when={tab() === "graph" && sqlish(active()!.db_type)}>
+              <Show
+                when={!graphBusy()}
+                fallback={<p class="p-6 text-xs text-text-3">Building graph…</p>}
+              >
+                <Show
+                  when={graphNodes().length > 0}
+                  fallback={
+                    <p class="p-6 text-xs text-text-3">
+                      {edgesNote() || "No tables in scope — pick a database first."}
+                    </p>
+                  }
+                >
+                  <SchemaGraph
+                    nodes={graphNodes()}
+                    edges={edges()}
+                    onPick={(t) => {
+                      setTab("browse");
+                      void describe(t);
+                    }}
+                  />
+                  <p class="px-4 pb-3 text-xs text-text-3">
+                    {edges().length} foreign key{edges().length === 1 ? "" : "s"} · click a table to inspect it
+                    <Show when={edgesNote()}> · {edgesNote()}</Show>
+                  </p>
+                </Show>
               </Show>
             </Show>
 

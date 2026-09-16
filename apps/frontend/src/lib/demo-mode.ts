@@ -353,7 +353,17 @@ let dbConnections: DBConnection[] = [
   },
 ];
 
-const demoTables = ["users", "projects", "api_keys", "audit_logs", "buckets"];
+const demoTables = [
+  "users",
+  "organizations",
+  "projects",
+  "api_keys",
+  "audit_logs",
+  "buckets",
+  "bucket_objects",
+  "collections",
+  "documents",
+];
 
 const demoColumns: Record<string, string[][]> = {
   users: [
@@ -830,6 +840,20 @@ class DemoService {
           ["created_at", "timestamptz", "NO", ""],
         ],
       },
+    };
+  }
+
+  async listDbForeignKeys() {
+    await this.delay();
+    return {
+      edges: [
+        { schema: "core", table: "projects", column: "organization_id", ref_schema: "core", ref_table: "organizations", ref_column: "id" },
+        { schema: "core", table: "api_keys", column: "project_id", ref_schema: "core", ref_table: "projects", ref_column: "id" },
+        { schema: "core", table: "audit_logs", column: "project_id", ref_schema: "core", ref_table: "projects", ref_column: "id" },
+        { schema: "core", table: "audit_logs", column: "organization_id", ref_schema: "core", ref_table: "organizations", ref_column: "id" },
+        { schema: "core", table: "bucket_objects", column: "bucket_id", ref_schema: "core", ref_table: "buckets", ref_column: "id" },
+        { schema: "core", table: "documents", column: "collection_id", ref_schema: "core", ref_table: "collections", ref_column: "id" },
+      ],
     };
   }
 

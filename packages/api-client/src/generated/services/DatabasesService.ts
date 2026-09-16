@@ -8,6 +8,7 @@ import type { DBConnectionListResponse } from '../models/DBConnectionListRespons
 import type { DBConnectionTestResult } from '../models/DBConnectionTestResult';
 import type { DBDatabaseListResponse } from '../models/DBDatabaseListResponse';
 import type { DBDescribeResponse } from '../models/DBDescribeResponse';
+import type { DBForeignKeysResponse } from '../models/DBForeignKeysResponse';
 import type { DBQueryRequest } from '../models/DBQueryRequest';
 import type { DBQueryResponse } from '../models/DBQueryResponse';
 import type { DBRedisRequest } from '../models/DBRedisRequest';
@@ -230,6 +231,38 @@ export class DatabasesService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/projects/{projectID}/db-connections/{connectionID}/schema',
+            path: {
+                'projectID': projectId,
+                'connectionID': connectionId,
+            },
+            query: {
+                'database': database,
+                'schema': schema,
+            },
+            errors: {
+                404: `Error response`,
+                502: `Error response`,
+            },
+        });
+    }
+    /**
+     * @returns DBForeignKeysResponse Foreign key edges for the schema graph
+     * @throws ApiError
+     */
+    public static listDbForeignKeys({
+        projectId,
+        connectionId,
+        database,
+        schema,
+    }: {
+        projectId: string,
+        connectionId: string,
+        database?: string,
+        schema?: string,
+    }): CancelablePromise<DBForeignKeysResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/projects/{projectID}/db-connections/{connectionID}/foreign-keys',
             path: {
                 'projectID': projectId,
                 'connectionID': connectionId,

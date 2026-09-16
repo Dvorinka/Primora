@@ -40,6 +40,8 @@ export type { DBConnectionListResponse } from './models/DBConnectionListResponse
 export type { DBConnectionTestResult } from './models/DBConnectionTestResult';
 export type { DBDatabaseListResponse } from './models/DBDatabaseListResponse';
 export type { DBDescribeResponse } from './models/DBDescribeResponse';
+export type { DBForeignKeyEdge } from './models/DBForeignKeyEdge';
+export type { DBForeignKeysResponse } from './models/DBForeignKeysResponse';
 export type { DBMDTable } from './models/DBMDTable';
 export type { DBObject } from './models/DBObject';
 export type { DBQueryRequest } from './models/DBQueryRequest';
@@ -118,6 +120,8 @@ export { $DBConnectionListResponse } from './schemas/$DBConnectionListResponse';
 export { $DBConnectionTestResult } from './schemas/$DBConnectionTestResult';
 export { $DBDatabaseListResponse } from './schemas/$DBDatabaseListResponse';
 export { $DBDescribeResponse } from './schemas/$DBDescribeResponse';
+export { $DBForeignKeyEdge } from './schemas/$DBForeignKeyEdge';
+export { $DBForeignKeysResponse } from './schemas/$DBForeignKeysResponse';
 export { $DBMDTable } from './schemas/$DBMDTable';
 export { $DBObject } from './schemas/$DBObject';
 export { $DBQueryRequest } from './schemas/$DBQueryRequest';

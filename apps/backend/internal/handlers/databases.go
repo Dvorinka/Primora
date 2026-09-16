@@ -150,6 +150,20 @@ func (h *HTTPHandler) dbxSchema(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
+func (h *HTTPHandler) dbxForeignKeys(c *gin.Context) {
+	actor, projectID, connectionID, ok := h.actorProjectConn(c)
+	if !ok {
+		return
+	}
+	result, err := h.Platform.ListDBXForeignKeys(c.Request.Context(), actor, projectID, connectionID,
+		strings.TrimSpace(c.Query("database")), strings.TrimSpace(c.Query("schema")))
+	if err != nil {
+		h.dbxError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
 func (h *HTTPHandler) dbxQuery(c *gin.Context) {
 	actor, projectID, connectionID, ok := h.actorProjectConn(c)
 	if !ok {

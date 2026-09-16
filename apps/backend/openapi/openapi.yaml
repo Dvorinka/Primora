@@ -1014,6 +1014,29 @@ paths:
           $ref: "#/components/responses/ErrorResponse"
         "502":
           $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/db-connections/{connectionID}/foreign-keys:
+    get:
+      tags: [Databases]
+      operationId: listDbForeignKeys
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/ConnectionID"
+        - $ref: "#/components/parameters/DatabaseQuery"
+        - $ref: "#/components/parameters/SchemaQuery"
+      responses:
+        "200":
+          description: Foreign key edges for the schema graph
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DBForeignKeysResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        "502":
+          $ref: "#/components/responses/ErrorResponse"
   /projects/{projectID}/db-connections/{connectionID}/query:
     post:
       tags: [Databases]
@@ -2014,6 +2037,34 @@ components:
         context:
           type: string
       required: [context]
+    DBForeignKeyEdge:
+      type: object
+      properties:
+        schema:
+          type: string
+        table:
+          type: string
+        column:
+          type: string
+        ref_schema:
+          type: string
+        ref_table:
+          type: string
+        ref_column:
+          type: string
+      required: [table, column, ref_table, ref_column]
+    DBForeignKeysResponse:
+      type: object
+      properties:
+        edges:
+          type: array
+          items:
+            $ref: "#/components/schemas/DBForeignKeyEdge"
+        raw:
+          type: string
+        note:
+          type: string
+      required: [edges]
     DBQueryRequest:
       type: object
       properties:
