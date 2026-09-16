@@ -111,11 +111,19 @@ IMS (`~/Desktop/PROG+HTML/IMS`) is discontinued and folded in — same stack
   in-app install banner on `beforeinstallprompt`. Native shells via Capacitor
   remain deferred until push notifications are a real requirement.
 - ~~**Versioning**~~ — `v0.x` minor-per-phase until the API surface stabilizes.
-  Release pipeline (Phase 1) now also ships desktop bundles: tag → GitHub
-  Release notes + ghcr.io images + CLI/MCP binaries + desktop installers.
+  `v0.5.0` tagged and pushed; the release pipeline now also ships desktop
+  bundles: tag → GitHub Release notes + ghcr.io images + CLI/MCP binaries +
+  desktop installers.
 - **Docs site** — deferred on purpose. README stays canonical; the OpenAPI
   contract is the machine-readable source. The API still changes every phase —
   a docs site now would document a moving target. Revisit when `v1.0.0` lands.
+
+Follow-ups:
+
+- Verify the macOS/Windows desktop bundles produced by the `v0.5.0` CI run
+  (host-verified on Linux only).
+- Desktop bundle signing + auto-updater — unsigned artifacts today; add when
+  distribution matures.
 
 ---
 
