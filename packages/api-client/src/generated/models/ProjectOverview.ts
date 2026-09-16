@@ -15,5 +15,13 @@ export type ProjectOverview = {
     pending_invitation_count: number;
     audit_events_24h: number;
     last_audit_at?: string | null;
+    /**
+     * Connectors attached to the project.
+     */
+    integration_count: number;
+    /**
+     * Enabled outbound webhooks.
+     */
+    webhook_count: number;
 };
 

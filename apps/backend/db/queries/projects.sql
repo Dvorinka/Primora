@@ -136,7 +136,18 @@ SELECT
     SELECT MAX(al.created_at)::TIMESTAMPTZ
     FROM core.audit_logs al
     WHERE al.project_id = p.id
-  ) AS last_audit_at
+  ) AS last_audit_at,
+  (
+    SELECT COUNT(*)::BIGINT
+    FROM core.integrations i
+    WHERE i.project_id = p.id
+  ) AS integration_count,
+  (
+    SELECT COUNT(*)::BIGINT
+    FROM core.webhooks w
+    WHERE w.project_id = p.id
+      AND w.enabled
+  ) AS webhook_count
 FROM core.projects p
 WHERE p.id = $1;
 

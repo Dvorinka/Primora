@@ -6,6 +6,7 @@ import {
   IconMembers,
   IconAudit,
   IconCollections,
+  IconIntegrations,
   IconChevronRight,
 } from "./Icons";
 
@@ -109,6 +110,12 @@ export function ProjectDashboard(props: ProjectDashboardProps) {
       sub: `${overview()?.member_count ?? 0} in project`,
       icon: IconMembers,
       view: "members",
+    },
+    {
+      title: "Integrations",
+      sub: `${overview()?.integration_count ?? 0} connectors · ${overview()?.webhook_count ?? 0} webhooks`,
+      icon: IconIntegrations,
+      view: "integrations",
     },
   ];
 

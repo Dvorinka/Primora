@@ -179,6 +179,8 @@ type ProjectOverview struct {
 	PendingInvitationCount int64      `json:"pending_invitation_count"`
 	AuditEvents24h         int64      `json:"audit_events_24h"`
 	LastAuditAt            *time.Time `json:"last_audit_at,omitempty"`
+	IntegrationCount       int64      `json:"integration_count"`
+	WebhookCount           int64      `json:"webhook_count"`
 }
 
 type OrganizationMemberSummary struct {
@@ -586,6 +588,8 @@ func (s *PlatformService) GetProjectOverview(ctx context.Context, actor *models.
 		PendingInvitationCount: row.PendingInvitationCount,
 		AuditEvents24h:         row.AuditEvents24h,
 		LastAuditAt:            projectOverviewLastAuditAt(row.LastAuditAt),
+		IntegrationCount:       row.IntegrationCount,
+		WebhookCount:           row.WebhookCount,
 	}, nil
 }
 

@@ -1979,6 +1979,14 @@ components:
           type: string
           format: date-time
           nullable: true
+        integration_count:
+          type: integer
+          format: int64
+          description: Connectors attached to the project.
+        webhook_count:
+          type: integer
+          format: int64
+          description: Enabled outbound webhooks.
       required:
         - project_id
         - organization_id
@@ -1991,6 +1999,8 @@ components:
         - object_bytes_total
         - pending_invitation_count
         - audit_events_24h
+        - integration_count
+        - webhook_count
     ProjectMember:
       type: object
       properties:

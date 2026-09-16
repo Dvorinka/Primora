@@ -511,6 +511,8 @@ class DemoService {
       pending_invitation_count: invitations.filter((i) => i.status === OrganizationInvitation.status.PENDING).length,
       audit_events_24h: auditLogs.length,
       last_audit_at: auditLogs[0]?.created_at ?? null,
+      integration_count: demoIntegrations.length,
+      webhook_count: demoWebhooks.filter((w) => w.enabled).length,
     };
   }
 

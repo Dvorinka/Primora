@@ -62,5 +62,17 @@ export const $ProjectOverview = {
             isNullable: true,
             format: 'date-time',
         },
+        integration_count: {
+            type: 'number',
+            description: `Connectors attached to the project.`,
+            isRequired: true,
+            format: 'int64',
+        },
+        webhook_count: {
+            type: 'number',
+            description: `Enabled outbound webhooks.`,
+            isRequired: true,
+            format: 'int64',
+        },
     },
 } as const;
