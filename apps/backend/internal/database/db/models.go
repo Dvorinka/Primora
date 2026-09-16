@@ -200,6 +200,15 @@ type CoreCollection struct {
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
+type CoreComponent struct {
+	ID        uuid.UUID          `json:"id"`
+	ProjectID uuid.UUID          `json:"project_id"`
+	Name      string             `json:"name"`
+	Kind      string             `json:"kind"`
+	Meta      []byte             `json:"meta"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type CoreDbConnection struct {
 	ID              uuid.UUID          `json:"id"`
 	ProjectID       uuid.UUID          `json:"project_id"`
@@ -219,6 +228,18 @@ type CoreDocument struct {
 	CreatedByUserID pgtype.UUID        `json:"created_by_user_id"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type CoreEvent struct {
+	ID          int64              `json:"id"`
+	ProjectID   uuid.UUID          `json:"project_id"`
+	ComponentID pgtype.UUID        `json:"component_id"`
+	Type        string             `json:"type"`
+	Severity    string             `json:"severity"`
+	Message     string             `json:"message"`
+	Payload     []byte             `json:"payload"`
+	Fingerprint string             `json:"fingerprint"`
+	Ts          pgtype.Timestamptz `json:"ts"`
 }
 
 type CoreOrganization struct {

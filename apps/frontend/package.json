@@ -10,8 +10,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@primora/api-client": "0.2.0",
-    "@primora/shared-types": "0.2.0",
+    "@primora/api-client": "0.3.0",
+    "@primora/shared-types": "0.3.0",
     "better-auth": "^1.5.6",
     "solid-js": "^1.9.12"
   },

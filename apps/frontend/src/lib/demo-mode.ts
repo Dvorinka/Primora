@@ -17,9 +17,14 @@ import type {
   DBConnection,
   Document,
   MeResponse,
+  MetricPoint,
   OrganizationSummary,
   ProjectOverview,
   ProjectSummary,
+  TelemetryComponent,
+  TelemetryEvent,
+  TelemetryIssue,
+  TelemetryStats,
 } from "@primora/api-client";
 
 const STORAGE_KEY = "primora_demo_mode";
@@ -352,6 +357,23 @@ let dbConnections: DBConnection[] = [
     has_password: false,
   },
 ];
+
+const demoComponents: TelemetryComponent[] = [
+  { id: "cmp-1", name: "web", kind: "frontend", last_seen_at: ago(0.02), last_status: "up", errors_24h: 0, events_24h: 88, meta: {} },
+  { id: "cmp-2", name: "api", kind: "backend", last_seen_at: ago(0.014), last_status: "degraded", errors_24h: 4, events_24h: 120, meta: {} },
+  { id: "cmp-3", name: "worker", kind: "backend", last_seen_at: ago(0.03), last_status: "up", errors_24h: 0, events_24h: 60, meta: {} },
+];
+
+const demoEventsSeed: TelemetryEvent[] = [
+  { id: 42, project_id: "proj-1", component_id: "cmp-2", component_name: "api", type: "error", severity: "error", message: "TypeError: Cannot read properties of undefined (reading 'id')", payload: { stack: "at getUser (api/src/users.ts:41)" }, fingerprint: "a1b2c3d4e5f60718", ts: ago(0.013) },
+  { id: 41, project_id: "proj-1", component_id: "cmp-2", component_name: "api", type: "metric", severity: "info", message: "", payload: { name: "http.req.ms", value: 132, route: "/projects" }, fingerprint: "", ts: ago(0.02) },
+  { id: 40, project_id: "proj-1", component_id: "cmp-1", component_name: "web", type: "log", severity: "warn", message: "Slow route render: /settings", payload: { ms: 940 }, fingerprint: "", ts: ago(0.03) },
+  { id: 39, project_id: "proj-1", component_id: "cmp-3", component_name: "worker", type: "heartbeat", severity: "info", message: "", payload: { status: "up" }, fingerprint: "", ts: ago(0.04) },
+  { id: 38, project_id: "proj-1", component_id: "cmp-1", component_name: "web", type: "event", severity: "info", message: "checkout.completed", payload: { total: 129 }, fingerprint: "", ts: ago(0.06) },
+  { id: 37, project_id: "proj-1", component_id: "cmp-2", component_name: "api", type: "error", severity: "error", message: "TypeError: Cannot read properties of undefined (reading 'id')", payload: { stack: "at getUser (api/src/users.ts:41)" }, fingerprint: "a1b2c3d4e5f60718", ts: ago(3.5) },
+];
+
+let demoEvents: TelemetryEvent[] = [...demoEventsSeed];
 
 const demoTables = [
   "users",
@@ -880,6 +902,120 @@ class DemoService {
     await this.delay();
     const cmd = data.requestBody?.command ?? "";
     return { output: cmd.trim().toUpperCase() === "PING" ? "PONG" : "OK" };
+  }
+
+  /* ---- telemetry ---- */
+
+  async ingestTelemetry(data: { requestBody?: { events?: Array<Record<string, unknown>> } }) {
+    await this.delay();
+    const events = data.requestBody?.events ?? [];
+    events.forEach((e) => {
+      demoEvents = [
+        {
+          id: (demoEvents[0]?.id ?? 0) + 1,
+          project_id: "proj-1",
+          component_id: demoComponents.find((c) => c.name === e.component)?.id ?? null,
+          component_name: String(e.component ?? ""),
+          type: String(e.type ?? "event"),
+          severity: String(e.severity ?? "info"),
+          message: String(e.message ?? ""),
+          payload: (e.payload as Record<string, unknown>) ?? {},
+          fingerprint: String(e.fingerprint ?? ""),
+          ts: String(e.ts ?? new Date().toISOString()),
+        },
+        ...demoEvents,
+      ];
+    });
+    return { accepted: events.length };
+  }
+
+  async listTelemetryEvents(data: { type?: string; component?: string; fingerprint?: string; limit?: number }) {
+    await this.delay();
+    let items = demoEvents;
+    if (data.type) items = items.filter((e) => e.type === data.type);
+    if (data.component) items = items.filter((e) => e.component_name === data.component);
+    if (data.fingerprint) items = items.filter((e) => e.fingerprint === data.fingerprint);
+    return { items: items.slice(0, data.limit ?? 100) };
+  }
+
+  async listTelemetryIssues() {
+    await this.delay();
+    const groups = new Map<string, TelemetryIssue>();
+    for (const e of demoEvents.filter((e) => e.type === "error" && e.fingerprint)) {
+      const fp = e.fingerprint!;
+      const g = groups.get(fp);
+      if (g) {
+        g.count += 1;
+        if (e.ts < g.first_seen) g.first_seen = e.ts;
+        if (e.ts > g.last_seen) g.last_seen = e.ts;
+      } else {
+        groups.set(fp, {
+          fingerprint: fp,
+          message: e.message,
+          component_id: e.component_id,
+          component_name: e.component_name,
+          count: 1,
+          first_seen: e.ts,
+          last_seen: e.ts,
+          severity: e.severity,
+        });
+      }
+    }
+    return { items: [...groups.values()] };
+  }
+
+  async listTelemetryComponents() {
+    await this.delay();
+    return { items: demoComponents };
+  }
+
+  async deleteTelemetryComponent(data: { componentId?: string }) {
+    await this.delay();
+    return {};
+  }
+
+  async getTelemetryStats(data: { window?: string }): Promise<TelemetryStats> {
+    await this.delay();
+    const now = Date.now();
+    const bucket = 900_000;
+    const series = Array.from({ length: 12 }, (_, i) => ({
+      ts: new Date(now - (11 - i) * bucket).toISOString(),
+      counts: {
+        error: i === 9 ? 2 : i % 5 === 0 ? 1 : 0,
+        event: i % 3,
+        metric: i * 2 + 4,
+        log: i % 4,
+        heartbeat: 4,
+      },
+    }));
+    return {
+      window: 86400,
+      bucket_sec: 900,
+      series,
+      components: demoComponents,
+      errors: demoEvents.filter((e) => e.type === "error").length,
+      events: demoEvents.length,
+      metrics: 46,
+      metric_names: ["http.req.ms", "db.query.ms"],
+    };
+  }
+
+  async getTelemetryMetricSeries(): Promise<{ items: MetricPoint[] }> {
+    await this.delay();
+    const now = Date.now();
+    return {
+      items: Array.from({ length: 12 }, (_, i) => {
+        const avg = 110 + Math.sin(i / 2) * 40;
+        return {
+          ts: new Date(now - (11 - i) * 900_000).toISOString(),
+          avg,
+          p50: avg * 0.9,
+          p95: avg * 1.8,
+          max: avg * 2.2,
+          count: 12 + i,
+        };
+      }),
+    };
   }
 }
 

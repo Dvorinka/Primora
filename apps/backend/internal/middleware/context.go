@@ -74,7 +74,20 @@ func Logger(logger *slog.Logger) gin.HandlerFunc {
 func (m AuthMiddleware) ResolveActor() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		apiKey := strings.TrimSpace(c.GetHeader("X-API-Key"))
+		if apiKey == "" {
+			apiKey = strings.TrimSpace(c.GetHeader("X-Primora-Key"))
+		}
 		authz := strings.TrimSpace(c.GetHeader("Authorization"))
+		// EventSource cannot set headers — the SSE stream accepts credentials
+		// as query params instead.
+		if apiKey == "" && authz == "" && strings.HasSuffix(c.Request.URL.Path, "/telemetry/stream") {
+			apiKey = strings.TrimSpace(c.Query("api_key"))
+			if apiKey == "" {
+				if t := strings.TrimSpace(c.Query("token")); t != "" {
+					authz = "Bearer " + t
+				}
+			}
+		}
 		if apiKey == "" && strings.HasPrefix(strings.ToLower(authz), "bearer ") {
 			token := strings.TrimSpace(strings.TrimPrefix(authz, "Bearer"))
 			if strings.HasPrefix(authz, "Bearer ") {

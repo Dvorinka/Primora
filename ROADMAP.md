@@ -62,23 +62,26 @@ as REST (pattern already proven in IMS's `internal/app/dbx.go`).
   (e.g. Postgres → Dragonfly cache warm), plus documented patterns for
   pairing them.
 
-## Phase 3 — Observability (IMS merge)
+## Phase 3 — Observability (IMS merge) ✅
 
 IMS (`~/Desktop/PROG+HTML/IMS`) is discontinued and folded in — same stack
 (Gin + pgx + Postgres), ~2k lines to port.
 
-- **Ingest API** — `POST /v1/ingest` with per-project ingest keys
-  (`X-Primora-Key`); event types: error, metric, log, heartbeat, event;
-  component auto-registration.
+- **Ingest API** — `POST /api/v1/ingest` authenticated by project `prm_` API keys
+  (`X-Primora-Key` or `X-API-Key`); event types: error, metric, log, heartbeat,
+  event; component auto-registration; single event or ≤500-event batch;
+  permissive CORS so browser SDKs can post directly.
 - **Issues** — error groups by fingerprint (count, first/last seen, severity,
   stack payload) — the Firebase Crashlytics-shaped view.
-- **Telemetry views** — metrics, logs, heartbeats per component; live updates
-  over SSE (port `sse.go`).
-- **`@primora/client` SDK** — port of `@ims/client`: one-line web/node
-  integration, platform snippets in a new project **Integrate** tab.
-- **Agent tooling** — `primora_*` MCP tools for issues/events (merge into
-  `apps/mcp` from Phase 1).
-- Migration note in IMS repo → archive, point at Primora.
+- **Telemetry views** — health overview (totals, activity histogram, component
+  health), issues, events, metric series (avg/p50/p95/max), Integrate tab;
+  live updates over SSE (`GET …/telemetry/stream`, `?api_key=`/`?token=` for
+  EventSource auth).
+- **`@primora/client` SDK** — port of `@ims/client`: queued batching,
+  `keepalive` flush, `installAuto()` for browser error capture.
+- **Agent tooling** — `primora_list_issues`, `primora_list_events`,
+  `primora_telemetry_stats`, `primora_metric_series` in `apps/mcp`.
+- Migration note in IMS repo README → archive, point at Primora.
 
 ## Phase 4 — Integrations
 

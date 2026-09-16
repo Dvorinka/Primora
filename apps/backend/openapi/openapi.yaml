@@ -13,6 +13,7 @@ tags:
   - name: Storage
   - name: Collections
   - name: Databases
+  - name: Telemetry
 paths:
   /health/liveness:
     get:
@@ -1091,6 +1092,200 @@ paths:
           $ref: "#/components/responses/ErrorResponse"
         "502":
           $ref: "#/components/responses/ErrorResponse"
+  /ingest:
+    post:
+      tags: [Telemetry]
+      operationId: ingestTelemetry
+      summary: Ingest one telemetry event or a batch of up to 500
+      security:
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IngestRequest"
+      responses:
+        "202":
+          description: Accepted event count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestResponse"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "413":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/events:
+    get:
+      tags: [Telemetry]
+      operationId: listTelemetryEvents
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [error, metric, log, heartbeat, event]
+        - name: component
+          in: query
+          schema:
+            type: string
+        - name: fingerprint
+          in: query
+          schema:
+            type: string
+        - name: before
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Telemetry events, newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TelemetryEventListResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/issues:
+    get:
+      tags: [Telemetry]
+      operationId: listTelemetryIssues
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - name: days
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Error groups by fingerprint
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TelemetryIssueListResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/components:
+    get:
+      tags: [Telemetry]
+      operationId: listTelemetryComponents
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "200":
+          description: Registered telemetry components
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TelemetryComponentListResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/components/{componentID}:
+    delete:
+      tags: [Telemetry]
+      operationId: deleteTelemetryComponent
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/ComponentID"
+      responses:
+        "204":
+          description: Component deleted
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/telemetry/stats:
+    get:
+      tags: [Telemetry]
+      operationId: getTelemetryStats
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - name: window
+          in: query
+          schema:
+            type: string
+            enum: [1h, 24h, 7d, 30d]
+      responses:
+        "200":
+          description: Aggregated telemetry statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TelemetryStats"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/telemetry/metrics/series:
+    get:
+      tags: [Telemetry]
+      operationId: getTelemetryMetricSeries
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: window
+          in: query
+          schema:
+            type: string
+            enum: [1h, 24h, 7d, 30d]
+      responses:
+        "200":
+          description: Aggregated metric series
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetricSeriesResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/telemetry/stream:
+    get:
+      tags: [Telemetry]
+      operationId: streamTelemetryEvents
+      summary: Server-sent events stream of live telemetry. EventSource clients pass `?api_key=` or `?token=` since headers cannot be set.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - name: api_key
+          in: query
+          schema:
+            type: string
+        - name: token
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: text/event-stream of TelemetryEvent messages
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
 components:
   securitySchemes:
     bearerAuth:
@@ -1146,6 +1341,13 @@ components:
         format: uuid
     InvitationID:
       name: invitationID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ComponentID:
+      name: componentID
       in: path
       required: true
       schema:
@@ -2094,3 +2296,237 @@ components:
         output:
           type: string
       required: [output]
+    IngestEvent:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [error, metric, log, heartbeat, event]
+        component:
+          type: string
+          description: Auto-registered under the project on first use
+        kind:
+          type: string
+          enum: [frontend, backend, database, android, desktop, web, other]
+        severity:
+          type: string
+        message:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true
+        fingerprint:
+          type: string
+          description: Error grouping key; derived from message when omitted
+        ts:
+          type: string
+          format: date-time
+      required: [type]
+    IngestRequest:
+      oneOf:
+        - $ref: "#/components/schemas/IngestEvent"
+        - type: object
+          properties:
+            events:
+              type: array
+              items:
+                $ref: "#/components/schemas/IngestEvent"
+              maxItems: 500
+          required: [events]
+    IngestResponse:
+      type: object
+      properties:
+        accepted:
+          type: integer
+      required: [accepted]
+    TelemetryEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+        project_id:
+          type: string
+          format: uuid
+        component_id:
+          type: string
+          format: uuid
+          nullable: true
+        component_name:
+          type: string
+        type:
+          type: string
+        severity:
+          type: string
+        message:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true
+        fingerprint:
+          type: string
+        ts:
+          type: string
+          format: date-time
+      required: [id, project_id, type, severity, message, ts]
+    TelemetryEventListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TelemetryEvent"
+      required: [items]
+    TelemetryIssue:
+      type: object
+      properties:
+        fingerprint:
+          type: string
+        message:
+          type: string
+        component_id:
+          type: string
+          format: uuid
+          nullable: true
+        component_name:
+          type: string
+        count:
+          type: integer
+        first_seen:
+          type: string
+          format: date-time
+        last_seen:
+          type: string
+          format: date-time
+        severity:
+          type: string
+      required: [fingerprint, message, count, first_seen, last_seen, severity]
+    TelemetryIssueListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TelemetryIssue"
+      required: [items]
+    TelemetryComponent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        kind:
+          type: string
+        last_seen_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_status:
+          type: string
+        errors_24h:
+          type: integer
+        events_24h:
+          type: integer
+        meta:
+          type: object
+          additionalProperties: true
+      required: [id, name, kind, errors_24h, events_24h]
+    TelemetryComponentListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TelemetryComponent"
+      required: [items]
+    ComponentHealth:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        kind:
+          type: string
+        last_seen_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_status:
+          type: string
+        errors_24h:
+          type: integer
+        events_24h:
+          type: integer
+        meta:
+          type: object
+          additionalProperties: true
+      required: [id, name, kind, errors_24h, events_24h]
+    EventSeriesBucket:
+      type: object
+      properties:
+        ts:
+          type: string
+          format: date-time
+        counts:
+          type: object
+          additionalProperties:
+            type: integer
+      required: [ts, counts]
+    TelemetryStats:
+      type: object
+      properties:
+        window:
+          type: integer
+        bucket_sec:
+          type: integer
+        series:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventSeriesBucket"
+        components:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComponentHealth"
+        errors:
+          type: integer
+        events:
+          type: integer
+        metrics:
+          type: integer
+        metric_names:
+          type: array
+          items:
+            type: string
+      required: [window, bucket_sec, series, components, errors, events, metrics, metric_names]
+    MetricPoint:
+      type: object
+      properties:
+        ts:
+          type: string
+          format: date-time
+        avg:
+          type: number
+          nullable: true
+        p50:
+          type: number
+          nullable: true
+        p95:
+          type: number
+          nullable: true
+        max:
+          type: number
+          nullable: true
+        count:
+          type: integer
+      required: [ts, count]
+    MetricSeriesResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetricPoint"
+      required: [items]

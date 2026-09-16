@@ -9,6 +9,7 @@ import {
   PlatformService,
   ProjectsService,
   StorageService,
+  TelemetryService,
 } from "@primora/api-client";
 
 import { configureClient, loadConfig, type McpConfig } from "./config.js";
@@ -355,6 +356,96 @@ server.registerTool(
     try {
       return ok(
         await ProjectsService.listAuditLogs({ projectId: projectId(p), q, action, limit, offset }),
+      );
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+const eventType = z.enum(["error", "metric", "log", "heartbeat", "event"]);
+
+server.registerTool(
+  "primora_list_issues",
+  {
+    description: "Error groups by fingerprint — count, severity, first/last seen",
+    inputSchema: {
+      projectId: z.string().optional(),
+      days: z.number().int().optional().describe("Lookback window (default 30)"),
+    },
+  },
+  async ({ projectId: p, days }) => {
+    try {
+      return ok(await TelemetryService.listTelemetryIssues({ projectId: projectId(p), days }));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
+  "primora_list_events",
+  {
+    description: "Telemetry events, newest first — errors, metrics, logs, heartbeats",
+    inputSchema: {
+      projectId: z.string().optional(),
+      type: eventType.optional(),
+      component: z.string().optional(),
+      fingerprint: z.string().optional().describe("Limit to one error group"),
+      limit: z.number().int().optional(),
+      before: z.number().int().optional().describe("Event id cursor for pagination"),
+    },
+  },
+  async ({ projectId: p, type, component, fingerprint, limit, before }) => {
+    try {
+      return ok(
+        await TelemetryService.listTelemetryEvents({
+          projectId: projectId(p),
+          type,
+          component,
+          fingerprint,
+          limit,
+          before,
+        }),
+      );
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
+  "primora_telemetry_stats",
+  {
+    description: "Aggregated telemetry: event series, component health, totals, metric names",
+    inputSchema: {
+      projectId: z.string().optional(),
+      window: z.enum(["1h", "24h", "7d", "30d"]).optional(),
+    },
+  },
+  async ({ projectId: p, window }) => {
+    try {
+      return ok(await TelemetryService.getTelemetryStats({ projectId: projectId(p), window }));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
+  "primora_metric_series",
+  {
+    description: "Time series for one metric name — avg, p50, p95, max per bucket",
+    inputSchema: {
+      projectId: z.string().optional(),
+      name: z.string(),
+      window: z.enum(["1h", "24h", "7d", "30d"]).optional(),
+    },
+  },
+  async ({ projectId: p, name, window }) => {
+    try {
+      return ok(
+        await TelemetryService.getTelemetryMetricSeries({ projectId: projectId(p), name, window }),
       );
     } catch (e) {
       return fail(e);

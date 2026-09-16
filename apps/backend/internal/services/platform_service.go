@@ -32,6 +32,7 @@ type PlatformService struct {
 	publicURL      string
 	dbx            *dbx.Client
 	managedDBSeeds []ManagedDBSeed
+	hub            *EventHub
 }
 
 type BootstrapInput struct {
@@ -210,7 +211,7 @@ type InvitationSummary struct {
 }
 
 func NewPlatformService(repo *repositories.CoreRepository, store *storage.LocalStore, mailer *Mailer, publicURL string, dbxClient *dbx.Client, managedDBSeeds []ManagedDBSeed) *PlatformService {
-	return &PlatformService{repo: repo, store: store, mailer: mailer, publicURL: publicURL, dbx: dbxClient, managedDBSeeds: managedDBSeeds}
+	return &PlatformService{repo: repo, store: store, mailer: mailer, publicURL: publicURL, dbx: dbxClient, managedDBSeeds: managedDBSeeds, hub: NewEventHub()}
 }
 
 func (s *PlatformService) Me(ctx context.Context, actor *models.Actor) (PlatformSummary, error) {

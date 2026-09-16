@@ -2,6 +2,22 @@
 
 All notable changes to Primora. Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Telemetry (IMS merge)** — `POST /api/v1/ingest` accepts a single event or a ≤500-event batch, authenticated by existing project `prm_` API keys via `X-Primora-Key` (or `X-API-Key`); `OPTIONS` preflight + permissive CORS for browser SDKs. Components auto-register on first use (`frontend`, `backend`, `database`, `android`, `desktop`, `web`, `other`). Event types: `error`, `metric`, `log`, `heartbeat`, `event`; missing fingerprints are derived from component + first message line.
+- **Issue grouping** — `GET /projects/:id/issues` groups errors by fingerprint (count, severity, first/last seen, latest component).
+- **Telemetry read APIs** — `GET …/events` (type/component/fingerprint filters, `before` cursor), `GET …/components`, `DELETE …/components/:id`, `GET …/telemetry/stats` (bucketed series + component health + totals + metric names over 1h/24h/7d/30d), `GET …/telemetry/metrics/series` (avg/p50/p95/max per bucket).
+- **Live SSE stream** — `GET …/telemetry/stream` pushes inserted events through an in-process hub (buffered subs, drop-on-slow, 25s keepalives). `?api_key=`/`?token=` query auth for `EventSource` clients.
+- **Telemetry page** — SolidJS view: health tab (totals, activity histogram, component status table), issues with drill-through to filtered events, event list with payload modal, metric series table, and an Integrate tab with SDK/cURL snippets. Live badge driven by the SSE stream; demo-mode stubs included.
+- **`@primora/client` SDK** — `createPrimoraClient({ endpoint, key, component, kind, base })` with `captureError`, `captureMetric`, `captureLog`, `captureEvent`, `heartbeat`, `installAuto`, queued batching and `keepalive` flushes.
+- **New `primora_*` MCP tools** — `primora_list_issues`, `primora_list_events`, `primora_telemetry_stats`, `primora_metric_series`.
+
+### Fixed
+
+- Workspace dependency pins updated to `0.3.0` (`@primora/api-client`, `@primora/shared-types`) — `npm ci` in the frontend image was resolving the unpublished `0.2.0` spec from the registry.
+
 ## [0.3.0] - 2026-09-16
 
 ### Added
