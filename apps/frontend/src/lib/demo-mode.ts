@@ -531,6 +531,9 @@ class DemoService {
       name: p.name,
       description: p.description ?? null,
       membership_role: p.membershipRole ?? null,
+      retention_events_days: 90,
+      retention_audit_days: 90,
+      retention_webhook_days: 90,
     }));
   }
   async listAuthUsers() { await this.delay(); return authUsers; }

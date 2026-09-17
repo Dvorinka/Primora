@@ -4,8 +4,9 @@ INSERT INTO core.api_keys (
   name,
   prefix,
   secret_hash,
+  scopes,
   created_by_user_id
-) VALUES ($1, $2, $3, $4, $5)
+) VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
 
 -- name: ListAPIKeysForProject :many

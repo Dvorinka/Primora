@@ -37,6 +37,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReadinessStatus"
+  /metrics:
+    get:
+      tags: [Health]
+      operationId: getMetrics
+      summary: Prometheus text exposition of platform HTTP metrics
+      responses:
+        "200":
+          description: Prometheus metrics
+          content:
+            text/plain:
+              schema:
+                type: string
   /me:
     get:
       tags: [Platform]
@@ -1092,6 +1104,34 @@ paths:
           $ref: "#/components/responses/ErrorResponse"
         "502":
           $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/db-connections/{connectionID}/transfer:
+    post:
+      tags: [Databases]
+      operationId: transferDbRows
+      summary: Move query results from this connection to another saved connection
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/ConnectionID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DBTransferRequest"
+      responses:
+        "200":
+          description: Transfer result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DBTransferResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        "502":
+          $ref: "#/components/responses/ErrorResponse"
   /ingest:
     post:
       tags: [Telemetry]
@@ -1920,6 +1960,21 @@ components:
         description:
           type: string
           nullable: true
+        retention_events_days:
+          type: integer
+          minimum: 0
+          maximum: 3650
+          description: Telemetry event retention; 0 disables the sweep.
+        retention_audit_days:
+          type: integer
+          minimum: 0
+          maximum: 3650
+          description: Audit log retention; 0 disables the sweep.
+        retention_webhook_days:
+          type: integer
+          minimum: 0
+          maximum: 3650
+          description: Webhook delivery retention; 0 disables the sweep.
       required: [name, slug]
     Project:
       type: object
@@ -1940,6 +1995,12 @@ components:
         membership_role:
           type: string
           nullable: true
+        retention_events_days:
+          type: integer
+        retention_audit_days:
+          type: integer
+        retention_webhook_days:
+          type: integer
       required: [id, organization_id, slug, name]
     ProjectOverview:
       type: object
@@ -2124,6 +2185,15 @@ components:
       properties:
         name:
           type: string
+        scopes:
+          type: array
+          items:
+            type: string
+            enum: [ingest, read, write, admin]
+          description: >-
+            Access scopes for the key. admin unlocks everything; write unlocks
+            read + ingest + non-admin mutations; read and ingest unlock only
+            themselves. Omitted means ["admin"] (full access, legacy behaviour).
       required: [name]
     ApiKey:
       type: object
@@ -2138,6 +2208,11 @@ components:
           type: string
         prefix:
           type: string
+        scopes:
+          type: array
+          items:
+            type: string
+            enum: [ingest, read, write, admin]
         last_used_at:
           type: string
           format: date-time
@@ -2159,6 +2234,11 @@ components:
           type: string
         name:
           type: string
+        scopes:
+          type: array
+          items:
+            type: string
+            enum: [ingest, read, write, admin]
       required: [id, prefix, secret, name]
     CreateBucketRequest:
       type: object
@@ -2591,6 +2671,52 @@ components:
         output:
           type: string
       required: [output]
+    DBTransferRequest:
+      type: object
+      properties:
+        target_connection_id:
+          type: string
+          format: uuid
+        query:
+          type: string
+          description: SELECT run against the source connection.
+        database:
+          type: string
+        target_table:
+          type: string
+          description: Destination table for SQL targets (schema-qualified allowed).
+        key_pattern:
+          type: string
+          description: >-
+            Redis targets: SET key template with {column} placeholders, e.g.
+            "user:{id}".
+        value_column:
+          type: string
+          description: >-
+            Redis targets: column whose cell becomes the value. Omitted stores
+            the whole row as JSON.
+        ttl_seconds:
+          type: integer
+          minimum: 0
+          description: Optional EX TTL applied to each Redis SET.
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 1000
+      required: [target_connection_id, query]
+    DBTransferResponse:
+      type: object
+      properties:
+        transferred:
+          type: integer
+        truncated:
+          type: boolean
+        source:
+          type: string
+        target:
+          type: string
+      required: [transferred, truncated, source, target]
     IngestEvent:
       type: object
       properties:

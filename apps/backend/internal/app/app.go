@@ -2,12 +2,16 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -37,6 +41,8 @@ type App struct {
 	Redis    *redis.Client
 	DBX      *dbx.Client
 	Platform *services.PlatformService
+
+	sweepCancel context.CancelFunc
 }
 
 func Bootstrap(ctx context.Context) (*App, error) {
@@ -157,21 +163,53 @@ func Bootstrap(ctx context.Context) (*App, error) {
 	}
 	handler.Register(router)
 
+	sweepCtx, sweepCancel := context.WithCancel(context.Background())
+	sweeper := services.NewRetentionSweeper(repo, logger)
+	go sweeper.Run(sweepCtx)
+
 	return &App{
-		Config:   cfg,
-		Router:   router,
-		Logger:   logger,
-		DB:       dbPool,
-		Redis:    redisClient,
-		DBX:      dbxClient,
-		Platform: platform,
+		Config:      cfg,
+		Router:      router,
+		Logger:      logger,
+		DB:          dbPool,
+		Redis:       redisClient,
+		DBX:         dbxClient,
+		Platform:    platform,
+		sweepCancel: sweepCancel,
 	}, nil
 }
 
 func (a *App) Run() error {
 	address := ":" + a.Config.ServerPort
-	a.Logger.Info("primora backend starting", "address", address)
-	return a.Router.Run(address)
+	srv := &http.Server{Addr: address, Handler: a.Router}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	errCh := make(chan error, 1)
+	go func() {
+		a.Logger.Info("primora backend starting", "address", address)
+		errCh <- srv.ListenAndServe()
+	}()
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+	}
+
+	a.Logger.Info("shutdown signal received, draining in-flight requests")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		return fmt.Errorf("graceful shutdown: %w", err)
+	}
+	if err := <-errCh; err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	// Stop the retention sweeper before main closes the DB pool.
+	a.sweepCancel()
+	return nil
 }
 
 // firstPartyDBSeeds turns the platform's own Postgres and Dragonfly URLs into
@@ -206,6 +244,9 @@ func firstPartyDBSeeds(cfg config.Config) []services.ManagedDBSeed {
 }
 
 func (a *App) Close() error {
+	if a.sweepCancel != nil {
+		a.sweepCancel()
+	}
 	if a.Platform != nil {
 		a.Platform.Close()
 	}

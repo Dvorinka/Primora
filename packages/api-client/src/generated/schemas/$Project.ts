@@ -30,5 +30,14 @@ export const $Project = {
             type: 'string',
             isNullable: true,
         },
+        retention_events_days: {
+            type: 'number',
+        },
+        retention_audit_days: {
+            type: 'number',
+        },
+        retention_webhook_days: {
+            type: 'number',
+        },
     },
 } as const;

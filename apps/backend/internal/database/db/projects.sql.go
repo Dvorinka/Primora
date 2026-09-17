@@ -59,7 +59,7 @@ INSERT INTO core.projects (
   name,
   description
 ) VALUES ($1, $2, $3, $4)
-RETURNING id, organization_id, slug, name, description, created_at
+RETURNING id, organization_id, slug, name, description, created_at, retention_events_days, retention_audit_days, retention_webhook_days
 `
 
 type CreateProjectParams struct {
@@ -84,6 +84,9 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (C
 		&i.Name,
 		&i.Description,
 		&i.CreatedAt,
+		&i.RetentionEventsDays,
+		&i.RetentionAuditDays,
+		&i.RetentionWebhookDays,
 	)
 	return i, err
 }
@@ -91,7 +94,7 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (C
 const deleteProjectByID = `-- name: DeleteProjectByID :one
 DELETE FROM core.projects
 WHERE id = $1
-RETURNING id, organization_id, slug, name, description, created_at
+RETURNING id, organization_id, slug, name, description, created_at, retention_events_days, retention_audit_days, retention_webhook_days
 `
 
 func (q *Queries) DeleteProjectByID(ctx context.Context, id uuid.UUID) (CoreProject, error) {
@@ -104,12 +107,15 @@ func (q *Queries) DeleteProjectByID(ctx context.Context, id uuid.UUID) (CoreProj
 		&i.Name,
 		&i.Description,
 		&i.CreatedAt,
+		&i.RetentionEventsDays,
+		&i.RetentionAuditDays,
+		&i.RetentionWebhookDays,
 	)
 	return i, err
 }
 
 const getProjectByID = `-- name: GetProjectByID :one
-SELECT id, organization_id, slug, name, description, created_at FROM core.projects
+SELECT id, organization_id, slug, name, description, created_at, retention_events_days, retention_audit_days, retention_webhook_days FROM core.projects
 WHERE id = $1
 `
 
@@ -123,6 +129,9 @@ func (q *Queries) GetProjectByID(ctx context.Context, id uuid.UUID) (CoreProject
 		&i.Name,
 		&i.Description,
 		&i.CreatedAt,
+		&i.RetentionEventsDays,
+		&i.RetentionAuditDays,
+		&i.RetentionWebhookDays,
 	)
 	return i, err
 }
@@ -327,7 +336,7 @@ func (q *Queries) ListProjectMembers(ctx context.Context, projectID uuid.UUID) (
 
 const listProjectsForOrganization = `-- name: ListProjectsForOrganization :many
 SELECT
-  p.id, p.organization_id, p.slug, p.name, p.description, p.created_at,
+  p.id, p.organization_id, p.slug, p.name, p.description, p.created_at, p.retention_events_days, p.retention_audit_days, p.retention_webhook_days,
   pm.role AS membership_role
 FROM core.projects p
 LEFT JOIN core.project_members pm
@@ -350,13 +359,16 @@ type ListProjectsForOrganizationParams struct {
 }
 
 type ListProjectsForOrganizationRow struct {
-	ID             uuid.UUID           `json:"id"`
-	OrganizationID uuid.UUID           `json:"organization_id"`
-	Slug           string              `json:"slug"`
-	Name           string              `json:"name"`
-	Description    *string             `json:"description"`
-	CreatedAt      pgtype.Timestamptz  `json:"created_at"`
-	MembershipRole NullCoreProjectRole `json:"membership_role"`
+	ID                   uuid.UUID           `json:"id"`
+	OrganizationID       uuid.UUID           `json:"organization_id"`
+	Slug                 string              `json:"slug"`
+	Name                 string              `json:"name"`
+	Description          *string             `json:"description"`
+	CreatedAt            pgtype.Timestamptz  `json:"created_at"`
+	RetentionEventsDays  int32               `json:"retention_events_days"`
+	RetentionAuditDays   int32               `json:"retention_audit_days"`
+	RetentionWebhookDays int32               `json:"retention_webhook_days"`
+	MembershipRole       NullCoreProjectRole `json:"membership_role"`
 }
 
 func (q *Queries) ListProjectsForOrganization(ctx context.Context, arg ListProjectsForOrganizationParams) ([]ListProjectsForOrganizationRow, error) {
@@ -375,6 +387,9 @@ func (q *Queries) ListProjectsForOrganization(ctx context.Context, arg ListProje
 			&i.Name,
 			&i.Description,
 			&i.CreatedAt,
+			&i.RetentionEventsDays,
+			&i.RetentionAuditDays,
+			&i.RetentionWebhookDays,
 			&i.MembershipRole,
 		); err != nil {
 			return nil, err
@@ -416,16 +431,22 @@ const updateProjectByID = `-- name: UpdateProjectByID :one
 UPDATE core.projects
 SET slug = $2,
     name = $3,
-    description = $4
+    description = $4,
+    retention_events_days = COALESCE($5, retention_events_days),
+    retention_audit_days = COALESCE($6, retention_audit_days),
+    retention_webhook_days = COALESCE($7, retention_webhook_days)
 WHERE id = $1
-RETURNING id, organization_id, slug, name, description, created_at
+RETURNING id, organization_id, slug, name, description, created_at, retention_events_days, retention_audit_days, retention_webhook_days
 `
 
 type UpdateProjectByIDParams struct {
-	ID          uuid.UUID `json:"id"`
-	Slug        string    `json:"slug"`
-	Name        string    `json:"name"`
-	Description *string   `json:"description"`
+	ID                   uuid.UUID `json:"id"`
+	Slug                 string    `json:"slug"`
+	Name                 string    `json:"name"`
+	Description          *string   `json:"description"`
+	RetentionEventsDays  *int32    `json:"retention_events_days"`
+	RetentionAuditDays   *int32    `json:"retention_audit_days"`
+	RetentionWebhookDays *int32    `json:"retention_webhook_days"`
 }
 
 func (q *Queries) UpdateProjectByID(ctx context.Context, arg UpdateProjectByIDParams) (CoreProject, error) {
@@ -434,6 +455,9 @@ func (q *Queries) UpdateProjectByID(ctx context.Context, arg UpdateProjectByIDPa
 		arg.Slug,
 		arg.Name,
 		arg.Description,
+		arg.RetentionEventsDays,
+		arg.RetentionAuditDays,
+		arg.RetentionWebhookDays,
 	)
 	var i CoreProject
 	err := row.Scan(
@@ -443,6 +467,9 @@ func (q *Queries) UpdateProjectByID(ctx context.Context, arg UpdateProjectByIDPa
 		&i.Name,
 		&i.Description,
 		&i.CreatedAt,
+		&i.RetentionEventsDays,
+		&i.RetentionAuditDays,
+		&i.RetentionWebhookDays,
 	)
 	return i, err
 }

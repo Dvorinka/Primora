@@ -9,5 +9,8 @@ export type Project = {
     name: string;
     description?: string | null;
     membership_role?: string | null;
+    retention_events_days?: number;
+    retention_audit_days?: number;
+    retention_webhook_days?: number;
 };
 

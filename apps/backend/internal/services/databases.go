@@ -500,3 +500,223 @@ func (s *PlatformService) ExecuteDBXRedis(ctx context.Context, actor *models.Act
 	}
 	return map[string]any{"output": text}, nil
 }
+
+// TransferInput describes a DB-to-DB link: rows read from the source
+// connection are written to the target connection.
+type TransferInput struct {
+	TargetConnectionID string `json:"target_connection_id" validate:"required,uuid"`
+	Query              string `json:"query" validate:"required"`
+	Database           string `json:"database"`
+	// SQL targets: destination table (schema-qualified allowed).
+	TargetTable string `json:"target_table"`
+	// Redis targets: SET key template with {column} placeholders; the value is
+	// value_column's cell, or the whole row as JSON when omitted.
+	KeyPattern  string `json:"key_pattern"`
+	ValueColumn string `json:"value_column"`
+	// Optional TTL in seconds applied to each Redis SET.
+	TTLSeconds *int `json:"ttl_seconds" validate:"omitempty,min=0"`
+	Limit      int   `json:"limit" validate:"omitempty,min=1,max=1000"`
+}
+
+const transferMaxRows = 1000
+
+// TransferDBRows moves data between two saved connections of the same
+// project. Both connections must accept write-level access.
+func (s *PlatformService) TransferDBRows(ctx context.Context, actor *models.Actor, projectID, sourceID uuid.UUID, input TransferInput, requestID string) (map[string]any, error) {
+	source, err := s.connForTool(ctx, actor, projectID, sourceID, true)
+	if err != nil {
+		return nil, err
+	}
+	targetID, err := uuid.Parse(input.TargetConnectionID)
+	if err != nil {
+		return nil, errors.New("target_connection_id must be a uuid")
+	}
+	target, err := s.connForTool(ctx, actor, projectID, targetID, true)
+	if err != nil {
+		return nil, err
+	}
+
+	limit := input.Limit
+	if limit <= 0 || limit > transferMaxRows {
+		limit = transferMaxRows
+	}
+	args := map[string]any{"connection_name": dbxConnectionName(projectID, source.Name), "sql": input.Query}
+	if input.Database != "" {
+		args["database"] = input.Database
+	}
+	text, err := s.dbx.Call(ctx, "dbx_execute_query", args)
+	if err != nil {
+		return nil, err
+	}
+	table, _ := dbx.ParseMDTable(text)
+	if table == nil || len(table.Columns) == 0 {
+		return nil, errors.New("source query did not return a result table")
+	}
+	rows := table.Rows
+	truncated := false
+	if len(rows) > limit {
+		rows = rows[:limit]
+		truncated = true
+	}
+
+	var transferred int
+	if target.DbType == "redis" {
+		transferred, err = s.transferToRedis(ctx, projectID, target, table.Columns, rows, input)
+	} else {
+		transferred, err = s.transferToSQL(ctx, projectID, target, table.Columns, rows, input)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	project, perr := s.repo.Queries().GetProjectByID(ctx, projectID)
+	if perr == nil {
+		_, _ = s.repo.Queries().CreateAuditLog(ctx, newAuditParams(project.OrganizationID, projectID, actor, requestID, "db_connection.transferred", "db_connection", source.ID.String(), map[string]any{
+			"source":      source.Name,
+			"target":      target.Name,
+			"transferred": transferred,
+			"truncated":   truncated,
+		}))
+	}
+	return map[string]any{
+		"transferred": transferred,
+		"truncated":   truncated,
+		"source":      source.Name,
+		"target":      target.Name,
+	}, nil
+}
+
+// transferToSQL INSERTs rows into target_table in batches of 100. Cell values
+// arrive as text from DBX's markdown output; literal "NULL" maps to SQL NULL.
+func (s *PlatformService) transferToSQL(ctx context.Context, projectID uuid.UUID, target db.CoreDbConnection, cols []string, rows [][]string, input TransferInput) (int, error) {
+	tableIdent, ok := safeDottedIdent(input.TargetTable)
+	if !ok {
+		return 0, errors.New("target_table must be a plain identifier or schema.table")
+	}
+	colIdents := make([]string, len(cols))
+	for i, col := range cols {
+		ident, ok := safeIdent(col)
+		if !ok {
+			return 0, fmt.Errorf("source column %q is not a usable identifier", col)
+		}
+		colIdents[i] = `"` + ident + `"`
+	}
+
+	transferred := 0
+	const batch = 100
+	for start := 0; start < len(rows); start += batch {
+		end := min(start+batch, len(rows))
+		var values strings.Builder
+		values.WriteString("INSERT INTO " + tableIdent + " (" + strings.Join(colIdents, ", ") + ") VALUES ")
+		for i, row := range rows[start:end] {
+			if i > 0 {
+				values.WriteString(", ")
+			}
+			values.WriteString("(")
+			for j := range cols {
+				if j > 0 {
+					values.WriteString(", ")
+				}
+				cell := ""
+				if j < len(row) {
+					cell = row[j]
+				}
+				if cell == "NULL" {
+					values.WriteString("NULL")
+				} else {
+					values.WriteString(sqlQuote(cell))
+				}
+			}
+			values.WriteString(")")
+		}
+		if _, err := s.dbx.Call(ctx, "dbx_execute_query", map[string]any{
+			"connection_name": dbxConnectionName(projectID, target.Name),
+			"sql":             values.String(),
+		}); err != nil {
+			return transferred, fmt.Errorf("insert batch at row %d: %w", start, err)
+		}
+		transferred += end - start
+	}
+	return transferred, nil
+}
+
+// transferToRedis SETs one key per row. Placeholders like {email} in
+// key_pattern are replaced with that row's cell value.
+var keyPlaceholder = regexp.MustCompile(`\{([A-Za-z0-9_]+)\}`)
+
+func (s *PlatformService) transferToRedis(ctx context.Context, projectID uuid.UUID, target db.CoreDbConnection, cols []string, rows [][]string, input TransferInput) (int, error) {
+	if input.KeyPattern == "" {
+		return 0, errors.New("key_pattern is required for redis targets")
+	}
+	colIndex := map[string]int{}
+	for i, col := range cols {
+		colIndex[col] = i
+	}
+	for _, ph := range keyPlaceholder.FindAllStringSubmatch(input.KeyPattern, -1) {
+		if _, ok := colIndex[ph[1]]; !ok {
+			return 0, fmt.Errorf("key_pattern references unknown column %q", ph[1])
+		}
+	}
+	if input.ValueColumn != "" {
+		if _, ok := colIndex[input.ValueColumn]; !ok {
+			return 0, fmt.Errorf("value_column %q not in source columns", input.ValueColumn)
+		}
+	}
+
+	transferred := 0
+	for _, row := range rows {
+		key := keyPlaceholder.ReplaceAllStringFunc(input.KeyPattern, func(m string) string {
+			col := keyPlaceholder.FindStringSubmatch(m)[1]
+			if i, ok := colIndex[col]; ok && i < len(row) {
+				return row[i]
+			}
+			return ""
+		})
+		var value string
+		if input.ValueColumn != "" {
+			value = row[colIndex[input.ValueColumn]]
+		} else {
+			obj := map[string]string{}
+			for i, col := range cols {
+				if i < len(row) {
+					obj[col] = row[i]
+				}
+			}
+			raw, _ := json.Marshal(obj)
+			value = string(raw)
+		}
+		cmd := "SET " + redisQuote(key) + " " + redisQuote(value)
+		if input.TTLSeconds != nil && *input.TTLSeconds > 0 {
+			cmd += fmt.Sprintf(" EX %d", *input.TTLSeconds)
+		}
+		if _, err := s.dbx.Call(ctx, "dbx_execute_redis_command", map[string]any{
+			"connection_name": dbxConnectionName(projectID, target.Name),
+			"command":         cmd,
+		}); err != nil {
+			return transferred, fmt.Errorf("SET %q: %w", key, err)
+		}
+		transferred++
+	}
+	return transferred, nil
+}
+
+var dottedIdent = regexp.MustCompile(`^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)?$`)
+
+func safeDottedIdent(s string) (string, bool) {
+	if !dottedIdent.MatchString(s) {
+		return "", false
+	}
+	parts := strings.Split(s, ".")
+	for i := range parts {
+		parts[i] = `"` + parts[i] + `"`
+	}
+	return strings.Join(parts, "."), true
+}
+
+func sqlQuote(v string) string {
+	return "'" + strings.ReplaceAll(v, "'", "''") + "'"
+}
+
+func redisQuote(v string) string {
+	return `"` + strings.ReplaceAll(strings.ReplaceAll(v, `\`, `\\`), `"`, `\"`) + `"`
+}

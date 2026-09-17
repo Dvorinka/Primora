@@ -29,6 +29,7 @@ func (h *HTTPHandler) Register(router *gin.Engine) {
 	router.GET("/api/v1/health/liveness", h.liveness)
 	router.GET("/api/v1/health/readiness", h.readiness)
 	router.GET("/api/v1/openapi.yaml", h.openapi)
+	router.GET("/api/v1/metrics", h.metrics)
 
 	api := router.Group("/api/v1")
 	api.GET("/me", h.me)
@@ -91,6 +92,7 @@ func (h *HTTPHandler) Register(router *gin.Engine) {
 	api.GET("/projects/:projectID/db-connections/:connectionID/foreign-keys", h.dbxForeignKeys)
 	api.POST("/projects/:projectID/db-connections/:connectionID/query", h.dbxQuery)
 	api.POST("/projects/:projectID/db-connections/:connectionID/redis", h.dbxRedis)
+	api.POST("/projects/:projectID/db-connections/:connectionID/transfer", h.dbxTransfer)
 	api.GET("/projects/:projectID/integrations", h.listIntegrations)
 	api.POST("/projects/:projectID/integrations", h.createIntegration)
 	api.DELETE("/projects/:projectID/integrations/:integrationID", h.deleteIntegration)
@@ -121,6 +123,12 @@ func (h *HTTPHandler) readiness(c *gin.Context) {
 
 func (h *HTTPHandler) openapi(c *gin.Context) {
 	c.File("openapi/openapi.yaml")
+}
+
+// metrics is intentionally unauthenticated — Prometheus scrapes it. Restrict
+// it at the edge if the deployment is public-facing.
+func (h *HTTPHandler) metrics(c *gin.Context) {
+	c.Data(http.StatusOK, "text/plain; version=0.0.4; charset=utf-8", []byte(h.Metrics.RenderPrometheus()))
 }
 
 func (h *HTTPHandler) me(c *gin.Context) {

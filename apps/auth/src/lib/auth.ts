@@ -75,6 +75,12 @@ export const auth = betterAuth({
       });
     },
   },
+  // Enabled unconditionally — better-auth only turns this on when NODE_ENV is
+  // production, but the shipped .env defaults to development. Credential
+  // endpoints get 3 req/10s; the IP-level limiter in index.ts sits in front.
+  rateLimit: {
+    enabled: true,
+  },
   socialProviders,
   plugins: [
     jwt({

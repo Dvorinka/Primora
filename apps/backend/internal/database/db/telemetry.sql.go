@@ -239,6 +239,7 @@ const listComponents = `-- name: ListComponents :many
 SELECT id, project_id, name, kind, meta, created_at FROM core.components
 WHERE project_id = $1
 ORDER BY name
+LIMIT 500
 `
 
 func (q *Queries) ListComponents(ctx context.Context, projectID uuid.UUID) ([]CoreComponent, error) {

@@ -28,4 +28,15 @@ export class HealthService {
             url: '/health/readiness',
         });
     }
+    /**
+     * Prometheus text exposition of platform HTTP metrics
+     * @returns string Prometheus metrics
+     * @throws ApiError
+     */
+    public static getMetrics(): CancelablePromise<string> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/metrics',
+        });
+    }
 }

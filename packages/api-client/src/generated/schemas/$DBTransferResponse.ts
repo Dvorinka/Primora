@@ -2,30 +2,23 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export const $CreatedApiKey = {
+export const $DBTransferResponse = {
     properties: {
-        id: {
-            type: 'string',
-            isRequired: true,
-            format: 'uuid',
-        },
-        prefix: {
-            type: 'string',
+        transferred: {
+            type: 'number',
             isRequired: true,
         },
-        secret: {
-            type: 'string',
+        truncated: {
+            type: 'boolean',
             isRequired: true,
         },
-        name: {
+        source: {
             type: 'string',
             isRequired: true,
         },
-        scopes: {
-            type: 'array',
-            contains: {
-                type: 'Enum',
-            },
+        target: {
+            type: 'string',
+            isRequired: true,
         },
     },
 } as const;

@@ -28,7 +28,10 @@ RETURNING *;
 UPDATE core.projects
 SET slug = $2,
     name = $3,
-    description = $4
+    description = $4,
+    retention_events_days = COALESCE(sqlc.narg('retention_events_days'), retention_events_days),
+    retention_audit_days = COALESCE(sqlc.narg('retention_audit_days'), retention_audit_days),
+    retention_webhook_days = COALESCE(sqlc.narg('retention_webhook_days'), retention_webhook_days)
 WHERE id = $1
 RETURNING *;
 

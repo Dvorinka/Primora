@@ -150,6 +150,7 @@ type CoreApiKey struct {
 	LastUsedAt      pgtype.Timestamptz `json:"last_used_at"`
 	RevokedAt       pgtype.Timestamptz `json:"revoked_at"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	Scopes          []string           `json:"scopes"`
 }
 
 type CoreAuditLog struct {
@@ -273,12 +274,15 @@ type CoreOrganizationMember struct {
 }
 
 type CoreProject struct {
-	ID             uuid.UUID          `json:"id"`
-	OrganizationID uuid.UUID          `json:"organization_id"`
-	Slug           string             `json:"slug"`
-	Name           string             `json:"name"`
-	Description    *string            `json:"description"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	ID                   uuid.UUID          `json:"id"`
+	OrganizationID       uuid.UUID          `json:"organization_id"`
+	Slug                 string             `json:"slug"`
+	Name                 string             `json:"name"`
+	Description          *string            `json:"description"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	RetentionEventsDays  int32              `json:"retention_events_days"`
+	RetentionAuditDays   int32              `json:"retention_audit_days"`
+	RetentionWebhookDays int32              `json:"retention_webhook_days"`
 }
 
 type CoreProjectInvitation struct {

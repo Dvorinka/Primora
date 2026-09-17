@@ -15,6 +15,8 @@ import type { DBRedisRequest } from '../models/DBRedisRequest';
 import type { DBRedisResponse } from '../models/DBRedisResponse';
 import type { DBSchemaContextResponse } from '../models/DBSchemaContextResponse';
 import type { DBTableListResponse } from '../models/DBTableListResponse';
+import type { DBTransferRequest } from '../models/DBTransferRequest';
+import type { DBTransferResponse } from '../models/DBTransferResponse';
 import type { DBXStatus } from '../models/DBXStatus';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
@@ -321,6 +323,35 @@ export class DatabasesService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/projects/{projectID}/db-connections/{connectionID}/redis',
+            path: {
+                'projectID': projectId,
+                'connectionID': connectionId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                404: `Error response`,
+                502: `Error response`,
+            },
+        });
+    }
+    /**
+     * Move query results from this connection to another saved connection
+     * @returns DBTransferResponse Transfer result
+     * @throws ApiError
+     */
+    public static transferDbRows({
+        projectId,
+        connectionId,
+        requestBody,
+    }: {
+        projectId: string,
+        connectionId: string,
+        requestBody: DBTransferRequest,
+    }): CancelablePromise<DBTransferResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/projects/{projectID}/db-connections/{connectionID}/transfer',
             path: {
                 'projectID': projectId,
                 'connectionID': connectionId,

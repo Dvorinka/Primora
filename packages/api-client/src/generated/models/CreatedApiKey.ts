@@ -7,5 +7,6 @@ export type CreatedApiKey = {
     prefix: string;
     secret: string;
     name: string;
+    scopes?: Array<'ingest' | 'read' | 'write' | 'admin'>;
 };
 
