@@ -14,6 +14,7 @@ import {
   UpdateOrganizationRequest,
   UpdateProjectMemberRoleRequest,
   UpdateProjectRequest,
+  CreateApiKeyRequest,
   CopyBucketObjectRequest,
   type Bucket,
   type BucketObject,
@@ -180,7 +181,14 @@ export default function App() {
   });
 
   const [projectInput, setProjectInput] = createSignal({ name: "", slug: "", description: "" });
-  const [projectEditInput, setProjectEditInput] = createSignal({ name: "", slug: "", description: "" });
+  const [projectEditInput, setProjectEditInput] = createSignal({
+    name: "",
+    slug: "",
+    description: "",
+    retentionEventsDays: "",
+    retentionAuditDays: "",
+    retentionWebhookDays: "",
+  });
   const [organizationInput, setOrganizationInput] = createSignal({ name: "", slug: "" });
   const [organizationEditInput, setOrganizationEditInput] = createSignal({ name: "", slug: "" });
   const [invitationInput, setInvitationInput] = createSignal({
@@ -190,6 +198,7 @@ export default function App() {
     projectRole: CreateInvitationRequest.projectRole.DEVELOPER as string,
   });
   const [apiKeyName, setApiKeyName] = createSignal("Frontend key");
+  const [apiKeyScopes, setApiKeyScopes] = createSignal<string[]>(["admin"]);
   const [bucketInput, setBucketInput] = createSignal({
     name: "",
     slug: "",
@@ -258,7 +267,13 @@ export default function App() {
     },
   );
 
-  const availableProjects = createMemo<ProjectSummary[]>(() => {
+  type ProjectListItem = ProjectSummary & {
+    retentionEventsDays?: number;
+    retentionAuditDays?: number;
+    retentionWebhookDays?: number;
+  };
+
+  const availableProjects = createMemo<ProjectListItem[]>(() => {
     const items = organizationProjects();
     if (!items) return activeOrganization()?.projects ?? [];
     return items.map((project) => ({
@@ -267,10 +282,13 @@ export default function App() {
       slug: project.slug,
       description: project.description ?? undefined,
       membershipRole: project.membership_role ?? undefined,
+      retentionEventsDays: project.retention_events_days,
+      retentionAuditDays: project.retention_audit_days,
+      retentionWebhookDays: project.retention_webhook_days,
     }));
   });
 
-  const activeProject = createMemo<ProjectSummary | undefined>(() =>
+  const activeProject = createMemo<ProjectListItem | undefined>(() =>
     availableProjects().find((item) => item.id === selectedProjectID()),
   );
   const canUpdateOrganization = createMemo(() => {
@@ -547,8 +565,15 @@ export default function App() {
     const project = activeProject();
     setProjectEditInput(
       project
-        ? { name: project.name, slug: project.slug, description: project.description ?? "" }
-        : { name: "", slug: "", description: "" },
+        ? {
+            name: project.name,
+            slug: project.slug,
+            description: project.description ?? "",
+            retentionEventsDays: project.retentionEventsDays?.toString() ?? "",
+            retentionAuditDays: project.retentionAuditDays?.toString() ?? "",
+            retentionWebhookDays: project.retentionWebhookDays?.toString() ?? "",
+          }
+        : { name: "", slug: "", description: "", retentionEventsDays: "", retentionAuditDays: "", retentionWebhookDays: "" },
     );
   });
 
@@ -713,6 +738,12 @@ export default function App() {
       setProjectMessage("");
       try {
         const trimmed = projectEditInput().description.trim();
+        const parseRetention = (value: string): number | undefined => {
+          const raw = value.trim();
+          if (raw === "") return undefined;
+          const n = Number(raw);
+          return Number.isFinite(n) ? Math.min(3650, Math.max(0, Math.trunc(n))) : undefined;
+        };
         if (isDemo) {
           await demoService.updateProject({ requestBody: { ...projectEditInput(), description: trimmed || null } });
         } else {
@@ -722,6 +753,9 @@ export default function App() {
               name: projectEditInput().name,
               slug: projectEditInput().slug,
               description: trimmed.length > 0 ? trimmed : null,
+              retention_events_days: parseRetention(projectEditInput().retentionEventsDays),
+              retention_audit_days: parseRetention(projectEditInput().retentionAuditDays),
+              retention_webhook_days: parseRetention(projectEditInput().retentionWebhookDays),
             } as UpdateProjectRequest,
           });
         }
@@ -1001,7 +1035,14 @@ export default function App() {
       try {
         const result = isDemo
           ? await demoService.createApiKey({ requestBody: { name: apiKeyName() } })
-          : await ProjectsService.createApiKey({ projectId: projectID, requestBody: { name: apiKeyName() } });
+          : await ProjectsService.createApiKey({
+              projectId: projectID,
+              requestBody: {
+                name: apiKeyName(),
+                scopes: apiKeyScopes() as CreateApiKeyRequest["scopes"],
+              },
+            });
+        setApiKeyScopes(["admin"]);
         await refetchAPIKeys();
         await refetchAuditLogs();
         await refreshProjectOverviewSnapshot();
@@ -1766,6 +1807,7 @@ export default function App() {
             <SettingsPage
               apiKeys={apiKeys()}
               apiKeyName={apiKeyName()}
+              apiKeyScopes={apiKeyScopes()}
               apiKeySecret={apiKeySecret()}
               apiKeyMessage={apiKeyMessage()}
               apiKeyPending={apiKeyPending()}
@@ -1776,6 +1818,9 @@ export default function App() {
               workspacePending={workspacePending()}
               hasActiveOrganization={!!activeOrganization()}
               onApiKeyNameChange={setApiKeyName}
+              onApiKeyScopeToggle={(scope) =>
+                setApiKeyScopes((c) => (c.includes(scope) ? c.filter((s) => s !== scope) : [...c, scope]))
+              }
               onCreateApiKey={createApiKey}
               onDeleteApiKey={revokeApiKey}
               onOrganizationInputChange={(field, value) => setOrganizationInput((c) => ({ ...c, [field]: value }))}

@@ -17,9 +17,17 @@ interface OrgInput {
   slug: string;
 }
 
+const API_KEY_SCOPES: Array<{ value: string; label: string; hint: string }> = [
+  { value: "ingest", label: "ingest", hint: "telemetry ingest only" },
+  { value: "read", label: "read", hint: "read endpoints" },
+  { value: "write", label: "write", hint: "read + ingest + mutations" },
+  { value: "admin", label: "admin", hint: "full access" },
+];
+
 interface SettingsPageProps {
   apiKeys?: ApiKey[];
   apiKeyName: string;
+  apiKeyScopes: string[];
   apiKeySecret: string;
   apiKeyMessage: string;
   apiKeyPending: boolean;
@@ -30,6 +38,7 @@ interface SettingsPageProps {
   workspacePending: boolean;
   hasActiveOrganization: boolean;
   onApiKeyNameChange: (name: string) => void;
+  onApiKeyScopeToggle: (scope: string) => void;
   onCreateApiKey: () => void;
   onDeleteApiKey: (id: string) => void;
   onOrganizationInputChange: (field: keyof OrgInput, value: string) => void;
@@ -112,11 +121,33 @@ export function SettingsPage(props: SettingsPageProps) {
             <button
               class="btn btn-primary"
               onClick={props.onCreateApiKey}
-              disabled={props.apiKeyPending || !props.apiKeyName.trim()}
+              disabled={props.apiKeyPending || !props.apiKeyName.trim() || props.apiKeyScopes.length === 0}
             >
               <IconPlus class="w-4 h-4" />
               Create key
             </button>
+          </div>
+          <div class="mt-4">
+            <span class="label">Scopes</span>
+            <div class="flex flex-wrap gap-x-5 gap-y-2 mt-1">
+              <For each={API_KEY_SCOPES}>
+                {(scope) => (
+                  <label class="flex items-center gap-2 text-sm text-text-2">
+                    <input
+                      type="checkbox"
+                      class="accent-[var(--accent)]"
+                      checked={props.apiKeyScopes.includes(scope.value)}
+                      disabled={props.apiKeyScopes.length === 1 && props.apiKeyScopes.includes(scope.value)}
+                      onChange={() => props.onApiKeyScopeToggle(scope.value)}
+                    />
+                    <span>
+                      <code>{scope.label}</code>
+                      <span class="text-text-3"> — {scope.hint}</span>
+                    </span>
+                  </label>
+                )}
+              </For>
+            </div>
           </div>
         </div>
 
@@ -141,6 +172,7 @@ export function SettingsPage(props: SettingsPageProps) {
                   <tr>
                     <th>Name</th>
                     <th>Prefix</th>
+                    <th>Scopes</th>
                     <th>Last used</th>
                     <th>Status</th>
                     <th style="width:1%" />
@@ -153,6 +185,13 @@ export function SettingsPage(props: SettingsPageProps) {
                         <td class="font-medium text-text-1">{key.name}</td>
                         <td>
                           <code>{key.prefix}…</code>
+                        </td>
+                        <td>
+                          <div class="flex flex-wrap gap-1">
+                            <For each={key.scopes && key.scopes.length > 0 ? key.scopes : ["admin"]}>
+                              {(scope) => <Badge variant="neutral">{scope}</Badge>}
+                            </For>
+                          </div>
                         </td>
                         <td class="text-text-3 text-xs">
                           {key.last_used_at ? props.formatDate(key.last_used_at) : "Never"}

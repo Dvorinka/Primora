@@ -7,6 +7,7 @@ export type ApiKey = {
     project_id: string;
     name: string;
     prefix: string;
+    scopes?: Array<'ingest' | 'read' | 'write' | 'admin'>;
     last_used_at?: string | null;
     revoked_at?: string | null;
 };

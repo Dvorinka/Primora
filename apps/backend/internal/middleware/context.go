@@ -125,6 +125,10 @@ func (m AuthMiddleware) ResolveActor() gin.HandlerFunc {
 			if !m.enforceRateLimit(c, "apikey", actor.APIKeyPrefix, m.RateLimits.APIKeyPerMinute, "API key rate limit exceeded") {
 				return
 			}
+			if need := requiredAPIKeyScope(c.Request.Method, c.Request.URL.Path); !actor.HasScope(need) {
+				apperrors.Abort(c, http.StatusForbidden, "insufficient_scope", "api key lacks the required scope: "+need)
+				return
+			}
 			c.Set(actorKey, actor)
 		}
 		c.Next()
@@ -264,7 +268,34 @@ func (m AuthMiddleware) resolveAPIKeyActor(ctx context.Context, rawKey string) (
 		OrganizationID: &orgID,
 		APIKeyID:       &apiKeyID,
 		APIKeyPrefix:   prefix,
+		Scopes:         row.Scopes,
 	}, nil
+}
+
+// requiredAPIKeyScope maps a request to the scope an API key must hold.
+// admin-only surfaces: org management, invitations, bootstrap, project
+// settings/members, and API key minting (a write key must never mint keys).
+func requiredAPIKeyScope(method, path string) string {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return "read"
+	}
+	if path == "/api/v1/ingest" {
+		return "ingest"
+	}
+	rest := strings.TrimPrefix(path, "/api/v1/")
+	segs := strings.SplitN(rest, "/", 3)
+	switch segs[0] {
+	case "organizations", "invitations", "bootstrap":
+		return "admin"
+	case "projects":
+		if len(segs) < 3 ||
+			strings.HasPrefix(segs[2], "api-keys") ||
+			strings.HasPrefix(segs[2], "members") {
+			return "admin"
+		}
+	}
+	return "write"
 }
 
 func PgUUID(id uuid.UUID) pgtype.UUID {

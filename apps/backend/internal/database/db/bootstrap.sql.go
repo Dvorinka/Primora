@@ -24,7 +24,7 @@ new_org_member AS (
 new_project AS (
   INSERT INTO core.projects (organization_id, slug, name, description)
   SELECT id, $4, $5, $6 FROM new_org
-  RETURNING id, organization_id, slug, name, description, created_at
+  RETURNING id, organization_id, slug, name, description, created_at, retention_events_days, retention_audit_days, retention_webhook_days
 ),
 new_project_member AS (
   INSERT INTO core.project_members (project_id, user_id, role)

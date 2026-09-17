@@ -17,12 +17,15 @@ type organizationMembershipResponse struct {
 }
 
 type projectResponse struct {
-	ID             string  `json:"id"`
-	OrganizationID string  `json:"organization_id"`
-	Slug           string  `json:"slug"`
-	Name           string  `json:"name"`
-	Description    *string `json:"description"`
-	MembershipRole *string `json:"membership_role"`
+	ID                   string  `json:"id"`
+	OrganizationID       string  `json:"organization_id"`
+	Slug                 string  `json:"slug"`
+	Name                 string  `json:"name"`
+	Description          *string `json:"description"`
+	MembershipRole       *string `json:"membership_role"`
+	RetentionEventsDays  int32   `json:"retention_events_days"`
+	RetentionAuditDays   int32   `json:"retention_audit_days"`
+	RetentionWebhookDays int32   `json:"retention_webhook_days"`
 }
 
 type apiKeyResponse struct {
@@ -30,6 +33,7 @@ type apiKeyResponse struct {
 	ProjectID  string     `json:"project_id"`
 	Name       string     `json:"name"`
 	Prefix     string     `json:"prefix"`
+	Scopes     []string   `json:"scopes"`
 	LastUsedAt *time.Time `json:"last_used_at"`
 	RevokedAt  *time.Time `json:"revoked_at"`
 }
@@ -114,23 +118,29 @@ func toProjectFromRow(row db.ListProjectsForOrganizationRow) projectResponse {
 		membershipRole = &role
 	}
 	return projectResponse{
-		ID:             row.ID.String(),
-		OrganizationID: row.OrganizationID.String(),
-		Slug:           row.Slug,
-		Name:           row.Name,
-		Description:    row.Description,
-		MembershipRole: membershipRole,
+		ID:                   row.ID.String(),
+		OrganizationID:       row.OrganizationID.String(),
+		Slug:                 row.Slug,
+		Name:                 row.Name,
+		Description:          row.Description,
+		MembershipRole:       membershipRole,
+		RetentionEventsDays:  row.RetentionEventsDays,
+		RetentionAuditDays:   row.RetentionAuditDays,
+		RetentionWebhookDays: row.RetentionWebhookDays,
 	}
 }
 
 func toProjectFromCore(row db.CoreProject) projectResponse {
 	return projectResponse{
-		ID:             row.ID.String(),
-		OrganizationID: row.OrganizationID.String(),
-		Slug:           row.Slug,
-		Name:           row.Name,
-		Description:    row.Description,
-		MembershipRole: nil,
+		ID:                   row.ID.String(),
+		OrganizationID:       row.OrganizationID.String(),
+		Slug:                 row.Slug,
+		Name:                 row.Name,
+		Description:          row.Description,
+		MembershipRole:       nil,
+		RetentionEventsDays:  row.RetentionEventsDays,
+		RetentionAuditDays:   row.RetentionAuditDays,
+		RetentionWebhookDays: row.RetentionWebhookDays,
 	}
 }
 
@@ -148,6 +158,7 @@ func toAPIKeyResponse(row db.CoreApiKey) apiKeyResponse {
 		ProjectID:  row.ProjectID.String(),
 		Name:       row.Name,
 		Prefix:     row.Prefix,
+		Scopes:     row.Scopes,
 		LastUsedAt: timestamptzPtr(row.LastUsedAt),
 		RevokedAt:  timestamptzPtr(row.RevokedAt),
 	}

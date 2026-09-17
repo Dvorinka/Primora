@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	db "github.com/tdvorak/primora/apps/backend/internal/database/db"
@@ -19,7 +19,8 @@ import (
 
 // DBConnectionConfig holds the server-side credential payload for a saved
 // connection. It is stored in core.db_connections.config and never serialized
-// to the client — see DBConnectionSummary.
+// to the client — see DBConnectionSummary. Password is AES-GCM sealed
+// (enc:v1:<base64>) before persisting; openPassword restores it.
 type DBConnectionConfig struct {
 	Host          string `json:"host"`
 	Port          *int   `json:"port,omitempty"`
@@ -28,14 +29,6 @@ type DBConnectionConfig struct {
 	Password      string `json:"password,omitempty"`
 	SSL           *bool  `json:"ssl,omitempty"`
 	DriverProfile string `json:"driver_profile,omitempty"`
-}
-
-// ManagedDBSeed describes a first-party connection auto-registered on every
-// project (the platform's own Postgres and Dragonfly).
-type ManagedDBSeed struct {
-	Name   string
-	DBType string
-	Config DBConnectionConfig
 }
 
 type CreateDBConnectionInput struct {
@@ -88,15 +81,44 @@ func toDBConnectionSummary(row db.CoreDbConnection) DBConnectionSummary {
 	}
 }
 
-// dbxConnectionName derives the DBX-internal name. The project prefix keeps
-// same-named connections in different projects from clobbering each other in
-// DBX's shared storage.
+// dbxConnectionName derives the DBX-internal name. The full project UUID
+// prefix keeps same-named connections in different projects from colliding
+// in DBX's shared storage.
 func dbxConnectionName(projectID uuid.UUID, name string) string {
-	short := strings.ReplaceAll(projectID.String(), "-", "")[:8]
-	return "prj_" + short + "_" + name
+	return "prj_" + strings.ReplaceAll(projectID.String(), "-", "") + "_" + name
 }
 
-func (s *PlatformService) dbxArgsFor(row db.CoreDbConnection) map[string]any {
+// encPasswordPrefix marks a sealed password inside the JSONB config. Values
+// without the prefix are legacy plaintext from pre-encryption rows.
+const encPasswordPrefix = "enc:v1:"
+
+func (s *PlatformService) sealPassword(plain string) (string, error) {
+	if plain == "" {
+		return "", nil
+	}
+	sealed, err := s.enc.Encrypt([]byte(plain))
+	if err != nil {
+		return "", fmt.Errorf("encrypt password: %w", err)
+	}
+	return encPasswordPrefix + base64.StdEncoding.EncodeToString(sealed), nil
+}
+
+func (s *PlatformService) openPassword(stored string) (string, error) {
+	if !strings.HasPrefix(stored, encPasswordPrefix) {
+		return stored, nil
+	}
+	sealed, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(stored, encPasswordPrefix))
+	if err != nil {
+		return "", fmt.Errorf("decode sealed password: %w", err)
+	}
+	plain, err := s.enc.Decrypt(sealed)
+	if err != nil {
+		return "", fmt.Errorf("decrypt password: %w", err)
+	}
+	return string(plain), nil
+}
+
+func (s *PlatformService) dbxArgsFor(row db.CoreDbConnection) (map[string]any, error) {
 	cfg := parseDBConnectionConfig(row.Config)
 	args := map[string]any{
 		"name":    dbxConnectionName(row.ProjectID, row.Name),
@@ -113,7 +135,11 @@ func (s *PlatformService) dbxArgsFor(row db.CoreDbConnection) map[string]any {
 		args["username"] = cfg.Username
 	}
 	if cfg.Password != "" {
-		args["password"] = cfg.Password
+		plain, err := s.openPassword(cfg.Password)
+		if err != nil {
+			return nil, err
+		}
+		args["password"] = plain
 	}
 	if cfg.SSL != nil {
 		args["ssl"] = *cfg.SSL
@@ -121,32 +147,7 @@ func (s *PlatformService) dbxArgsFor(row db.CoreDbConnection) map[string]any {
 	if cfg.DriverProfile != "" {
 		args["driver_profile"] = cfg.DriverProfile
 	}
-	return args
-}
-
-// seedManagedConnections registers the platform's own Postgres and Dragonfly
-// on the project. Runs on list so existing projects pick them up too.
-func (s *PlatformService) seedManagedConnections(ctx context.Context, projectID uuid.UUID) {
-	for _, seed := range s.managedDBSeeds {
-		_, err := s.repo.Queries().GetDBConnectionByName(ctx, db.GetDBConnectionByNameParams{
-			ProjectID: projectID,
-			Name:      seed.Name,
-		})
-		if err == nil {
-			continue
-		}
-		if !errors.Is(err, pgx.ErrNoRows) {
-			continue
-		}
-		cfgBytes, _ := json.Marshal(seed.Config)
-		_, _ = s.repo.Queries().CreateDBConnection(ctx, db.CreateDBConnectionParams{
-			ProjectID: projectID,
-			Name:      seed.Name,
-			DbType:    seed.DBType,
-			Config:    cfgBytes,
-			IsManaged: true,
-		})
-	}
+	return args, nil
 }
 
 func (s *PlatformService) DBXStatus(ctx context.Context, actor *models.Actor) (map[string]any, error) {
@@ -163,7 +164,6 @@ func (s *PlatformService) ListDBConnections(ctx context.Context, actor *models.A
 	if err := s.requireProjectRole(ctx, actor, projectID, "admin", "developer", "viewer"); err != nil {
 		return nil, err
 	}
-	s.seedManagedConnections(ctx, projectID)
 	rows, err := s.repo.Queries().ListDBConnections(ctx, projectID)
 	if err != nil {
 		return nil, err
@@ -183,12 +183,16 @@ func (s *PlatformService) CreateDBConnection(ctx context.Context, actor *models.
 	if name == "" {
 		return DBConnectionSummary{}, errors.New("name must contain letters or digits")
 	}
+	sealedPassword, err := s.sealPassword(input.Password)
+	if err != nil {
+		return DBConnectionSummary{}, err
+	}
 	cfg := DBConnectionConfig{
 		Host:          strings.TrimSpace(input.Host),
 		Port:          input.Port,
 		Database:      strings.TrimSpace(input.Database),
 		Username:      strings.TrimSpace(input.Username),
-		Password:      input.Password,
+		Password:      sealedPassword,
 		SSL:           input.SSL,
 		DriverProfile: strings.TrimSpace(input.DriverProfile),
 	}
@@ -269,7 +273,11 @@ func (s *PlatformService) connForTool(ctx context.Context, actor *models.Actor, 
 	if s.dbx == nil {
 		return db.CoreDbConnection{}, errors.New("dbx not configured")
 	}
-	if err := s.dbx.EnsureConnection(ctx, dbxConnectionName(projectID, row.Name), s.dbxArgsFor(row)); err != nil {
+	args, err := s.dbxArgsFor(row)
+	if err != nil {
+		return db.CoreDbConnection{}, err
+	}
+	if err := s.dbx.EnsureConnection(ctx, dbxConnectionName(projectID, row.Name), args); err != nil {
 		return db.CoreDbConnection{}, err
 	}
 	return row, nil
@@ -499,4 +507,224 @@ func (s *PlatformService) ExecuteDBXRedis(ctx context.Context, actor *models.Act
 		return nil, err
 	}
 	return map[string]any{"output": text}, nil
+}
+
+// TransferInput describes a DB-to-DB link: rows read from the source
+// connection are written to the target connection.
+type TransferInput struct {
+	TargetConnectionID string `json:"target_connection_id" validate:"required,uuid"`
+	Query              string `json:"query" validate:"required"`
+	Database           string `json:"database"`
+	// SQL targets: destination table (schema-qualified allowed).
+	TargetTable string `json:"target_table"`
+	// Redis targets: SET key template with {column} placeholders; the value is
+	// value_column's cell, or the whole row as JSON when omitted.
+	KeyPattern  string `json:"key_pattern"`
+	ValueColumn string `json:"value_column"`
+	// Optional TTL in seconds applied to each Redis SET.
+	TTLSeconds *int `json:"ttl_seconds" validate:"omitempty,min=0"`
+	Limit      int   `json:"limit" validate:"omitempty,min=1,max=1000"`
+}
+
+const transferMaxRows = 1000
+
+// TransferDBRows moves data between two saved connections of the same
+// project. Both connections must accept write-level access.
+func (s *PlatformService) TransferDBRows(ctx context.Context, actor *models.Actor, projectID, sourceID uuid.UUID, input TransferInput, requestID string) (map[string]any, error) {
+	source, err := s.connForTool(ctx, actor, projectID, sourceID, true)
+	if err != nil {
+		return nil, err
+	}
+	targetID, err := uuid.Parse(input.TargetConnectionID)
+	if err != nil {
+		return nil, errors.New("target_connection_id must be a uuid")
+	}
+	target, err := s.connForTool(ctx, actor, projectID, targetID, true)
+	if err != nil {
+		return nil, err
+	}
+
+	limit := input.Limit
+	if limit <= 0 || limit > transferMaxRows {
+		limit = transferMaxRows
+	}
+	args := map[string]any{"connection_name": dbxConnectionName(projectID, source.Name), "sql": input.Query}
+	if input.Database != "" {
+		args["database"] = input.Database
+	}
+	text, err := s.dbx.Call(ctx, "dbx_execute_query", args)
+	if err != nil {
+		return nil, err
+	}
+	table, _ := dbx.ParseMDTable(text)
+	if table == nil || len(table.Columns) == 0 {
+		return nil, errors.New("source query did not return a result table")
+	}
+	rows := table.Rows
+	truncated := false
+	if len(rows) > limit {
+		rows = rows[:limit]
+		truncated = true
+	}
+
+	var transferred int
+	if target.DbType == "redis" {
+		transferred, err = s.transferToRedis(ctx, projectID, target, table.Columns, rows, input)
+	} else {
+		transferred, err = s.transferToSQL(ctx, projectID, target, table.Columns, rows, input)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	project, perr := s.repo.Queries().GetProjectByID(ctx, projectID)
+	if perr == nil {
+		_, _ = s.repo.Queries().CreateAuditLog(ctx, newAuditParams(project.OrganizationID, projectID, actor, requestID, "db_connection.transferred", "db_connection", source.ID.String(), map[string]any{
+			"source":      source.Name,
+			"target":      target.Name,
+			"transferred": transferred,
+			"truncated":   truncated,
+		}))
+	}
+	return map[string]any{
+		"transferred": transferred,
+		"truncated":   truncated,
+		"source":      source.Name,
+		"target":      target.Name,
+	}, nil
+}
+
+// transferToSQL INSERTs rows into target_table in batches of 100. Cell values
+// arrive as text from DBX's markdown output; literal "NULL" maps to SQL NULL.
+func (s *PlatformService) transferToSQL(ctx context.Context, projectID uuid.UUID, target db.CoreDbConnection, cols []string, rows [][]string, input TransferInput) (int, error) {
+	tableIdent, ok := safeDottedIdent(input.TargetTable)
+	if !ok {
+		return 0, errors.New("target_table must be a plain identifier or schema.table")
+	}
+	colIdents := make([]string, len(cols))
+	for i, col := range cols {
+		ident, ok := safeIdent(col)
+		if !ok {
+			return 0, fmt.Errorf("source column %q is not a usable identifier", col)
+		}
+		colIdents[i] = `"` + ident + `"`
+	}
+
+	transferred := 0
+	const batch = 100
+	for start := 0; start < len(rows); start += batch {
+		end := min(start+batch, len(rows))
+		var values strings.Builder
+		values.WriteString("INSERT INTO " + tableIdent + " (" + strings.Join(colIdents, ", ") + ") VALUES ")
+		for i, row := range rows[start:end] {
+			if i > 0 {
+				values.WriteString(", ")
+			}
+			values.WriteString("(")
+			for j := range cols {
+				if j > 0 {
+					values.WriteString(", ")
+				}
+				cell := ""
+				if j < len(row) {
+					cell = row[j]
+				}
+				if cell == "NULL" {
+					values.WriteString("NULL")
+				} else {
+					values.WriteString(sqlQuote(cell))
+				}
+			}
+			values.WriteString(")")
+		}
+		if _, err := s.dbx.Call(ctx, "dbx_execute_query", map[string]any{
+			"connection_name": dbxConnectionName(projectID, target.Name),
+			"sql":             values.String(),
+		}); err != nil {
+			return transferred, fmt.Errorf("insert batch at row %d: %w", start, err)
+		}
+		transferred += end - start
+	}
+	return transferred, nil
+}
+
+// transferToRedis SETs one key per row. Placeholders like {email} in
+// key_pattern are replaced with that row's cell value.
+var keyPlaceholder = regexp.MustCompile(`\{([A-Za-z0-9_]+)\}`)
+
+func (s *PlatformService) transferToRedis(ctx context.Context, projectID uuid.UUID, target db.CoreDbConnection, cols []string, rows [][]string, input TransferInput) (int, error) {
+	if input.KeyPattern == "" {
+		return 0, errors.New("key_pattern is required for redis targets")
+	}
+	colIndex := map[string]int{}
+	for i, col := range cols {
+		colIndex[col] = i
+	}
+	for _, ph := range keyPlaceholder.FindAllStringSubmatch(input.KeyPattern, -1) {
+		if _, ok := colIndex[ph[1]]; !ok {
+			return 0, fmt.Errorf("key_pattern references unknown column %q", ph[1])
+		}
+	}
+	if input.ValueColumn != "" {
+		if _, ok := colIndex[input.ValueColumn]; !ok {
+			return 0, fmt.Errorf("value_column %q not in source columns", input.ValueColumn)
+		}
+	}
+
+	transferred := 0
+	for _, row := range rows {
+		key := keyPlaceholder.ReplaceAllStringFunc(input.KeyPattern, func(m string) string {
+			col := keyPlaceholder.FindStringSubmatch(m)[1]
+			if i, ok := colIndex[col]; ok && i < len(row) {
+				return row[i]
+			}
+			return ""
+		})
+		var value string
+		if input.ValueColumn != "" {
+			value = row[colIndex[input.ValueColumn]]
+		} else {
+			obj := map[string]string{}
+			for i, col := range cols {
+				if i < len(row) {
+					obj[col] = row[i]
+				}
+			}
+			raw, _ := json.Marshal(obj)
+			value = string(raw)
+		}
+		cmd := "SET " + redisQuote(key) + " " + redisQuote(value)
+		if input.TTLSeconds != nil && *input.TTLSeconds > 0 {
+			cmd += fmt.Sprintf(" EX %d", *input.TTLSeconds)
+		}
+		if _, err := s.dbx.Call(ctx, "dbx_execute_redis_command", map[string]any{
+			"connection_name": dbxConnectionName(projectID, target.Name),
+			"command":         cmd,
+		}); err != nil {
+			return transferred, fmt.Errorf("SET %q: %w", key, err)
+		}
+		transferred++
+	}
+	return transferred, nil
+}
+
+var dottedIdent = regexp.MustCompile(`^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)?$`)
+
+func safeDottedIdent(s string) (string, bool) {
+	if !dottedIdent.MatchString(s) {
+		return "", false
+	}
+	parts := strings.Split(s, ".")
+	for i := range parts {
+		parts[i] = `"` + parts[i] + `"`
+	}
+	return strings.Join(parts, "."), true
+}
+
+func sqlQuote(v string) string {
+	return "'" + strings.ReplaceAll(v, "'", "''") + "'"
+}
+
+func redisQuote(v string) string {
+	return `"` + strings.ReplaceAll(strings.ReplaceAll(v, `\`, `\\`), `"`, `\"`) + `"`
 }

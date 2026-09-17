@@ -33,7 +33,6 @@ type PlatformService struct {
 	mailer         *Mailer
 	publicURL      string
 	dbx            *dbx.Client
-	managedDBSeeds []ManagedDBSeed
 	hub            *EventHub
 	enc            *secrets.Encryptor
 	dispatcher     *WebhookDispatcher
@@ -67,6 +66,11 @@ type UpdateProjectInput struct {
 	Name        string  `json:"name" validate:"required,min=2"`
 	Slug        string  `json:"slug" validate:"required,min=2"`
 	Description *string `json:"description"`
+	// Retention windows in days; nil leaves the current value, 0 disables
+	// the sweeper for that stream.
+	RetentionEventsDays  *int32 `json:"retention_events_days" validate:"omitempty,min=0,max=3650"`
+	RetentionAuditDays   *int32 `json:"retention_audit_days" validate:"omitempty,min=0,max=3650"`
+	RetentionWebhookDays *int32 `json:"retention_webhook_days" validate:"omitempty,min=0,max=3650"`
 }
 
 type CreateInvitationInput struct {
@@ -78,7 +82,8 @@ type CreateInvitationInput struct {
 }
 
 type CreateAPIKeyInput struct {
-	Name string `json:"name" validate:"required,min=2"`
+	Name   string   `json:"name" validate:"required,min=2"`
+	Scopes []string `json:"scopes" validate:"omitempty,dive,oneof=ingest read write admin"`
 }
 
 type CreateBucketInput struct {
@@ -216,8 +221,8 @@ type InvitationSummary struct {
 	Status          string     `json:"status"`
 }
 
-func NewPlatformService(repo *repositories.CoreRepository, store *storage.LocalStore, mailer *Mailer, publicURL string, dbxClient *dbx.Client, managedDBSeeds []ManagedDBSeed, enc *secrets.Encryptor, logger *slog.Logger) *PlatformService {
-	s := &PlatformService{repo: repo, store: store, mailer: mailer, publicURL: publicURL, dbx: dbxClient, managedDBSeeds: managedDBSeeds, hub: NewEventHub(), enc: enc}
+func NewPlatformService(repo *repositories.CoreRepository, store *storage.LocalStore, mailer *Mailer, publicURL string, dbxClient *dbx.Client, enc *secrets.Encryptor, logger *slog.Logger) *PlatformService {
+	s := &PlatformService{repo: repo, store: store, mailer: mailer, publicURL: publicURL, dbx: dbxClient, hub: NewEventHub(), enc: enc}
 	if enc != nil {
 		s.dispatcher = NewWebhookDispatcher(repo.Queries(), enc, logger)
 		s.dispatcher.Start(context.Background())
@@ -736,10 +741,13 @@ func (s *PlatformService) UpdateProject(ctx context.Context, actor *models.Actor
 		return db.CoreProject{}, err
 	}
 	updated, err := s.repo.Queries().UpdateProjectByID(ctx, db.UpdateProjectByIDParams{
-		ID:          projectID,
-		Slug:        normalizeSlug(input.Slug),
-		Name:        strings.TrimSpace(input.Name),
-		Description: input.Description,
+		ID:                   projectID,
+		Slug:                 normalizeSlug(input.Slug),
+		Name:                 strings.TrimSpace(input.Name),
+		Description:          input.Description,
+		RetentionEventsDays:  input.RetentionEventsDays,
+		RetentionAuditDays:   input.RetentionAuditDays,
+		RetentionWebhookDays: input.RetentionWebhookDays,
 	})
 	if err != nil {
 		return db.CoreProject{}, err
@@ -1038,6 +1046,7 @@ func (s *PlatformService) CreateAPIKey(ctx context.Context, actor *models.Actor,
 	if err != nil {
 		return nil, fmt.Errorf("generate api key secret: %w", err)
 	}
+	scopes := normalizeAPIKeyScopes(input.Scopes)
 	prefix := "prm_" + prefixSuffix
 	rawKey := prefix + "_" + keySuffix
 	secretHash := sha256.Sum256([]byte(rawKey))
@@ -1046,6 +1055,7 @@ func (s *PlatformService) CreateAPIKey(ctx context.Context, actor *models.Actor,
 		Name:            strings.TrimSpace(input.Name),
 		Prefix:          prefix,
 		SecretHash:      secretHash[:],
+		Scopes:          scopes,
 		CreatedByUserID: pgtype.UUID{Bytes: *actor.UserID, Valid: true},
 	})
 	if err != nil {
@@ -1062,7 +1072,25 @@ func (s *PlatformService) CreateAPIKey(ctx context.Context, actor *models.Actor,
 		"prefix": row.Prefix,
 		"secret": rawKey,
 		"name":   row.Name,
+		"scopes": row.Scopes,
 	}, nil
+}
+
+// normalizeAPIKeyScopes dedupes the requested scopes. An omitted or empty
+// list means a full-access key — the pre-scopes behaviour.
+func normalizeAPIKeyScopes(input []string) []string {
+	if len(input) == 0 {
+		return []string{"admin"}
+	}
+	seen := map[string]bool{}
+	out := make([]string, 0, len(input))
+	for _, s := range input {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func (s *PlatformService) RevokeAPIKey(ctx context.Context, actor *models.Actor, projectID, apiKeyID uuid.UUID, requestID string) error {

@@ -2,12 +2,13 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
+	"net/http"
 	"os"
-	"strconv"
-	"strings"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -37,6 +38,8 @@ type App struct {
 	Redis    *redis.Client
 	DBX      *dbx.Client
 	Platform *services.PlatformService
+
+	sweepCancel context.CancelFunc
 }
 
 func Bootstrap(ctx context.Context) (*App, error) {
@@ -88,7 +91,7 @@ func Bootstrap(ctx context.Context) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("encryption key: %w", err)
 	}
-	platform := services.NewPlatformService(repo, store, services.NewMailer(cfg), os.Getenv("VITE_APP_URL"), dbxClient, firstPartyDBSeeds(cfg), encryptor, logger)
+	platform := services.NewPlatformService(repo, store, services.NewMailer(cfg), os.Getenv("VITE_APP_URL"), dbxClient, encryptor, logger)
 
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -157,55 +160,59 @@ func Bootstrap(ctx context.Context) (*App, error) {
 	}
 	handler.Register(router)
 
+	sweepCtx, sweepCancel := context.WithCancel(context.Background())
+	sweeper := services.NewRetentionSweeper(repo, logger)
+	go sweeper.Run(sweepCtx)
+
 	return &App{
-		Config:   cfg,
-		Router:   router,
-		Logger:   logger,
-		DB:       dbPool,
-		Redis:    redisClient,
-		DBX:      dbxClient,
-		Platform: platform,
+		Config:      cfg,
+		Router:      router,
+		Logger:      logger,
+		DB:          dbPool,
+		Redis:       redisClient,
+		DBX:         dbxClient,
+		Platform:    platform,
+		sweepCancel: sweepCancel,
 	}, nil
 }
 
 func (a *App) Run() error {
 	address := ":" + a.Config.ServerPort
-	a.Logger.Info("primora backend starting", "address", address)
-	return a.Router.Run(address)
-}
+	srv := &http.Server{Addr: address, Handler: a.Router}
 
-// firstPartyDBSeeds turns the platform's own Postgres and Dragonfly URLs into
-// managed connection seeds registered on every project.
-func firstPartyDBSeeds(cfg config.Config) []services.ManagedDBSeed {
-	var seeds []services.ManagedDBSeed
-	if u, err := url.Parse(cfg.DatabaseURL); err == nil && u.Hostname() != "" {
-		cfg2 := services.DBConnectionConfig{
-			Host:     u.Hostname(),
-			Database: strings.TrimPrefix(u.Path, "/"),
-			Username: u.User.Username(),
-		}
-		if p, ok := u.User.Password(); ok {
-			cfg2.Password = p
-		}
-		if port, err := strconv.Atoi(u.Port()); err == nil {
-			cfg2.Port = &port
-		}
-		seeds = append(seeds, services.ManagedDBSeed{Name: "platform-postgres", DBType: "postgres", Config: cfg2})
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	errCh := make(chan error, 1)
+	go func() {
+		a.Logger.Info("primora backend starting", "address", address)
+		errCh <- srv.ListenAndServe()
+	}()
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
 	}
-	if u, err := url.Parse(cfg.DragonflyURL); err == nil && u.Hostname() != "" {
-		cfg2 := services.DBConnectionConfig{Host: u.Hostname()}
-		if p, ok := u.User.Password(); ok {
-			cfg2.Password = p
-		}
-		if port, err := strconv.Atoi(u.Port()); err == nil {
-			cfg2.Port = &port
-		}
-		seeds = append(seeds, services.ManagedDBSeed{Name: "platform-dragonfly", DBType: "redis", Config: cfg2})
+
+	a.Logger.Info("shutdown signal received, draining in-flight requests")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		return fmt.Errorf("graceful shutdown: %w", err)
 	}
-	return seeds
+	if err := <-errCh; err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	// Stop the retention sweeper before main closes the DB pool.
+	a.sweepCancel()
+	return nil
 }
 
 func (a *App) Close() error {
+	if a.sweepCancel != nil {
+		a.sweepCancel()
+	}
 	if a.Platform != nil {
 		a.Platform.Close()
 	}

@@ -204,6 +204,23 @@ func (h *HTTPHandler) dbxRedis(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
+func (h *HTTPHandler) dbxTransfer(c *gin.Context) {
+	actor, projectID, connectionID, ok := h.actorProjectConn(c)
+	if !ok {
+		return
+	}
+	var body services.TransferInput
+	if !h.bindAndValidate(c, &body) {
+		return
+	}
+	result, err := h.Platform.TransferDBRows(c.Request.Context(), actor, projectID, connectionID, body, middleware.RequestIDFromContext(c))
+	if err != nil {
+		h.dbxError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
 // actorAndProject resolves the actor and :projectID param.
 func (h *HTTPHandler) actorAndProject(c *gin.Context) (*models.Actor, uuid.UUID, bool) {
 	actor, ok := middleware.RequireActor(c)

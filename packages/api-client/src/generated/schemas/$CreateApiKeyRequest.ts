@@ -8,5 +8,11 @@ export const $CreateApiKeyRequest = {
             type: 'string',
             isRequired: true,
         },
+        scopes: {
+            type: 'array',
+            contains: {
+                type: 'Enum',
+            },
+        },
     },
 } as const;

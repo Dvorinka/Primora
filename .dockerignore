@@ -7,3 +7,12 @@ coverage
 .env
 npm-debug.log
 
+# build artifacts + local data — 4.5G+ of Rust target dir otherwise
+**/target
+apps/desktop/src-tauri/gen
+backups
+tmp
+**/tmp
+graphify-out
+.playwright-mcp
+

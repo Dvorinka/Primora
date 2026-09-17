@@ -11,16 +11,22 @@ interface ProjectInput {
   description: string;
 }
 
+interface ProjectEditInput extends ProjectInput {
+  retentionEventsDays: string;
+  retentionAuditDays: string;
+  retentionWebhookDays: string;
+}
+
 interface ProjectsPageProps {
   projects: ProjectSummary[];
   selectedProjectID?: string;
   projectInput: ProjectInput;
-  projectEditInput: ProjectInput;
+  projectEditInput: ProjectEditInput;
   projectMessage: string;
   projectPending: boolean;
   canUpdateProject: boolean;
   onProjectInputChange: (field: keyof ProjectInput, value: string) => void;
-  onProjectEditInputChange: (field: keyof ProjectInput, value: string) => void;
+  onProjectEditInputChange: (field: keyof ProjectEditInput, value: string) => void;
   onCreateProject: (event: SubmitEvent) => void;
   onUpdateProject: (event: SubmitEvent) => void;
   onDeleteProject: () => void;
@@ -252,6 +258,38 @@ export function ProjectsPage(props: ProjectsPageProps) {
             value={props.projectEditInput.description}
             onInput={(e) => props.onProjectEditInputChange("description", e.currentTarget.value)}
           />
+          <div>
+            <span class="label">Data retention (days)</span>
+            <p class="label-hint mb-2">
+              Rows older than this are swept hourly. 0 disables a category. Max 3650.
+            </p>
+            <div class="grid gap-3 sm:grid-cols-3">
+              <Input
+                label="Telemetry events"
+                type="number"
+                min={0}
+                max={3650}
+                value={props.projectEditInput.retentionEventsDays}
+                onInput={(e) => props.onProjectEditInputChange("retentionEventsDays", e.currentTarget.value)}
+              />
+              <Input
+                label="Audit log"
+                type="number"
+                min={0}
+                max={3650}
+                value={props.projectEditInput.retentionAuditDays}
+                onInput={(e) => props.onProjectEditInputChange("retentionAuditDays", e.currentTarget.value)}
+              />
+              <Input
+                label="Webhook deliveries"
+                type="number"
+                min={0}
+                max={3650}
+                value={props.projectEditInput.retentionWebhookDays}
+                onInput={(e) => props.onProjectEditInputChange("retentionWebhookDays", e.currentTarget.value)}
+              />
+            </div>
+          </div>
           <ModalFooter>
             <button type="button" class="btn btn-ghost" onClick={() => setSettingsOpen(false)}>
               Cancel

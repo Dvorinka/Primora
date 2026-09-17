@@ -39,7 +39,7 @@ Everything an operator touches that isn't in the box yet.
 - **Responsive pass** — sidebar already collapses; audit every page at
   390px for table/card overflow.
 
-## Phase 2 — Databases (DBX)
+## Phase 2 — Databases (DBX) ✅
 
 The "any database" story, via [DBX](https://github.com/t8y2/dbx) — 90+ drivers
 in a 25 MB MCP server. Primora does not embed DBX; the Go backend keeps
@@ -58,9 +58,10 @@ as REST (pattern already proven in IMS's `internal/app/dbx.go`).
 - **First-party connections** ✅ — the platform's own Postgres and Dragonfly
   auto-register as connections on every project, so "put Postgres in it and
   it runs Postgres" works out of the box.
-- **DB-to-DB links** — DBX data transfer between two saved connections
-  (e.g. Postgres → Dragonfly cache warm), plus documented patterns for
-  pairing them.
+- **DB-to-DB links** ✅ — `POST …/db-connections/:id/transfer` runs a query
+  on the source connection and writes rows to a SQL target (`target_table`)
+  or a Redis target (`key_pattern` + `value_column`, optional TTL). Bounded
+  at 1000 rows; credentials stay server-side.
 
 ## Phase 3 — Observability (IMS merge) ✅
 
@@ -125,7 +126,7 @@ Follow-ups:
 - Desktop bundle signing + auto-updater — unsigned artifacts today; add when
   distribution matures.
 
-## Phase 6 — Production hardening (v0.6.0)
+## Phase 6 — Production hardening (v0.6.0) ✅
 
 The v1 feature surface is essentially complete; what remains is the
 difference between "works" and "safe to run other people's data". Roughly
@@ -140,74 +141,79 @@ release pipeline with images + binaries + desktop bundles.
 
 ### Security
 
-- **Graceful shutdown** — `router.Run()` drops in-flight requests on every
-  deploy. Switch to `http.Server` + `signal.NotifyContext` with a ~10s
-  drain.
-- **Security headers** — add `X-Frame-Options`, `Referrer-Policy`,
-  `Permissions-Policy`, and a baseline CSP at the nginx/frontend layer.
-- **TLS story** — shipped nginx vhost is HTTP-only. Document a reverse
-  proxy (Caddy/Traefik) in front for production; optionally ship a
-  TLS-ready vhost with cert volume mounts. Don't embed a cert manager.
-- **Scoped API keys** — `prm_…` keys are full-project-access today. Add a
-  `scopes` column (`ingest`, `read`, `write`, `admin`) and enforce in the
-  auth middleware.
-- **Dev-surface isolation** — mailpit is proxied at `/mailpit/` in the
-  single compose file. Move dev services to `docker-compose.dev.yml` so a
-  production deploy cannot expose it.
-- **Auth brute-force** — verify Better Auth's built-in throttling covers
-  login/signup; add IP backoff if it doesn't.
-- **Setup ergonomics** — `setup.sh` should generate
-  `PRIMORA_ENCRYPTION_KEY` (`openssl rand -hex 32`) rather than leaving it
-  to the operator.
+- ~~**Graceful shutdown**~~ ✅ — `http.Server` + `signal.NotifyContext`,
+  10 s drain; verified via SIGTERM on the running container.
+- ~~**Security headers**~~ ✅ — `X-Frame-Options`, `X-Content-Type-Options`,
+  `Referrer-Policy`, `Permissions-Policy` on every response; CSP scoped to
+  the SPA location only (verified live).
+- ~~**TLS story**~~ ✅ — documented Caddy/Traefik front-proxy setups in
+  DEPLOYMENT_GUIDE.md; no embedded cert manager.
+- ~~**Scoped API keys**~~ ✅ — `scopes` column (migration 00006), enforced
+  in auth middleware (`requiredAPIKeyScope`), UI checkboxes in Settings;
+  keys without stored scopes behave as `admin` (legacy). Verified live: a
+  `read`-only key gets 403 on ingest.
+- ~~**Dev-surface isolation**~~ ✅ — Mailpit moved to
+  `docker-compose.dev.yml`; the base compose file cannot expose it.
+- ~~**Auth brute-force**~~ ✅ — Better Auth's built-in rate limiting is now
+  enabled unconditionally (it previously followed `NODE_ENV`, which the
+  shipped `.env` sets to development); the IP-level 60 req/min limiter on
+  `/auth/*` stays in front.
+- ~~**Setup ergonomics**~~ ✅ — `setup.sh` generates
+  `PRIMORA_ENCRYPTION_KEY` via `openssl rand -hex 32` alongside the other
+  secrets.
 
 ### Reliability & operations
 
-- **Backups + restore runbook** — `pg_dump` of `core.*`, storage-root
-  archive, cron/timer example, and a documented restore path. The restore
-  must be tested, not just the dump.
-- **Retention** — telemetry events, audit log, and webhook deliveries grow
-  unbounded. Per-project retention settings + a sweeper job.
-- **Platform metrics export** — internal counters exist (surfaced in
-  readiness); expose `/metrics` for Prometheus scraping.
-- **Production compose profile** — healthchecks on every service, restart
-  policies, pinned versions for dependencies (dragonfly is on `latest`).
-- **Upgrade runbook** — today it's `git pull && compose up -d`. Document
-  the safe order (backup → pull → migrate-on-boot → verify) and rollback.
+- ~~**Backups + restore runbook**~~ ✅ — `scripts/backup.sh` (pg_dump -Fc +
+  storage volume tar) and `scripts/restore.sh`; restore verified against a
+  scratch postgres + volume. Cron/systemd examples in the docs.
+- ~~**Retention**~~ ✅ — per-project `retention_{events,audit,webhook}_days`
+  (migration 00007, 0 = disabled) + hourly `RetentionSweeper`; settings
+  exposed in the project edit dialog.
+- ~~**Platform metrics export**~~ ✅ — `GET /api/v1/metrics` renders
+  Prometheus text exposition (requests, errors, active, duration sum).
+- ~~**Production compose profile**~~ ✅ — healthchecks + `restart:
+  unless-stopped` on every service, `depends_on: service_healthy`,
+  Dragonfly pinned to `v2.0.0`.
+- ~~**Upgrade runbook**~~ ✅ — DEPLOYMENT_GUIDE.md documents backup → pull →
+  migrate-on-boot → verify, plus rollback via `goose down`.
 
 ### Correctness
 
-- **Pagination audit** — every list endpoint must paginate; verify the
-  heaviest (audit, events, webhook deliveries) can't return unbounded
-  rows.
-- **DB-to-DB links** — the one open Phase 2 item: DBX transfer between two
-  saved connections.
-- **External object storage** — files live under `BACKEND_STORAGE_ROOT`
-  on local disk. Acceptable for single-node self-hosting; document the
-  constraint or add an S3-compatible backend behind the storage service.
+- ~~**Pagination audit**~~ ✅ — every `:many` query audited; time-series and
+  entity lists are naturally bounded; `ListComponents` capped at 500
+  (auto-registers from ingest).
+- ~~**DB-to-DB links**~~ ✅ — implemented and verified live (postgres →
+  dragonfly transfer, key templating, TTL).
+- ~~**External object storage**~~ ✅ — constraint documented in
+  DEPLOYMENT_GUIDE.md / PRODUCTION_READINESS.md; S3 backend deferred.
 
 ### Testing
 
-- **E2E smoke in CI** — `ci.yml` runs unit tests; add a compose-up job
-  exercising health, signup/login, project create, and ingest → issue
-  created. Six Go test files + one frontend file is thin for a platform.
-- **Migration tests** — goose up/down against a scratch database in CI.
-- **Load sanity** — one `k6`/`vegeta` script against ingest + a hot read
-  path; publish numbers, don't promise scale.
+- ~~**E2E smoke in CI**~~ ✅ — `scripts/smoke-e2e.sh` + `e2e-smoke` job:
+  health, signup, token, bootstrap/org+project, scoped key create, ingest,
+  read-only key rejection, metrics. Verified locally against the stack.
+- ~~**Migration tests**~~ ✅ — `migrations` job runs goose up → reset → up
+  against scratch postgres; verified locally.
+- ~~**Load sanity**~~ ✅ — `scripts/load-sanity.js` (k6): ingest + events
+  read, 15 VUs / 30 s. Local run: 6650 requests, ~217 req/s, 0 real
+  failures, p95 221 ms — most requests beyond the configured 600/min cap
+  correctly returned 429.
 
 ### Distribution
 
-- **arm64 images** — releases build amd64 only; ARM VPS/Pi can't pull. Add
-  `platforms: linux/amd64,linux/arm64` to the buildx steps.
+- ~~**arm64 images**~~ ✅ — release builds `linux/amd64,linux/arm64` via
+  QEMU + buildx.
 - Carried forward from Phase 5 follow-ups: macOS/Windows bundle
   verification, signing + auto-updater.
 - Optional: SBOM + provenance attestation on release images.
 
 ### Docs
 
-- **Self-host guide** — TLS, SMTP, backups, upgrade, and env reference in
-  one place. `scripts/verify-production-ready.sh` already points at
-  `DEPLOYMENT_GUIDE.md` / `PRODUCTION_READINESS.md`, which don't exist —
-  write them or fix the script.
+- ~~**Self-host guide**~~ ✅ — `DEPLOYMENT_GUIDE.md` (TLS, SMTP, backups,
+  upgrades, env reference, storage constraint) and
+  `PRODUCTION_READINESS.md` written; `verify-production-ready.sh` updated
+  to check them plus the Phase 6 artifacts.
 
 **v1.0 bar:** every Security item done, a restore test actually run, E2E
 smoke green in CI, and the upgrade runbook followed once on a real

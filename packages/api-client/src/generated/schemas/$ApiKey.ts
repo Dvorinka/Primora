@@ -22,6 +22,12 @@ export const $ApiKey = {
             type: 'string',
             isRequired: true,
         },
+        scopes: {
+            type: 'array',
+            contains: {
+                type: 'Enum',
+            },
+        },
         last_used_at: {
             type: 'string',
             isNullable: true,

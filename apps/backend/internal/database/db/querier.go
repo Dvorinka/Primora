@@ -100,6 +100,15 @@ type Querier interface {
 	RemoveProjectMember(ctx context.Context, arg RemoveProjectMemberParams) (CoreProjectMember, error)
 	RemoveProjectMembershipsForOrganizationUser(ctx context.Context, arg RemoveProjectMembershipsForOrganizationUserParams) error
 	RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) (CoreApiKey, error)
+	SweepExpiredAuditLogs(ctx context.Context) (int64, error)
+	// Per-project retention sweeps. A retention of 0 days disables the sweep for
+	// that stream. Pending webhook deliveries are never swept — they may still be
+	// retrying.
+	SweepExpiredEvents(ctx context.Context) (int64, error)
+	// Org-scoped audit rows (project_id NULL) have no project retention — sweep
+	// them on a fixed 365-day floor so they cannot grow unbounded.
+	SweepExpiredOrgAuditLogs(ctx context.Context) (int64, error)
+	SweepExpiredWebhookDeliveries(ctx context.Context) (int64, error)
 	TouchAPIKey(ctx context.Context, id uuid.UUID) error
 	UpdateBucketByID(ctx context.Context, arg UpdateBucketByIDParams) (CoreBucket, error)
 	UpdateCollection(ctx context.Context, arg UpdateCollectionParams) (CoreCollection, error)

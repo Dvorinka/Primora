@@ -26,15 +26,18 @@ if [ ! -f .env ]; then
     echo "🔐 Generating secure secrets..."
     JWT_SECRET=$(openssl rand -base64 32)
     BETTER_AUTH_SECRET=$(openssl rand -base64 32)
+    ENCRYPTION_KEY=$(openssl rand -hex 32)
     
     # Update .env with secrets
     # Use different sed approach for better compatibility
     if [[ "$OSTYPE" == "darwin"* ]]; then
         sed -i '' "s/JWT_SECRET=change-me-super-long-jwt-secret/JWT_SECRET=$JWT_SECRET/g" .env
         sed -i '' "s/BETTER_AUTH_SECRET=change-me-super-long-better-auth-secret/BETTER_AUTH_SECRET=$BETTER_AUTH_SECRET/g" .env
+        sed -i '' "s/^PRIMORA_ENCRYPTION_KEY=.*/PRIMORA_ENCRYPTION_KEY=$ENCRYPTION_KEY/" .env
     else
         sed -i "s/JWT_SECRET=change-me-super-long-jwt-secret/JWT_SECRET=$JWT_SECRET/g" .env
         sed -i "s/BETTER_AUTH_SECRET=change-me-super-long-better-auth-secret/BETTER_AUTH_SECRET=$BETTER_AUTH_SECRET/g" .env
+        sed -i "s/^PRIMORA_ENCRYPTION_KEY=.*/PRIMORA_ENCRYPTION_KEY=$ENCRYPTION_KEY/" .env
     fi
     echo "✅ .env file created and secured."
 else
@@ -55,12 +58,13 @@ else
     sed -i "s/VITE_APP_URL=http:\/\/localhost/VITE_APP_URL=http:\/\/$DOMAIN/g" .env
 fi
 
-# Start services
+# Start services — the dev overlay adds mailpit for local email capture.
+# Production deploys use the base file alone: docker compose up -d
 echo "📦 Pulling images and starting services..."
 if command -v docker-compose &> /dev/null; then
-    docker-compose up -d
+    docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 else
-    docker compose up -d
+    docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 fi
 
 echo ""

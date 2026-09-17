@@ -4,6 +4,12 @@ All notable changes to Primora. Format follows [Keep a Changelog](https://keepac
 
 ## [Unreleased]
 
+### Security
+
+- **Managed platform connections removed** — `platform-postgres`/`platform-dragonfly` seeds carried the backend's own `DATABASE_URL`/`DRAGONFLY_URL` into every project, where any member could run arbitrary queries through DBX against `core` tables. The seeds are gone and migration 00008 deletes existing managed rows. Operators keep direct `psql`/`redis-cli` access.
+- **Connection passwords encrypted at rest** — `core.db_connections.config.password` is now AES-256-GCM sealed (`enc:v1:` marker) via `PRIMORA_ENCRYPTION_KEY`; decrypted only when registering the connection with DBX. Migration 00008 strips pre-existing plaintext passwords.
+- **DBX naming** — connection names now prefix the full project UUID; the previous 8-hex prefix could collide across projects and alias the wrong credentials.
+
 ## [0.5.0] - 2026-09-16
 
 ### Added

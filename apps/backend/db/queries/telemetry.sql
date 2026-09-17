@@ -11,7 +11,8 @@ WHERE project_id = $1 AND name = $2;
 -- name: ListComponents :many
 SELECT * FROM core.components
 WHERE project_id = $1
-ORDER BY name;
+ORDER BY name
+LIMIT 500;
 
 -- name: DeleteComponent :exec
 DELETE FROM core.components

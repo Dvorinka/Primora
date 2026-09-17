@@ -29,6 +29,8 @@ apps/desktop/src-tauri/gen/schemas
 
 # Runtime data
 infra/data
+backups
+.restore-tmp.*
 infra/postgres
 infra/dragonfly
 infra/mailpit

@@ -20,20 +20,20 @@ FAILED=0
 check_file() {
     if [ -f "$1" ]; then
         echo -e "${GREEN}✓${NC} $2"
-        ((PASSED++))
+        ((++PASSED))
     else
         echo -e "${RED}✗${NC} $2 (missing: $1)"
-        ((FAILED++))
+        ((++FAILED))
     fi
 }
 
 check_dir() {
     if [ -d "$1" ]; then
         echo -e "${GREEN}✓${NC} $2"
-        ((PASSED++))
+        ((++PASSED))
     else
         echo -e "${RED}✗${NC} $2 (missing: $1)"
-        ((FAILED++))
+        ((++FAILED))
     fi
 }
 
@@ -58,8 +58,18 @@ echo ""
 echo "📚 Documentation:"
 check_file "PRODUCTION_READINESS.md" "Production readiness checklist"
 check_file "DEPLOYMENT_GUIDE.md" "Deployment guide"
-check_file "PRODUCTION_IMPROVEMENTS.md" "Improvements summary"
-check_file "PRODUCTION_READY_SUMMARY.md" "Production ready summary"
+check_file "ROADMAP.md" "Roadmap"
+echo ""
+
+echo "🛡️ Phase 6 hardening:"
+check_file "apps/backend/db/migrations/00006_api_key_scopes.sql" "API key scopes migration"
+check_file "apps/backend/db/migrations/00007_retention.sql" "Retention migration"
+check_file "apps/backend/internal/services/retention.go" "Retention sweeper"
+check_file "docker-compose.dev.yml" "Dev overlay (Mailpit isolation)"
+check_file "scripts/smoke-e2e.sh" "E2E smoke script"
+check_file "scripts/backup.sh" "Backup script"
+check_file "scripts/restore.sh" "Restore script"
+check_file "scripts/load-sanity.js" "k6 load sanity script"
 echo ""
 
 echo "🐳 Infrastructure:"

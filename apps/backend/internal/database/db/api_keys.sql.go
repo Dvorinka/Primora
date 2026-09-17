@@ -18,9 +18,10 @@ INSERT INTO core.api_keys (
   name,
   prefix,
   secret_hash,
+  scopes,
   created_by_user_id
-) VALUES ($1, $2, $3, $4, $5)
-RETURNING id, project_id, name, prefix, secret_hash, created_by_user_id, last_used_at, revoked_at, created_at
+) VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, project_id, name, prefix, secret_hash, created_by_user_id, last_used_at, revoked_at, created_at, scopes
 `
 
 type CreateAPIKeyParams struct {
@@ -28,6 +29,7 @@ type CreateAPIKeyParams struct {
 	Name            string      `json:"name"`
 	Prefix          string      `json:"prefix"`
 	SecretHash      []byte      `json:"secret_hash"`
+	Scopes          []string    `json:"scopes"`
 	CreatedByUserID pgtype.UUID `json:"created_by_user_id"`
 }
 
@@ -37,6 +39,7 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Cor
 		arg.Name,
 		arg.Prefix,
 		arg.SecretHash,
+		arg.Scopes,
 		arg.CreatedByUserID,
 	)
 	var i CoreApiKey
@@ -50,12 +53,13 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Cor
 		&i.LastUsedAt,
 		&i.RevokedAt,
 		&i.CreatedAt,
+		&i.Scopes,
 	)
 	return i, err
 }
 
 const getAPIKeyByIDForProject = `-- name: GetAPIKeyByIDForProject :one
-SELECT id, project_id, name, prefix, secret_hash, created_by_user_id, last_used_at, revoked_at, created_at FROM core.api_keys
+SELECT id, project_id, name, prefix, secret_hash, created_by_user_id, last_used_at, revoked_at, created_at, scopes FROM core.api_keys
 WHERE project_id = $1
   AND id = $2
 `
@@ -78,13 +82,14 @@ func (q *Queries) GetAPIKeyByIDForProject(ctx context.Context, arg GetAPIKeyByID
 		&i.LastUsedAt,
 		&i.RevokedAt,
 		&i.CreatedAt,
+		&i.Scopes,
 	)
 	return i, err
 }
 
 const getAPIKeyByPrefix = `-- name: GetAPIKeyByPrefix :one
 SELECT
-  ak.id, ak.project_id, ak.name, ak.prefix, ak.secret_hash, ak.created_by_user_id, ak.last_used_at, ak.revoked_at, ak.created_at,
+  ak.id, ak.project_id, ak.name, ak.prefix, ak.secret_hash, ak.created_by_user_id, ak.last_used_at, ak.revoked_at, ak.created_at, ak.scopes,
   p.organization_id
 FROM core.api_keys ak
 JOIN core.projects p ON p.id = ak.project_id
@@ -101,6 +106,7 @@ type GetAPIKeyByPrefixRow struct {
 	LastUsedAt      pgtype.Timestamptz `json:"last_used_at"`
 	RevokedAt       pgtype.Timestamptz `json:"revoked_at"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	Scopes          []string           `json:"scopes"`
 	OrganizationID  uuid.UUID          `json:"organization_id"`
 }
 
@@ -117,13 +123,14 @@ func (q *Queries) GetAPIKeyByPrefix(ctx context.Context, prefix string) (GetAPIK
 		&i.LastUsedAt,
 		&i.RevokedAt,
 		&i.CreatedAt,
+		&i.Scopes,
 		&i.OrganizationID,
 	)
 	return i, err
 }
 
 const listAPIKeysForProject = `-- name: ListAPIKeysForProject :many
-SELECT id, project_id, name, prefix, secret_hash, created_by_user_id, last_used_at, revoked_at, created_at FROM core.api_keys
+SELECT id, project_id, name, prefix, secret_hash, created_by_user_id, last_used_at, revoked_at, created_at, scopes FROM core.api_keys
 WHERE project_id = $1
 ORDER BY created_at DESC
 `
@@ -147,6 +154,7 @@ func (q *Queries) ListAPIKeysForProject(ctx context.Context, projectID uuid.UUID
 			&i.LastUsedAt,
 			&i.RevokedAt,
 			&i.CreatedAt,
+			&i.Scopes,
 		); err != nil {
 			return nil, err
 		}
@@ -164,7 +172,7 @@ SET revoked_at = NOW()
 WHERE project_id = $1
   AND id = $2
   AND revoked_at IS NULL
-RETURNING id, project_id, name, prefix, secret_hash, created_by_user_id, last_used_at, revoked_at, created_at
+RETURNING id, project_id, name, prefix, secret_hash, created_by_user_id, last_used_at, revoked_at, created_at, scopes
 `
 
 type RevokeAPIKeyParams struct {
@@ -185,6 +193,7 @@ func (q *Queries) RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) (Cor
 		&i.LastUsedAt,
 		&i.RevokedAt,
 		&i.CreatedAt,
+		&i.Scopes,
 	)
 	return i, err
 }
