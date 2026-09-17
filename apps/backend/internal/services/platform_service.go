@@ -33,7 +33,6 @@ type PlatformService struct {
 	mailer         *Mailer
 	publicURL      string
 	dbx            *dbx.Client
-	managedDBSeeds []ManagedDBSeed
 	hub            *EventHub
 	enc            *secrets.Encryptor
 	dispatcher     *WebhookDispatcher
@@ -222,8 +221,8 @@ type InvitationSummary struct {
 	Status          string     `json:"status"`
 }
 
-func NewPlatformService(repo *repositories.CoreRepository, store *storage.LocalStore, mailer *Mailer, publicURL string, dbxClient *dbx.Client, managedDBSeeds []ManagedDBSeed, enc *secrets.Encryptor, logger *slog.Logger) *PlatformService {
-	s := &PlatformService{repo: repo, store: store, mailer: mailer, publicURL: publicURL, dbx: dbxClient, managedDBSeeds: managedDBSeeds, hub: NewEventHub(), enc: enc}
+func NewPlatformService(repo *repositories.CoreRepository, store *storage.LocalStore, mailer *Mailer, publicURL string, dbxClient *dbx.Client, enc *secrets.Encryptor, logger *slog.Logger) *PlatformService {
+	s := &PlatformService{repo: repo, store: store, mailer: mailer, publicURL: publicURL, dbx: dbxClient, hub: NewEventHub(), enc: enc}
 	if enc != nil {
 		s.dispatcher = NewWebhookDispatcher(repo.Queries(), enc, logger)
 		s.dispatcher.Start(context.Background())

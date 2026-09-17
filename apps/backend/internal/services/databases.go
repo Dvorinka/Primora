@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	db "github.com/tdvorak/primora/apps/backend/internal/database/db"
@@ -19,7 +19,8 @@ import (
 
 // DBConnectionConfig holds the server-side credential payload for a saved
 // connection. It is stored in core.db_connections.config and never serialized
-// to the client — see DBConnectionSummary.
+// to the client — see DBConnectionSummary. Password is AES-GCM sealed
+// (enc:v1:<base64>) before persisting; openPassword restores it.
 type DBConnectionConfig struct {
 	Host          string `json:"host"`
 	Port          *int   `json:"port,omitempty"`
@@ -28,14 +29,6 @@ type DBConnectionConfig struct {
 	Password      string `json:"password,omitempty"`
 	SSL           *bool  `json:"ssl,omitempty"`
 	DriverProfile string `json:"driver_profile,omitempty"`
-}
-
-// ManagedDBSeed describes a first-party connection auto-registered on every
-// project (the platform's own Postgres and Dragonfly).
-type ManagedDBSeed struct {
-	Name   string
-	DBType string
-	Config DBConnectionConfig
 }
 
 type CreateDBConnectionInput struct {
@@ -88,15 +81,44 @@ func toDBConnectionSummary(row db.CoreDbConnection) DBConnectionSummary {
 	}
 }
 
-// dbxConnectionName derives the DBX-internal name. The project prefix keeps
-// same-named connections in different projects from clobbering each other in
-// DBX's shared storage.
+// dbxConnectionName derives the DBX-internal name. The full project UUID
+// prefix keeps same-named connections in different projects from colliding
+// in DBX's shared storage.
 func dbxConnectionName(projectID uuid.UUID, name string) string {
-	short := strings.ReplaceAll(projectID.String(), "-", "")[:8]
-	return "prj_" + short + "_" + name
+	return "prj_" + strings.ReplaceAll(projectID.String(), "-", "") + "_" + name
 }
 
-func (s *PlatformService) dbxArgsFor(row db.CoreDbConnection) map[string]any {
+// encPasswordPrefix marks a sealed password inside the JSONB config. Values
+// without the prefix are legacy plaintext from pre-encryption rows.
+const encPasswordPrefix = "enc:v1:"
+
+func (s *PlatformService) sealPassword(plain string) (string, error) {
+	if plain == "" {
+		return "", nil
+	}
+	sealed, err := s.enc.Encrypt([]byte(plain))
+	if err != nil {
+		return "", fmt.Errorf("encrypt password: %w", err)
+	}
+	return encPasswordPrefix + base64.StdEncoding.EncodeToString(sealed), nil
+}
+
+func (s *PlatformService) openPassword(stored string) (string, error) {
+	if !strings.HasPrefix(stored, encPasswordPrefix) {
+		return stored, nil
+	}
+	sealed, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(stored, encPasswordPrefix))
+	if err != nil {
+		return "", fmt.Errorf("decode sealed password: %w", err)
+	}
+	plain, err := s.enc.Decrypt(sealed)
+	if err != nil {
+		return "", fmt.Errorf("decrypt password: %w", err)
+	}
+	return string(plain), nil
+}
+
+func (s *PlatformService) dbxArgsFor(row db.CoreDbConnection) (map[string]any, error) {
 	cfg := parseDBConnectionConfig(row.Config)
 	args := map[string]any{
 		"name":    dbxConnectionName(row.ProjectID, row.Name),
@@ -113,7 +135,11 @@ func (s *PlatformService) dbxArgsFor(row db.CoreDbConnection) map[string]any {
 		args["username"] = cfg.Username
 	}
 	if cfg.Password != "" {
-		args["password"] = cfg.Password
+		plain, err := s.openPassword(cfg.Password)
+		if err != nil {
+			return nil, err
+		}
+		args["password"] = plain
 	}
 	if cfg.SSL != nil {
 		args["ssl"] = *cfg.SSL
@@ -121,32 +147,7 @@ func (s *PlatformService) dbxArgsFor(row db.CoreDbConnection) map[string]any {
 	if cfg.DriverProfile != "" {
 		args["driver_profile"] = cfg.DriverProfile
 	}
-	return args
-}
-
-// seedManagedConnections registers the platform's own Postgres and Dragonfly
-// on the project. Runs on list so existing projects pick them up too.
-func (s *PlatformService) seedManagedConnections(ctx context.Context, projectID uuid.UUID) {
-	for _, seed := range s.managedDBSeeds {
-		_, err := s.repo.Queries().GetDBConnectionByName(ctx, db.GetDBConnectionByNameParams{
-			ProjectID: projectID,
-			Name:      seed.Name,
-		})
-		if err == nil {
-			continue
-		}
-		if !errors.Is(err, pgx.ErrNoRows) {
-			continue
-		}
-		cfgBytes, _ := json.Marshal(seed.Config)
-		_, _ = s.repo.Queries().CreateDBConnection(ctx, db.CreateDBConnectionParams{
-			ProjectID: projectID,
-			Name:      seed.Name,
-			DbType:    seed.DBType,
-			Config:    cfgBytes,
-			IsManaged: true,
-		})
-	}
+	return args, nil
 }
 
 func (s *PlatformService) DBXStatus(ctx context.Context, actor *models.Actor) (map[string]any, error) {
@@ -163,7 +164,6 @@ func (s *PlatformService) ListDBConnections(ctx context.Context, actor *models.A
 	if err := s.requireProjectRole(ctx, actor, projectID, "admin", "developer", "viewer"); err != nil {
 		return nil, err
 	}
-	s.seedManagedConnections(ctx, projectID)
 	rows, err := s.repo.Queries().ListDBConnections(ctx, projectID)
 	if err != nil {
 		return nil, err
@@ -183,12 +183,16 @@ func (s *PlatformService) CreateDBConnection(ctx context.Context, actor *models.
 	if name == "" {
 		return DBConnectionSummary{}, errors.New("name must contain letters or digits")
 	}
+	sealedPassword, err := s.sealPassword(input.Password)
+	if err != nil {
+		return DBConnectionSummary{}, err
+	}
 	cfg := DBConnectionConfig{
 		Host:          strings.TrimSpace(input.Host),
 		Port:          input.Port,
 		Database:      strings.TrimSpace(input.Database),
 		Username:      strings.TrimSpace(input.Username),
-		Password:      input.Password,
+		Password:      sealedPassword,
 		SSL:           input.SSL,
 		DriverProfile: strings.TrimSpace(input.DriverProfile),
 	}
@@ -269,7 +273,11 @@ func (s *PlatformService) connForTool(ctx context.Context, actor *models.Actor, 
 	if s.dbx == nil {
 		return db.CoreDbConnection{}, errors.New("dbx not configured")
 	}
-	if err := s.dbx.EnsureConnection(ctx, dbxConnectionName(projectID, row.Name), s.dbxArgsFor(row)); err != nil {
+	args, err := s.dbxArgsFor(row)
+	if err != nil {
+		return db.CoreDbConnection{}, err
+	}
+	if err := s.dbx.EnsureConnection(ctx, dbxConnectionName(projectID, row.Name), args); err != nil {
 		return db.CoreDbConnection{}, err
 	}
 	return row, nil

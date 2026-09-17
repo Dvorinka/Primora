@@ -6,11 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
-	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -94,7 +91,7 @@ func Bootstrap(ctx context.Context) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("encryption key: %w", err)
 	}
-	platform := services.NewPlatformService(repo, store, services.NewMailer(cfg), os.Getenv("VITE_APP_URL"), dbxClient, firstPartyDBSeeds(cfg), encryptor, logger)
+	platform := services.NewPlatformService(repo, store, services.NewMailer(cfg), os.Getenv("VITE_APP_URL"), dbxClient, encryptor, logger)
 
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -210,37 +207,6 @@ func (a *App) Run() error {
 	// Stop the retention sweeper before main closes the DB pool.
 	a.sweepCancel()
 	return nil
-}
-
-// firstPartyDBSeeds turns the platform's own Postgres and Dragonfly URLs into
-// managed connection seeds registered on every project.
-func firstPartyDBSeeds(cfg config.Config) []services.ManagedDBSeed {
-	var seeds []services.ManagedDBSeed
-	if u, err := url.Parse(cfg.DatabaseURL); err == nil && u.Hostname() != "" {
-		cfg2 := services.DBConnectionConfig{
-			Host:     u.Hostname(),
-			Database: strings.TrimPrefix(u.Path, "/"),
-			Username: u.User.Username(),
-		}
-		if p, ok := u.User.Password(); ok {
-			cfg2.Password = p
-		}
-		if port, err := strconv.Atoi(u.Port()); err == nil {
-			cfg2.Port = &port
-		}
-		seeds = append(seeds, services.ManagedDBSeed{Name: "platform-postgres", DBType: "postgres", Config: cfg2})
-	}
-	if u, err := url.Parse(cfg.DragonflyURL); err == nil && u.Hostname() != "" {
-		cfg2 := services.DBConnectionConfig{Host: u.Hostname()}
-		if p, ok := u.User.Password(); ok {
-			cfg2.Password = p
-		}
-		if port, err := strconv.Atoi(u.Port()); err == nil {
-			cfg2.Port = &port
-		}
-		seeds = append(seeds, services.ManagedDBSeed{Name: "platform-dragonfly", DBType: "redis", Config: cfg2})
-	}
-	return seeds
 }
 
 func (a *App) Close() error {
