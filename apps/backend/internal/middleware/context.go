@@ -96,7 +96,6 @@ func (m AuthMiddleware) ResolveActor() gin.HandlerFunc {
 				token = strings.TrimSpace(strings.TrimPrefix(authz, "Bearer "))
 			}
 			if strings.HasPrefix(strings.ToLower(authz), "bearer ") {
-				apiKey = ""
 				actor, err := m.resolveJWTActor(c.Request.Context(), token)
 				if err != nil {
 					apperrors.Abort(c, http.StatusUnauthorized, "invalid_token", err.Error())
