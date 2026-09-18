@@ -307,6 +307,35 @@ type CoreProjectMember struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type CoreScheduledJob struct {
+	ID              uuid.UUID          `json:"id"`
+	ProjectID       uuid.UUID          `json:"project_id"`
+	Name            string             `json:"name"`
+	Schedule        string             `json:"schedule"`
+	Url             string             `json:"url"`
+	Secret          []byte             `json:"secret"`
+	Payload         []byte             `json:"payload"`
+	Enabled         bool               `json:"enabled"`
+	LastRunAt       pgtype.Timestamptz `json:"last_run_at"`
+	LastStatus      string             `json:"last_status"`
+	NextRunAt       pgtype.Timestamptz `json:"next_run_at"`
+	CreatedByUserID pgtype.UUID        `json:"created_by_user_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type CoreScheduledJobRun struct {
+	ID          uuid.UUID          `json:"id"`
+	JobID       uuid.UUID          `json:"job_id"`
+	Status      string             `json:"status"`
+	TriggeredBy string             `json:"triggered_by"`
+	StatusCode  *int32             `json:"status_code"`
+	Error       string             `json:"error"`
+	DurationMs  *int32             `json:"duration_ms"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	FinishedAt  pgtype.Timestamptz `json:"finished_at"`
+}
+
 type CoreUser struct {
 	ID            uuid.UUID          `json:"id"`
 	AuthSubject   string             `json:"auth_subject"`

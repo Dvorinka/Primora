@@ -4,6 +4,21 @@ All notable changes to Primora. Format follows [Keep a Changelog](https://keepac
 
 ## [Unreleased]
 
+### Added
+
+- **Scheduled jobs** — `core.scheduled_jobs` + `core.scheduled_job_runs` (migration 00009). Cron expressions and descriptors (`@hourly`, `@daily`, `@every 30m`, `*/15 * * * *`) parsed via robfig/cron; an in-process `JobScheduler` scans every 15 s, queues due jobs through a buffered channel, and collapses missed schedules into a single run. Endpoints under `/projects/:id/jobs`: list/create/update/delete, `GET …/jobs/:id/runs`, `POST …/jobs/:id/run` (manual execution). Jobs deliver a JSON envelope (event type, project/job/run IDs, trigger source, timestamp, static payload) via POST with `X-Primora-Signature: sha256=<hmac-sha256(body)>`, `X-Primora-Event`, `X-Primora-Job`, `X-Primora-Run` headers and a 10 s timeout. Secrets are AES-256-GCM sealed at rest; a generated secret is returned exactly once on create/rotate (`has_secret` thereafter). Run records carry status, trigger, HTTP status, duration, error text, and timestamps; history is pruned by retention. Reads require viewer+, writes admin/developer.
+- **Domain events + realtime stream** — `PlatformService.publishEvent` fans project mutations out to realtime subscribers and matching webhooks through one path. New webhook event types: `job.run`, `document.created`/`updated`/`deleted`, `object.created`/`updated`/`deleted`. `GET …/projects/:projectID/realtime/stream` serves an SSE feed with 25 s keepalives and `?token=`/`?api_key=` query auth for `EventSource` clients.
+- **Automation page** — SolidJS view with a Schedules tab (job table, create modal with schedule helper text, expandable run history, manual Run, enable/disable, delete, secret-shown-once banner) and a Live events tab (live/offline badge, pause, clear, auto-reconnect). Sidebar + command palette entries; demo-mode seeds and stubs included.
+- **`primora jobs:*` CLI group** — `jobs:list`, `jobs:create <name> --schedule --url [--payload --secret --disabled]`, `jobs:run <job>`, `jobs:runs <job> --limit`, `jobs:rm <job> --yes`. Both `jobs list` and `jobs:list` spellings.
+- **New `primora_*` MCP tools** — `primora_list_jobs`, `primora_create_job`, `primora_update_job`, `primora_delete_job`, `primora_list_job_runs`, `primora_run_job`. Webhook event schema extended to all new event types.
+
+### Fixed
+
+- **SSE broken by gzip middleware** — `Compression()` wrapped every `Accept-Encoding: gzip` response, and the gzip buffer swallowed each `Flush()`, so `EventSource` received headers then silence and closed. Paths ending in `/stream` now bypass compression; this repaired the pre-existing telemetry stream too.
+- **Event payloads serialized as base64** — `document`/`object` fields inside domain-event envelopes were `json.RawMessage` placed into `map[string]any`, which marshals as base64. They're now wrapped so the raw document embeds in the event JSON.
+- **Auth trusted origins ignored the configured public URL** — `docker-compose.yml` hardcoded `http://localhost` for `BETTER_AUTH_URL`, `AUTH_BASE_URL`, and `VITE_APP_URL`, so any non-default `NGINX_PORT` or domain broke sign-in with a 403. All three now read `.env` with localhost defaults.
+- **Frontend auth base URL on non-default ports** — the bundled default baked `http://localhost`; `auth-client` now resolves `/auth` against `window.location.origin` (absolute, as better-auth requires) when `VITE_AUTH_BASE_URL` is unset.
+
 ### Security
 
 - **Managed platform connections removed** — `platform-postgres`/`platform-dragonfly` seeds carried the backend's own `DATABASE_URL`/`DRAGONFLY_URL` into every project, where any member could run arbitrary queries through DBX against `core` tables. The seeds are gone and migration 00008 deletes existing managed rows. Operators keep direct `psql`/`redis-cli` access.

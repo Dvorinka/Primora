@@ -4,6 +4,7 @@ import { cmdLogin, cmdLogout, cmdWhoami } from "./commands/auth.js";
 import { cmdAuditList } from "./commands/audit.js";
 import { cmdBucketsCreate, cmdBucketsList } from "./commands/buckets.js";
 import { cmdContext, cmdUse } from "./commands/context.js";
+import { cmdJobsCreate, cmdJobsList, cmdJobsRemove, cmdJobsRun, cmdJobsRuns } from "./commands/jobs.js";
 import { cmdKeysCreate, cmdKeysList, cmdKeysRevoke } from "./commands/keys.js";
 import {
   cmdObjectsDownload,
@@ -105,6 +106,34 @@ cli
   .action(cmdKeysRevoke);
 
 cli
+  .command("jobs:list", "List scheduled jobs in the current project")
+  .option("--project <id>", "Project override")
+  .action(cmdJobsList);
+cli
+  .command("jobs:create <name>", "Create a scheduled job (secret shown once if generated)")
+  .option("--project <id>", "Project override")
+  .option("--schedule <cron>", "Cron or descriptor, e.g. '*/15 * * * *' or '@every 1h'")
+  .option("--url <url>", "Target endpoint (HTTPS public, HTTP private)")
+  .option("--payload <json>", "Static JSON payload merged into every delivery")
+  .option("--secret <secret>", "HMAC signing secret (generated if omitted)")
+  .option("--disabled", "Create paused — enable via the dashboard or API")
+  .action(cmdJobsCreate);
+cli
+  .command("jobs:run <job>", "Trigger a manual run now")
+  .option("--project <id>", "Project override")
+  .action(cmdJobsRun);
+cli
+  .command("jobs:runs <job>", "List run history for a job")
+  .option("--project <id>", "Project override")
+  .option("--limit <n>", "Page size (default 50)")
+  .action(cmdJobsRuns);
+cli
+  .command("jobs:rm <job>", "Delete a scheduled job")
+  .option("--project <id>", "Project override")
+  .option("--yes", "Skip the confirmation prompt")
+  .action(cmdJobsRemove);
+
+cli
   .command("audit:list", "List audit events for the current project")
   .option("--project <id>", "Project override")
   .option("--q <query>", "Search filter")
@@ -121,7 +150,7 @@ cli.version("0.4.0");
 // cac only matches the first positional token, so "orgs list" cannot be a
 // command name. Fold "group verb" pairs into "group:verb" before parsing —
 // `primora orgs list` and `primora orgs:list` both work.
-const GROUPS = new Set(["orgs", "projects", "buckets", "objects", "keys", "audit"]);
+const GROUPS = new Set(["orgs", "projects", "buckets", "objects", "keys", "jobs", "audit"]);
 const argv = process.argv.slice(2);
 if (GROUPS.has(argv[0]) && argv[1] && !argv[1].startsWith("-")) {
   argv.splice(0, 2, `${argv[0]}:${argv[1]}`);

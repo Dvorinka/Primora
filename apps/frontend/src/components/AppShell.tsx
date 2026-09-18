@@ -10,6 +10,7 @@ import {
   IconDatabases,
   IconTelemetry,
   IconIntegrations,
+  IconZap,
   IconAudit,
   IconAuth,
   IconSettings,
@@ -30,6 +31,7 @@ export type ViewType =
   | "databases"
   | "telemetry"
   | "integrations"
+  | "automation"
   | "auth"
   | "audit"
   | "settings";
@@ -46,6 +48,7 @@ const projectNav: NavEntry[] = [
   { id: "databases", label: "Databases", shortLabel: "DBs", icon: IconDatabases },
   { id: "telemetry", label: "Telemetry", shortLabel: "Signals", icon: IconTelemetry },
   { id: "integrations", label: "Integrations", shortLabel: "Integr.", icon: IconIntegrations },
+  { id: "automation", label: "Automation", shortLabel: "Auto", icon: IconZap },
   { id: "storage", label: "Storage", icon: IconStorage },
   { id: "collections", label: "Collections", icon: IconCollections },
   { id: "auth", label: "Authentication", shortLabel: "Auth", icon: IconAuth },
@@ -53,7 +56,7 @@ const projectNav: NavEntry[] = [
 ];
 
 // Instagram-style bottom bar caps at five slots — the rest stay reachable via Menu.
-const bottomNav: NavEntry[] = projectNav.filter((e) => !["collections", "telemetry", "integrations"].includes(e.id));
+const bottomNav: NavEntry[] = projectNav.filter((e) => !["collections", "telemetry", "integrations", "automation"].includes(e.id));
 
 const workspaceNav: NavEntry[] = [
   { id: "projects", label: "Projects", icon: IconProjects },
@@ -92,6 +95,7 @@ const viewTitle: Record<ViewType, string> = {
   databases: "Databases",
   telemetry: "Telemetry",
   integrations: "Integrations",
+  automation: "Automation",
   auth: "Authentication",
   audit: "Audit log",
   settings: "Settings",

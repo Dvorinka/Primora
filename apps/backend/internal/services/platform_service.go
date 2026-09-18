@@ -34,8 +34,10 @@ type PlatformService struct {
 	publicURL      string
 	dbx            *dbx.Client
 	hub            *EventHub
+	realtime       *EventHub
 	enc            *secrets.Encryptor
 	dispatcher     *WebhookDispatcher
+	scheduler      *JobScheduler
 }
 
 type BootstrapInput struct {
@@ -222,19 +224,50 @@ type InvitationSummary struct {
 }
 
 func NewPlatformService(repo *repositories.CoreRepository, store *storage.LocalStore, mailer *Mailer, publicURL string, dbxClient *dbx.Client, enc *secrets.Encryptor, logger *slog.Logger) *PlatformService {
-	s := &PlatformService{repo: repo, store: store, mailer: mailer, publicURL: publicURL, dbx: dbxClient, hub: NewEventHub(), enc: enc}
+	s := &PlatformService{repo: repo, store: store, mailer: mailer, publicURL: publicURL, dbx: dbxClient, hub: NewEventHub(), realtime: NewEventHub(), enc: enc}
 	if enc != nil {
 		s.dispatcher = NewWebhookDispatcher(repo.Queries(), enc, logger)
 		s.dispatcher.Start(context.Background())
+		s.scheduler = NewJobScheduler(repo.Queries(), enc, logger, s.publishEvent)
+		s.scheduler.Start(context.Background())
 	}
 	return s
 }
 
-// Close stops the webhook dispatcher. Idempotent.
+// Close stops the webhook dispatcher and job scheduler. Idempotent.
 func (s *PlatformService) Close() {
 	if s.dispatcher != nil {
 		s.dispatcher.Stop()
 	}
+	if s.scheduler != nil {
+		s.scheduler.Stop()
+	}
+}
+
+// publishEvent fans a domain event out to realtime SSE subscribers and to
+// matching webhooks. Failures are logged by the callees — events never block
+// the request that produced them.
+func (s *PlatformService) publishEvent(ctx context.Context, projectID uuid.UUID, eventType string, data map[string]any) {
+	if s.realtime != nil {
+		s.realtime.Broadcast(projectID.String(), map[string]any{
+			"type":        eventType,
+			"occurred_at": time.Now().UTC().Format(time.RFC3339),
+			"data":        data,
+		})
+	}
+	s.dispatchEvent(ctx, projectID, eventType, data)
+}
+
+// SubscribeRealtime registers an SSE consumer for project domain events.
+func (s *PlatformService) SubscribeRealtime(ctx context.Context, actor *models.Actor, projectID uuid.UUID) (chan []byte, error) {
+	if err := s.requireProjectRole(ctx, actor, projectID, "admin", "developer", "viewer"); err != nil {
+		return nil, err
+	}
+	return s.realtime.Subscribe(projectID.String()), nil
+}
+
+func (s *PlatformService) UnsubscribeRealtime(projectID uuid.UUID, ch chan []byte) {
+	s.realtime.Unsubscribe(projectID.String(), ch)
 }
 
 func (s *PlatformService) Me(ctx context.Context, actor *models.Actor) (PlatformSummary, error) {
@@ -1242,6 +1275,12 @@ func (s *PlatformService) UploadObject(ctx context.Context, actor *models.Actor,
 		"bucketId": bucket.ID.String(),
 		"key":      objectKey,
 	}))
+	s.publishEvent(ctx, bucket.ProjectID, WebhookEventObjectCreated, map[string]any{
+		"bucket_id":    bucket.ID.String(),
+		"object_key":   objectKey,
+		"content_type": contentType,
+		"size_bytes":   stored.SizeBytes,
+	})
 	return row, nil
 }
 
@@ -1363,6 +1402,12 @@ func (s *PlatformService) UpdateObject(ctx context.Context, actor *models.Actor,
 		"oldObjectKey":        oldObject.ObjectKey,
 		"newObjectKey":        updated.ObjectKey,
 	}))
+	s.publishEvent(ctx, sourceBucket.ProjectID, WebhookEventObjectUpdated, map[string]any{
+		"bucket_id":      destinationBucket.ID.String(),
+		"object_key":     updated.ObjectKey,
+		"old_bucket_id":  sourceBucket.ID.String(),
+		"old_object_key": oldObject.ObjectKey,
+	})
 	return updated, nil
 }
 
@@ -1444,6 +1489,14 @@ func (s *PlatformService) CopyObject(ctx context.Context, actor *models.Actor, b
 		"sourceObjectKey":     sourceObjectKey,
 		"newObjectKey":        created.ObjectKey,
 	}))
+	s.publishEvent(ctx, sourceBucket.ProjectID, WebhookEventObjectCreated, map[string]any{
+		"bucket_id":         destinationBucket.ID.String(),
+		"object_key":        created.ObjectKey,
+		"content_type":      created.ContentType,
+		"size_bytes":        created.SizeBytes,
+		"source_bucket_id":  sourceBucket.ID.String(),
+		"source_object_key": sourceObjectKey,
+	})
 	return created, nil
 }
 
@@ -1469,6 +1522,10 @@ func (s *PlatformService) DeleteObject(ctx context.Context, actor *models.Actor,
 		"bucketId": bucketID.String(),
 		"key":      objectKey,
 	}))
+	s.publishEvent(ctx, bucket.ProjectID, WebhookEventObjectDeleted, map[string]any{
+		"bucket_id":  bucketID.String(),
+		"object_key": objectKey,
+	})
 	return nil
 }
 
@@ -1692,6 +1749,11 @@ func (s *PlatformService) CreateDocument(ctx context.Context, actor *models.Acto
 	_, _ = s.repo.Queries().CreateAuditLog(ctx, newAuditParams(project.OrganizationID, collection.ProjectID, actor, requestID, "document.created", "document", row.ID.String(), map[string]any{
 		"collectionId": collectionID.String(),
 	}))
+	s.publishEvent(ctx, collection.ProjectID, WebhookEventDocumentCreated, map[string]any{
+		"collection_id": collectionID.String(),
+		"document_id":   row.ID.String(),
+		"document":      json.RawMessage(row.Data),
+	})
 	return row, nil
 }
 
@@ -1716,6 +1778,11 @@ func (s *PlatformService) UpdateDocument(ctx context.Context, actor *models.Acto
 	_, _ = s.repo.Queries().CreateAuditLog(ctx, newAuditParams(project.OrganizationID, collection.ProjectID, actor, requestID, "document.updated", "document", documentID.String(), map[string]any{
 		"collectionId": collectionID.String(),
 	}))
+	s.publishEvent(ctx, collection.ProjectID, WebhookEventDocumentUpdated, map[string]any{
+		"collection_id": collectionID.String(),
+		"document_id":   documentID.String(),
+		"document":      json.RawMessage(row.Data),
+	})
 	return row, nil
 }
 
@@ -1737,6 +1804,10 @@ func (s *PlatformService) DeleteDocument(ctx context.Context, actor *models.Acto
 	_, _ = s.repo.Queries().CreateAuditLog(ctx, newAuditParams(project.OrganizationID, collection.ProjectID, actor, requestID, "document.deleted", "document", documentID.String(), map[string]any{
 		"collectionId": collectionID.String(),
 	}))
+	s.publishEvent(ctx, collection.ProjectID, WebhookEventDocumentDeleted, map[string]any{
+		"collection_id": collectionID.String(),
+		"document_id":   documentID.String(),
+	})
 	return nil
 }
 

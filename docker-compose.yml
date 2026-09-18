@@ -64,9 +64,9 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
       DRAGONFLY_URL: redis://dragonfly:6379/0
-      BETTER_AUTH_URL: http://localhost/auth
-      AUTH_BASE_URL: http://localhost/auth
-      VITE_APP_URL: http://localhost
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost/auth}
+      AUTH_BASE_URL: ${AUTH_BASE_URL:-http://localhost/auth}
+      VITE_APP_URL: ${VITE_APP_URL:-http://localhost}
     depends_on:
       postgres:
         condition: service_healthy

@@ -35,8 +35,11 @@ func Compression() gin.HandlerFunc {
 			return
 		}
 
-		// Skip compression for small responses or streaming
-		if c.Request.Method == "HEAD" || c.Request.URL.Path == "/api/v1/health/liveness" {
+		// Skip compression for small responses or streaming — gzip buffers
+		// writes, which breaks SSE flush semantics.
+		if c.Request.Method == "HEAD" ||
+			c.Request.URL.Path == "/api/v1/health/liveness" ||
+			strings.HasSuffix(c.Request.URL.Path, "/stream") {
 			c.Next()
 			return
 		}

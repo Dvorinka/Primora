@@ -8,6 +8,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
@@ -32,6 +33,7 @@ type Querier interface {
 	CreateInvitation(ctx context.Context, arg CreateInvitationParams) (CoreProjectInvitation, error)
 	CreateOrganization(ctx context.Context, arg CreateOrganizationParams) (CoreOrganization, error)
 	CreateProject(ctx context.Context, arg CreateProjectParams) (CoreProject, error)
+	CreateScheduledJob(ctx context.Context, arg CreateScheduledJobParams) (CoreScheduledJob, error)
 	CreateWebhook(ctx context.Context, arg CreateWebhookParams) (CoreWebhook, error)
 	DeleteBucketByID(ctx context.Context, id uuid.UUID) (CoreBucket, error)
 	DeleteBucketObjectByKey(ctx context.Context, arg DeleteBucketObjectByKeyParams) (CoreBucketObject, error)
@@ -43,9 +45,11 @@ type Querier interface {
 	DeleteOrganizationByID(ctx context.Context, id uuid.UUID) (CoreOrganization, error)
 	DeletePendingInvitationByIDForOrganization(ctx context.Context, arg DeletePendingInvitationByIDForOrganizationParams) (CoreProjectInvitation, error)
 	DeleteProjectByID(ctx context.Context, id uuid.UUID) (CoreProject, error)
+	DeleteScheduledJob(ctx context.Context, arg DeleteScheduledJobParams) (uuid.UUID, error)
 	DeleteWebhook(ctx context.Context, arg DeleteWebhookParams) (CoreWebhook, error)
 	EventTotals(ctx context.Context, arg EventTotalsParams) (EventTotalsRow, error)
 	EventTypeSeries(ctx context.Context, arg EventTypeSeriesParams) ([]EventTypeSeriesRow, error)
+	FinishScheduledJobRun(ctx context.Context, arg FinishScheduledJobRunParams) (CoreScheduledJobRun, error)
 	GetAPIKeyByIDForProject(ctx context.Context, arg GetAPIKeyByIDForProjectParams) (CoreApiKey, error)
 	GetAPIKeyByPrefix(ctx context.Context, prefix string) (GetAPIKeyByPrefixRow, error)
 	GetBucketByID(ctx context.Context, id uuid.UUID) (GetBucketByIDRow, error)
@@ -63,12 +67,14 @@ type Querier interface {
 	GetProjectByID(ctx context.Context, id uuid.UUID) (CoreProject, error)
 	GetProjectMembership(ctx context.Context, arg GetProjectMembershipParams) (GetProjectMembershipRow, error)
 	GetProjectOverview(ctx context.Context, id uuid.UUID) (GetProjectOverviewRow, error)
+	GetScheduledJobByID(ctx context.Context, id uuid.UUID) (CoreScheduledJob, error)
 	GetUserByAuthSubject(ctx context.Context, authSubject string) (CoreUser, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (CoreUser, error)
 	GetWebhookByID(ctx context.Context, id uuid.UUID) (CoreWebhook, error)
 	GetWebhookDeliveryByID(ctx context.Context, id uuid.UUID) (CoreWebhookDelivery, error)
 	HasFingerprintSeen(ctx context.Context, arg HasFingerprintSeenParams) (bool, error)
 	InsertEvent(ctx context.Context, arg InsertEventParams) (CoreEvent, error)
+	InsertScheduledJobRun(ctx context.Context, arg InsertScheduledJobRunParams) (CoreScheduledJobRun, error)
 	InsertWebhookDelivery(ctx context.Context, arg InsertWebhookDeliveryParams) (CoreWebhookDelivery, error)
 	ListAPIKeysForProject(ctx context.Context, projectID uuid.UUID) ([]CoreApiKey, error)
 	ListAuditLogsForProject(ctx context.Context, arg ListAuditLogsForProjectParams) ([]CoreAuditLog, error)
@@ -79,6 +85,7 @@ type Querier interface {
 	ListComponents(ctx context.Context, projectID uuid.UUID) ([]CoreComponent, error)
 	ListDBConnections(ctx context.Context, projectID uuid.UUID) ([]CoreDbConnection, error)
 	ListDocuments(ctx context.Context, arg ListDocumentsParams) ([]CoreDocument, error)
+	ListDueScheduledJobs(ctx context.Context, nextRunAt pgtype.Timestamptz) ([]CoreScheduledJob, error)
 	ListErrorGroups(ctx context.Context, arg ListErrorGroupsParams) ([]ListErrorGroupsRow, error)
 	ListEvents(ctx context.Context, arg ListEventsParams) ([]ListEventsRow, error)
 	ListIntegrations(ctx context.Context, projectID uuid.UUID) ([]CoreIntegration, error)
@@ -88,14 +95,18 @@ type Querier interface {
 	ListPendingWebhookDeliveries(ctx context.Context, limit int32) ([]CoreWebhookDelivery, error)
 	ListProjectMembers(ctx context.Context, projectID uuid.UUID) ([]ListProjectMembersRow, error)
 	ListProjectsForOrganization(ctx context.Context, arg ListProjectsForOrganizationParams) ([]ListProjectsForOrganizationRow, error)
+	ListScheduledJobRuns(ctx context.Context, arg ListScheduledJobRunsParams) ([]CoreScheduledJobRun, error)
+	ListScheduledJobs(ctx context.Context, projectID uuid.UUID) ([]CoreScheduledJob, error)
 	ListWebhookDeliveries(ctx context.Context, arg ListWebhookDeliveriesParams) ([]CoreWebhookDelivery, error)
 	ListWebhooks(ctx context.Context, projectID uuid.UUID) ([]CoreWebhook, error)
 	ListWebhooksForEvent(ctx context.Context, arg ListWebhooksForEventParams) ([]CoreWebhook, error)
 	MarkInvitationAccepted(ctx context.Context, id uuid.UUID) (CoreProjectInvitation, error)
+	MarkScheduledJobRan(ctx context.Context, arg MarkScheduledJobRanParams) (CoreScheduledJob, error)
 	MarkWebhookDelivery(ctx context.Context, arg MarkWebhookDeliveryParams) error
 	MetricNames(ctx context.Context, projectID uuid.UUID) ([]string, error)
 	MetricSeries(ctx context.Context, arg MetricSeriesParams) ([]MetricSeriesRow, error)
 	MoveBucketObject(ctx context.Context, arg MoveBucketObjectParams) (CoreBucketObject, error)
+	PruneScheduledJobRuns(ctx context.Context, arg PruneScheduledJobRunsParams) error
 	RemoveOrganizationMember(ctx context.Context, arg RemoveOrganizationMemberParams) (CoreOrganizationMember, error)
 	RemoveProjectMember(ctx context.Context, arg RemoveProjectMemberParams) (CoreProjectMember, error)
 	RemoveProjectMembershipsForOrganizationUser(ctx context.Context, arg RemoveProjectMembershipsForOrganizationUserParams) error
@@ -118,6 +129,7 @@ type Querier interface {
 	UpdateOrganizationMemberRole(ctx context.Context, arg UpdateOrganizationMemberRoleParams) (CoreOrganizationMember, error)
 	UpdateProjectByID(ctx context.Context, arg UpdateProjectByIDParams) (CoreProject, error)
 	UpdateProjectMemberRole(ctx context.Context, arg UpdateProjectMemberRoleParams) (CoreProjectMember, error)
+	UpdateScheduledJob(ctx context.Context, arg UpdateScheduledJobParams) (CoreScheduledJob, error)
 	UpdateWebhook(ctx context.Context, arg UpdateWebhookParams) (CoreWebhook, error)
 	UpsertComponent(ctx context.Context, arg UpsertComponentParams) (CoreComponent, error)
 	UpsertUser(ctx context.Context, arg UpsertUserParams) (CoreUser, error)

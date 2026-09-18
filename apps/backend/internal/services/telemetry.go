@@ -192,9 +192,9 @@ func (s *PlatformService) IngestEvents(ctx context.Context, actor *models.Actor,
 	for _, ev := range inserted {
 		s.hub.Broadcast(ev.ProjectID.String(), ev)
 	}
-	// A fresh error fingerprint is a new issue group — notify webhooks.
+	// A fresh error fingerprint is a new issue group — notify webhooks + SSE.
 	for _, issue := range newIssues {
-		s.dispatchEvent(ctx, projectID, WebhookEventIssueCreated, map[string]any{
+		s.publishEvent(ctx, projectID, WebhookEventIssueCreated, map[string]any{
 			"fingerprint":    issue.Fingerprint,
 			"message":        issue.Message,
 			"severity":       issue.Severity,

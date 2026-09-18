@@ -39,6 +39,7 @@ import {
 import {
   AuditPage,
   AuthPage,
+  AutomationPage,
   type AuthUser,
   CollectionsPage,
   DatabasesPage,
@@ -58,6 +59,7 @@ import {
   IconStorage,
   IconDatabases,
   IconTelemetry,
+  IconZap,
   IconCollections,
   IconAudit,
   IconAuth,
@@ -1457,6 +1459,7 @@ export default function App() {
     { id: "nav-members", label: "Go to Members", category: "Navigate", icon: <IconMembers class="w-4 h-4" />, keywords: ["team", "users", "invite"], action: () => setActiveView("members") },
     { id: "nav-databases", label: "Go to Databases", category: "Navigate", icon: <IconDatabases class="w-4 h-4" />, keywords: ["db", "sql", "query", "tables", "redis"], action: () => setActiveView("databases") },
     { id: "nav-telemetry", label: "Go to Telemetry", category: "Navigate", icon: <IconTelemetry class="w-4 h-4" />, keywords: ["errors", "metrics", "logs", "observability", "issues"], action: () => setActiveView("telemetry") },
+    { id: "nav-automation", label: "Go to Automation", category: "Navigate", icon: <IconZap class="w-4 h-4" />, keywords: ["cron", "jobs", "schedule", "events", "realtime"], action: () => setActiveView("automation") },
     { id: "nav-storage", label: "Go to Storage", category: "Navigate", icon: <IconStorage class="w-4 h-4" />, keywords: ["files", "buckets", "upload"], action: () => setActiveView("storage") },
     { id: "nav-collections", label: "Go to Collections", category: "Navigate", icon: <IconCollections class="w-4 h-4" />, keywords: ["documents", "database"], action: () => setActiveView("collections") },
     { id: "nav-auth", label: "Go to Authentication", category: "Navigate", icon: <IconAuth class="w-4 h-4" />, keywords: ["users", "sign in", "ban"], action: () => setActiveView("auth") },
@@ -1681,6 +1684,14 @@ export default function App() {
 
           <Show when={activeView() === "integrations"}>
             <IntegrationsPage
+              projectID={activeProject()?.id}
+              canManage={canUpdateProject()}
+              demoMode={isDemo}
+            />
+          </Show>
+
+          <Show when={activeView() === "automation"}>
+            <AutomationPage
               projectID={activeProject()?.id}
               canManage={canUpdateProject()}
               demoMode={isDemo}

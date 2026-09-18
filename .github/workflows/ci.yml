@@ -236,3 +236,6 @@ jobs:
         with:
           version: latest
           working-directory: apps/backend
+          # Prebuilt binaries lag the repo's Go version — build the linter
+          # with the toolchain above so it understands go 1.26.
+          install-mode: goinstall

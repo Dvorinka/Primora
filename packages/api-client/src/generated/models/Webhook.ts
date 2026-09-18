@@ -7,7 +7,7 @@ export type Webhook = {
     project_id: string;
     url: string;
     /**
-     * Event filter (issue.created, deploy.marker, webhook.test). Empty means all events.
+     * Event filter (issue.created, deploy.marker, webhook.test, job.run, document.*, object.*). Empty means all events.
      */
     events: Array<string>;
     enabled: boolean;

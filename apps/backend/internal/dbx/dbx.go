@@ -86,7 +86,7 @@ func (d *Client) reset() {
 		d.session = nil
 	}
 	if d.cmd != nil && d.cmd.Process != nil {
-		d.cmd.Process.Kill()
+		_ = d.cmd.Process.Kill()
 	}
 	d.cmd = nil
 	d.registered = map[string]bool{}
