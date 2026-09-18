@@ -219,12 +219,82 @@ release pipeline with images + binaries + desktop bundles.
 smoke green in CI, and the upgrade runbook followed once on a real
 upgrade. Docs site revisited here, not before.
 
+## Phase 7 — Automation & realtime (v0.7.0) ✅
+
+The last Supabase/Appwrite-parity gaps: scheduled work and a live view of
+what the platform is doing. One event fan-out drives webhooks and the
+dashboard's live feed off the same stream.
+
+- **Scheduled jobs** — `core.scheduled_jobs` + `core.scheduled_job_runs`
+  (migration 00009). Cron expressions and descriptors (`@hourly`,
+  `@daily`, `@every 30m`, `*/15 * * * *`) via robfig/cron. In-process
+  `JobScheduler`: 15 s due-scan, buffered execution queue, missed
+  schedules collapse into one run, run history pruned by retention.
+- **Signed delivery** — jobs POST a JSON envelope (event, project/job/run
+  IDs, trigger, timestamp, static payload) with
+  `X-Primora-Signature: sha256=<hmac-sha256(body)>`, 10 s timeout. Secrets
+  are AES-256-GCM sealed at rest and the generated value is returned
+  exactly once (`has_secret` thereafter).
+- **Run history** — status (running/success/failed), trigger source,
+  HTTP status, duration, error text, timestamps; `POST …/jobs/:id/run`
+  for manual execution. Role-gated: viewers read, admin/developer write.
+- **Domain events** — `publishEvent` fans document/object/issue/deploy/
+  job mutations out to realtime subscribers and matching webhooks.
+  Webhook event filter extended to `job.run`, `document.*`, `object.*`.
+- **Realtime stream** — `GET …/projects/:projectID/realtime/stream` SSE,
+  25 s keepalives, `?token=`/`?api_key=` query auth for `EventSource`.
+- **Automation page** — Schedules tab (table, create modal, run history
+  expansion, manual run, enable/disable, delete, secret-shown-once) and
+  Live events tab (live badge, pause, clear, reconnect). Demo-mode seeds
+  and stubs included; command palette entry added.
+- **Surfaces** — `primora jobs:*` CLI group (list/create/run/runs/rm),
+  six new `primora_*_job*` MCP tools, `AutomationService` in the
+  generated client.
+
+### Fixes folded in
+
+- **gzip swallowed SSE** — the compression middleware buffered every
+  flush, so `EventSource` saw headers then nothing and died. `*/stream`
+  paths now bypass compression (telemetry stream was equally broken).
+- **Trusted origins ignored `PUBLIC_URL`** — compose hardcoded
+  `http://localhost` for `BETTER_AUTH_URL`/`AUTH_BASE_URL`/`VITE_APP_URL`;
+  they now read env so a non-default port/domain actually works.
+- **Relative auth base URL** — better-auth rejects relative URLs;
+  `auth-client` now resolves `/auth` against `window.location.origin`,
+  preserving same-origin defaults without breaking split-origin dev.
+
+## Future phases — candidates
+
+Ordered loosely by leverage. None committed; each gets scoped when picked.
+
+- **Phase 8 — Client realtime SDK** — `@primora/client` channel
+  subscriptions (`channel('documents').on('created', …)`), presence,
+  and broadcast over the Phase 7 stream. Supabase-realtime parity is a
+  protocol question, not a transport one.
+- **Phase 9 — Functions** — user code on schedule/event/HTTP triggers.
+  Deno or Bun isolates in a sidecar; secrets via env, payload via stdin.
+  The job runner already supplies the scheduling half.
+- **Phase 10 — Storage backends** — S3-compatible object storage behind
+  the existing bucket abstraction (deferred from Phase 6), plus
+  presigned-URL uploads for large files.
+- **Phase 11 — Generated REST per collection** — PostgREST-style
+  auto-CRUD + filtering over Collections documents; a clean read layer
+  on data that already exists.
+- **Notifications** — alert rules on telemetry (error-rate thresholds,
+  heartbeat silence) fanning out through the webhook dispatcher.
+- **Inbound webhooks** — project-scoped ingest endpoints that turn
+  external events into domain events/jobs.
+- **HA mode** — leader-elected scheduler + distributed locks so two
+  backend replicas don't double-fire jobs; Postgres advisory locks are
+  enough at this scale.
+- **Email surface** — transactional templates + send log in the
+  dashboard, backed by the auth service's existing SMTP/Resend wiring.
+
 ---
 
 ## What is deliberately out of scope
 
 - Managed/hosted tier — the product is the self-hosted thing.
-- Realtime subscriptions, edge functions, generated REST/GraphQL per-table
-  (Supabase PostgREST-style). Revisit after Phase 3 if wanted — Collections
-  already cover the common case.
+- Per-request compute billing / hosted function runtime — if the
+  Functions phase lands it stays user-managed infrastructure.
 - Embedding DBX's desktop UI — we use its MCP server as a library, not its app.

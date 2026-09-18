@@ -2,13 +2,15 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-export type UpdateWebhookRequest = {
+export type UpdateScheduledJobRequest = {
+    name?: string;
+    schedule?: string;
     url?: string;
     /**
      * Replace the signing secret. Omit to keep the current one.
      */
     secret?: string;
-    events?: Array<'issue.created' | 'deploy.marker' | 'webhook.test' | 'job.run' | 'document.created' | 'document.updated' | 'document.deleted' | 'object.created' | 'object.updated' | 'object.deleted'>;
+    payload?: Record<string, any>;
     enabled?: boolean;
 };
 

@@ -1,8 +1,12 @@
 import { createAuthClient } from "better-auth/solid";
 import { adminClient } from "better-auth/client/plugins";
 
-// Use full URL for dev mode, relative path for production
-const baseURL = import.meta.env.VITE_AUTH_BASE_URL ?? "http://localhost/auth";
+// Same-origin default — nginx routes /auth to the auth service at whatever
+// port or domain serves the app. better-auth requires an absolute baseURL, so
+// resolve it against the runtime origin; VITE_AUTH_BASE_URL overrides for
+// split-origin setups.
+const baseURL =
+  import.meta.env.VITE_AUTH_BASE_URL ?? new URL("/auth", window.location.origin).href;
 
 export const authClient = createAuthClient({
   baseURL,

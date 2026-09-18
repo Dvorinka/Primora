@@ -8,7 +8,7 @@ export type CreateWebhookRequest = {
      * HMAC key for X-Primora-Signature. Generated when omitted.
      */
     secret?: string;
-    events?: Array<'issue.created' | 'deploy.marker' | 'webhook.test'>;
+    events?: Array<'issue.created' | 'deploy.marker' | 'webhook.test' | 'job.run' | 'document.created' | 'document.updated' | 'document.deleted' | 'object.created' | 'object.updated' | 'object.deleted'>;
     enabled?: boolean;
 };
 

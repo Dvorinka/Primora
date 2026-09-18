@@ -14,6 +14,9 @@ tags:
   - name: Collections
   - name: Databases
   - name: Telemetry
+  - name: Integrations
+  - name: Webhooks
+  - name: Automation
 paths:
   /health/liveness:
     get:
@@ -1597,6 +1600,162 @@ paths:
                 $ref: "#/components/schemas/DeployMarker"
         "401":
           $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/jobs:
+    get:
+      tags: [Automation]
+      operationId: listScheduledJobs
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "200":
+          description: Scheduled jobs for the project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledJobListResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+    post:
+      tags: [Automation]
+      operationId: createScheduledJob
+      summary: Runs a signed POST to the job URL on a cron schedule (standard 5-field cron or @every/@hourly descriptors). Payload is signed X-Primora-Signature like webhook deliveries; an empty secret generates one returned once. HTTPS required for public targets, HTTP allowed for private/self-hosted.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateScheduledJobRequest"
+      responses:
+        "201":
+          description: Job created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledJobCreateResponse"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "409":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/jobs/{jobID}:
+    patch:
+      tags: [Automation]
+      operationId: updateScheduledJob
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/JobID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateScheduledJobRequest"
+      responses:
+        "200":
+          description: Job updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledJobCreateResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+    delete:
+      tags: [Automation]
+      operationId: deleteScheduledJob
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/JobID"
+      responses:
+        "204":
+          description: Job deleted
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/jobs/{jobID}/runs:
+    get:
+      tags: [Automation]
+      operationId: listScheduledJobRuns
+      summary: Recent executions, newest first. History is capped at 200 runs per job.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/JobID"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: Job run history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledJobRunListResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/jobs/{jobID}/run:
+    post:
+      tags: [Automation]
+      operationId: runScheduledJob
+      summary: Triggers an out-of-schedule manual run. Returns the run row in "running" state.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/JobID"
+      responses:
+        "202":
+          description: Manual run queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledJobRun"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/realtime/stream:
+    get:
+      tags: [Automation]
+      operationId: streamRealtimeEvents
+      summary: Server-sent events stream of project domain events — document/object mutations, new issues, deploy markers, job runs. EventSource clients pass `?api_key=` or `?token=` since headers cannot be set.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - name: api_key
+          in: query
+          schema:
+            type: string
+        - name: token
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: text/event-stream of {type, occurred_at, data} messages
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
 components:
   securitySchemes:
     bearerAuth:
@@ -1725,6 +1884,13 @@ components:
         format: uuid
     WebhookID:
       name: webhookID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    JobID:
+      name: jobID
       in: path
       required: true
       schema:
@@ -3106,7 +3272,7 @@ components:
           type: array
           items:
             type: string
-          description: Event filter (issue.created, deploy.marker, webhook.test). Empty means all events.
+          description: Event filter (issue.created, deploy.marker, webhook.test, job.run, document.*, object.*). Empty means all events.
         enabled:
           type: boolean
         has_secret:
@@ -3128,7 +3294,7 @@ components:
           type: array
           items:
             type: string
-            enum: [issue.created, deploy.marker, webhook.test]
+            enum: [issue.created, deploy.marker, webhook.test, job.run, document.created, document.updated, document.deleted, object.created, object.updated, object.deleted]
         enabled:
           type: boolean
       required: [url]
@@ -3145,7 +3311,7 @@ components:
           type: array
           items:
             type: string
-            enum: [issue.created, deploy.marker, webhook.test]
+            enum: [issue.created, deploy.marker, webhook.test, job.run, document.created, document.updated, document.deleted, object.created, object.updated, object.deleted]
         enabled:
           type: boolean
     WebhookCreateResponse:
@@ -3234,3 +3400,137 @@ components:
           type: string
           format: date-time
       required: [recorded_at]
+    ScheduledJob:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        schedule:
+          type: string
+          description: Cron expression (5-field) or descriptor (@hourly, @every 30m).
+        url:
+          type: string
+        payload:
+          type: object
+          description: Static JSON payload merged into every delivery's data field.
+        enabled:
+          type: boolean
+        has_secret:
+          type: boolean
+        last_run_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_status:
+          type: string
+          enum: [success, failed]
+          nullable: true
+        next_run_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+      required: [id, project_id, name, schedule, url, payload, enabled, has_secret]
+    CreateScheduledJobRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+        schedule:
+          type: string
+          description: 'Cron expression, e.g. "*/15 * * * *", or descriptor like "@every 1h".'
+        url:
+          type: string
+          format: uri
+        secret:
+          type: string
+          description: HMAC key for X-Primora-Signature. Generated when omitted.
+        payload:
+          type: object
+          description: Static JSON payload delivered as data on every run.
+        enabled:
+          type: boolean
+          default: true
+      required: [name, schedule, url]
+    UpdateScheduledJobRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+        schedule:
+          type: string
+        url:
+          type: string
+          format: uri
+        secret:
+          type: string
+          description: Replace the signing secret. Omit to keep the current one.
+        payload:
+          type: object
+        enabled:
+          type: boolean
+    ScheduledJobCreateResponse:
+      allOf:
+        - $ref: "#/components/schemas/ScheduledJob"
+        - type: object
+          properties:
+            secret:
+              type: string
+              description: Plaintext secret — present only when Primora generated it. Store it; it cannot be recovered.
+    ScheduledJobListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScheduledJob"
+      required: [items]
+    ScheduledJobRun:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        job_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [running, success, failed]
+        triggered_by:
+          type: string
+          enum: [schedule, manual]
+        status_code:
+          type: integer
+          nullable: true
+        error:
+          type: string
+        duration_ms:
+          type: integer
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+      required: [id, job_id, status, triggered_by]
+    ScheduledJobRunListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScheduledJobRun"
+      required: [items]

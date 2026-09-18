@@ -28,15 +28,28 @@ import (
 )
 
 const (
-	WebhookEventIssueCreated = "issue.created"
-	WebhookEventDeployMarker = "deploy.marker"
-	WebhookEventTest         = "webhook.test"
+	WebhookEventIssueCreated    = "issue.created"
+	WebhookEventDeployMarker    = "deploy.marker"
+	WebhookEventTest            = "webhook.test"
+	WebhookEventDocumentCreated = "document.created"
+	WebhookEventDocumentUpdated = "document.updated"
+	WebhookEventDocumentDeleted = "document.deleted"
+	WebhookEventObjectCreated   = "object.created"
+	WebhookEventObjectUpdated   = "object.updated"
+	WebhookEventObjectDeleted   = "object.deleted"
 )
 
 var webhookEventTypes = map[string]bool{
-	WebhookEventIssueCreated: true,
-	WebhookEventDeployMarker: true,
-	WebhookEventTest:         true,
+	WebhookEventIssueCreated:    true,
+	WebhookEventDeployMarker:    true,
+	WebhookEventTest:            true,
+	WebhookEventJobRun:          true,
+	WebhookEventDocumentCreated: true,
+	WebhookEventDocumentUpdated: true,
+	WebhookEventDocumentDeleted: true,
+	WebhookEventObjectCreated:   true,
+	WebhookEventObjectUpdated:   true,
+	WebhookEventObjectDeleted:   true,
 }
 
 const webhookMaxAttempts = 3
@@ -436,7 +449,7 @@ func (s *PlatformService) CreateDeployMarker(ctx context.Context, actor *models.
 	if _, err := s.repo.Queries().CreateAuditLog(ctx, newAuditParams(project.OrganizationID, projectID, actor, requestID, "deploy.marker", "deploy_marker", marker.Ref+marker.Version, meta)); err != nil {
 		return DeployMarker{}, err
 	}
-	s.dispatchEvent(ctx, projectID, WebhookEventDeployMarker, map[string]any{
+	s.publishEvent(ctx, projectID, WebhookEventDeployMarker, map[string]any{
 		"version":     marker.Version,
 		"ref":         marker.Ref,
 		"environment": marker.Environment,

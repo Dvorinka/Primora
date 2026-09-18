@@ -8,6 +8,8 @@ import {
   OrganizationInvitation,
   OrganizationMember,
   ProjectMember,
+  ScheduledJob,
+  ScheduledJobRun,
   WebhookDelivery,
 } from "@primora/api-client";
 import type {
@@ -32,6 +34,7 @@ import type {
   TelemetryStats,
   Webhook,
   WebhookCreateResponse,
+  ScheduledJobCreateResponse,
 } from "@primora/api-client";
 
 const STORAGE_KEY = "primora_demo_mode";
@@ -484,6 +487,74 @@ const demoDeliveries: WebhookDelivery[] = [
     created_at: new Date(Date.now() - 26 * 3_600_000).toISOString(),
   },
 ];
+
+const demoJobs: ScheduledJob[] = [
+  {
+    id: "demo-job-1",
+    project_id: "demo-project-1",
+    name: "nightly-rollup",
+    schedule: "0 3 * * *",
+    url: "https://api.example.com/jobs/rollup",
+    payload: { task: "rollup", window: "24h" },
+    enabled: true,
+    has_secret: true,
+    last_run_at: new Date(Date.now() - 7 * 3_600_000).toISOString(),
+    last_status: ScheduledJob.last_status.SUCCESS,
+    next_run_at: new Date(Date.now() + 17 * 3_600_000).toISOString(),
+    created_at: new Date(Date.now() - 14 * 86_400_000).toISOString(),
+  },
+  {
+    id: "demo-job-2",
+    project_id: "demo-project-1",
+    name: "healthcheck-ping",
+    schedule: "@every 15m",
+    url: "https://status.example.com/ping",
+    payload: {},
+    enabled: false,
+    has_secret: false,
+    last_run_at: new Date(Date.now() - 3 * 86_400_000).toISOString(),
+    last_status: ScheduledJob.last_status.FAILED,
+    created_at: new Date(Date.now() - 30 * 86_400_000).toISOString(),
+  },
+];
+
+const demoJobRuns: Record<string, ScheduledJobRun[]> = {
+  "demo-job-1": [
+    {
+      id: "demo-run-1",
+      job_id: "demo-job-1",
+      status: ScheduledJobRun.status.SUCCESS,
+      triggered_by: ScheduledJobRun.triggered_by.SCHEDULE,
+      status_code: 200,
+      duration_ms: 214,
+      started_at: new Date(Date.now() - 7 * 3_600_000).toISOString(),
+      finished_at: new Date(Date.now() - 7 * 3_600_000 + 214).toISOString(),
+    },
+    {
+      id: "demo-run-2",
+      job_id: "demo-job-1",
+      status: ScheduledJobRun.status.FAILED,
+      triggered_by: ScheduledJobRun.triggered_by.MANUAL,
+      status_code: 500,
+      error: "endpoint returned 500",
+      duration_ms: 1024,
+      started_at: new Date(Date.now() - 31 * 3_600_000).toISOString(),
+      finished_at: new Date(Date.now() - 31 * 3_600_000 + 1024).toISOString(),
+    },
+  ],
+  "demo-job-2": [
+    {
+      id: "demo-run-3",
+      job_id: "demo-job-2",
+      status: ScheduledJobRun.status.FAILED,
+      triggered_by: ScheduledJobRun.triggered_by.SCHEDULE,
+      error: "connection refused",
+      duration_ms: 12,
+      started_at: new Date(Date.now() - 3 * 86_400_000).toISOString(),
+      finished_at: new Date(Date.now() - 3 * 86_400_000 + 12).toISOString(),
+    },
+  ],
+};
 
 class DemoService {
   private delay(ms = 250) {
@@ -1231,6 +1302,76 @@ class DemoService {
     };
     demoDeliveries.unshift(delivery);
     return delivery;
+  }
+
+  async listScheduledJobs(): Promise<{ items: ScheduledJob[] }> {
+    await this.delay();
+    return { items: demoJobs };
+  }
+
+  async createScheduledJob(data: {
+    requestBody?: { name?: string; schedule?: string; url?: string; secret?: string; payload?: Record<string, unknown>; enabled?: boolean };
+  }): Promise<ScheduledJobCreateResponse> {
+    await this.delay();
+    const generated = !data.requestBody?.secret;
+    const job: ScheduledJob = {
+      id: `demo-job-${demoJobs.length + 1}`,
+      project_id: "demo-project-1",
+      name: data.requestBody?.name ?? "untitled",
+      schedule: data.requestBody?.schedule ?? "0 * * * *",
+      url: data.requestBody?.url ?? "https://example.com",
+      payload: (data.requestBody?.payload ?? {}) as Record<string, never>,
+      enabled: data.requestBody?.enabled ?? true,
+      has_secret: true,
+      last_status: null,
+      next_run_at: new Date(Date.now() + 3_600_000).toISOString(),
+      created_at: new Date().toISOString(),
+    };
+    demoJobs.push(job);
+    return { ...job, secret: generated ? "demo-secret-" + Math.random().toString(36).slice(2, 18) : undefined };
+  }
+
+  async updateScheduledJob(data: { jobId?: string; requestBody?: Partial<ScheduledJob> }): Promise<ScheduledJob> {
+    await this.delay();
+    const job = demoJobs.find((j) => j.id === data.jobId);
+    if (job && data.requestBody) {
+      Object.assign(job, data.requestBody);
+    }
+    return job as ScheduledJob;
+  }
+
+  async deleteScheduledJob(data: { jobId?: string }) {
+    await this.delay();
+    const idx = demoJobs.findIndex((j) => j.id === data.jobId);
+    if (idx >= 0) demoJobs.splice(idx, 1);
+    return {};
+  }
+
+  async listScheduledJobRuns(data: { jobId?: string; limit?: number }): Promise<{ items: ScheduledJobRun[] }> {
+    await this.delay();
+    return { items: (demoJobRuns[data.jobId ?? ""] ?? []).slice(0, data.limit ?? 50) };
+  }
+
+  async runScheduledJob(data: { jobId?: string }): Promise<ScheduledJobRun> {
+    await this.delay();
+    const jobID = data.jobId ?? "demo-job-1";
+    const run: ScheduledJobRun = {
+      id: `demo-run-${Date.now()}`,
+      job_id: jobID,
+      status: ScheduledJobRun.status.SUCCESS,
+      triggered_by: ScheduledJobRun.triggered_by.MANUAL,
+      status_code: 200,
+      duration_ms: Math.floor(Math.random() * 800) + 50,
+      started_at: new Date().toISOString(),
+      finished_at: new Date().toISOString(),
+    };
+    (demoJobRuns[jobID] ??= []).unshift(run);
+    const job = demoJobs.find((j) => j.id === jobID);
+    if (job) {
+      job.last_run_at = run.started_at;
+      job.last_status = ScheduledJob.last_status.SUCCESS;
+    }
+    return run;
   }
 
   async createDeployMarker(data: {

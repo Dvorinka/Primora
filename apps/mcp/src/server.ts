@@ -3,6 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 
 import {
+  AutomationService,
   CreateBucketRequest,
   IntegrationsService,
   OpenAPI,
@@ -574,7 +575,20 @@ server.registerTool(
 
 const webhookRef = z.string().describe("Webhook id (see primora_list_webhooks)");
 const webhookEvents = z
-  .array(z.enum(["issue.created", "deploy.marker", "webhook.test"]))
+  .array(
+    z.enum([
+      "issue.created",
+      "deploy.marker",
+      "webhook.test",
+      "job.run",
+      "document.created",
+      "document.updated",
+      "document.deleted",
+      "object.created",
+      "object.updated",
+      "object.deleted",
+    ]),
+  )
   .describe("Event filter — empty means every event");
 
 server.registerTool(
@@ -726,6 +740,140 @@ server.registerTool(
           requestBody: { version, ref, environment, note },
         }),
       );
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+/* ---------------------------------------------------------- */
+/* automation — scheduled jobs                                */
+/* ---------------------------------------------------------- */
+
+const jobRef = z.string().describe("Scheduled job id (see primora_list_jobs)");
+
+server.registerTool(
+  "primora_list_jobs",
+  {
+    description: "List scheduled jobs for a project — cron schedule, target URL, last/next run",
+    inputSchema: { projectId: z.string().optional() },
+  },
+  async ({ projectId: p }) => {
+    try {
+      return ok(await AutomationService.listScheduledJobs({ projectId: projectId(p) }));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
+  "primora_create_job",
+  {
+    description:
+      "Create a scheduled job — cron expression or @descriptor, signed POST to url. Omit secret to generate one (returned once)",
+    inputSchema: {
+      name: z.string(),
+      schedule: z
+        .string()
+        .describe('Cron (5-field, e.g. "*/15 * * * *") or descriptor: @hourly, @daily, @every 30m'),
+      url: z.string().describe("HTTPS endpoint (http allowed only for private/self-hosted targets)"),
+      secret: z.string().optional(),
+      payload: z.record(z.unknown()).optional().describe("Static JSON payload merged into every delivery"),
+      enabled: z.boolean().optional(),
+      projectId: z.string().optional(),
+    },
+  },
+  async ({ name, schedule, url, secret, payload, enabled, projectId: p }) => {
+    try {
+      return ok(
+        await AutomationService.createScheduledJob({
+          projectId: projectId(p),
+          requestBody: { name, schedule, url, secret, payload, enabled },
+        }),
+      );
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
+  "primora_update_job",
+  {
+    description: "Update a scheduled job — name, schedule, url, payload, enabled flag, or rotate the secret",
+    inputSchema: {
+      jobId: jobRef,
+      name: z.string().optional(),
+      schedule: z.string().optional(),
+      url: z.string().optional(),
+      secret: z.string().optional(),
+      payload: z.record(z.unknown()).optional(),
+      enabled: z.boolean().optional(),
+      projectId: z.string().optional(),
+    },
+  },
+  async ({ jobId, name, schedule, url, secret, payload, enabled, projectId: p }) => {
+    try {
+      return ok(
+        await AutomationService.updateScheduledJob({
+          projectId: projectId(p),
+          jobId,
+          requestBody: { name, schedule, url, secret, payload, enabled },
+        }),
+      );
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
+  "primora_delete_job",
+  {
+    description: "Delete a scheduled job and stop future runs",
+    inputSchema: { jobId: jobRef, projectId: z.string().optional() },
+  },
+  async ({ jobId, projectId: p }) => {
+    try {
+      await AutomationService.deleteScheduledJob({ projectId: projectId(p), jobId });
+      return ok({ deleted: jobId });
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
+  "primora_list_job_runs",
+  {
+    description: "Run history for a scheduled job — status, HTTP code, duration, errors",
+    inputSchema: {
+      jobId: jobRef,
+      limit: z.number().int().optional(),
+      projectId: z.string().optional(),
+    },
+  },
+  async ({ jobId, limit, projectId: p }) => {
+    try {
+      return ok(
+        await AutomationService.listScheduledJobRuns({ projectId: projectId(p), jobId, limit }),
+      );
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
+  "primora_run_job",
+  {
+    description: "Trigger a manual run of a scheduled job now",
+    inputSchema: { jobId: jobRef, projectId: z.string().optional() },
+  },
+  async ({ jobId, projectId: p }) => {
+    try {
+      return ok(await AutomationService.runScheduledJob({ projectId: projectId(p), jobId }));
     } catch (e) {
       return fail(e);
     }

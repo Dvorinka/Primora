@@ -78,9 +78,11 @@ func (m AuthMiddleware) ResolveActor() gin.HandlerFunc {
 			apiKey = strings.TrimSpace(c.GetHeader("X-Primora-Key"))
 		}
 		authz := strings.TrimSpace(c.GetHeader("Authorization"))
-		// EventSource cannot set headers — the SSE stream accepts credentials
+		// EventSource cannot set headers — the SSE streams accept credentials
 		// as query params instead.
-		if apiKey == "" && authz == "" && strings.HasSuffix(c.Request.URL.Path, "/telemetry/stream") {
+		sseStream := strings.HasSuffix(c.Request.URL.Path, "/telemetry/stream") ||
+			strings.HasSuffix(c.Request.URL.Path, "/realtime/stream")
+		if apiKey == "" && authz == "" && sseStream {
 			apiKey = strings.TrimSpace(c.Query("api_key"))
 			if apiKey == "" {
 				if t := strings.TrimSpace(c.Query("token")); t != "" {
