@@ -2,7 +2,7 @@
 
 All notable changes to Primora. Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [0.6.0] - 2026-09-21
 
 ### Added
 
@@ -24,6 +24,12 @@ All notable changes to Primora. Format follows [Keep a Changelog](https://keepac
 - **Managed platform connections removed** — `platform-postgres`/`platform-dragonfly` seeds carried the backend's own `DATABASE_URL`/`DRAGONFLY_URL` into every project, where any member could run arbitrary queries through DBX against `core` tables. The seeds are gone and migration 00008 deletes existing managed rows. Operators keep direct `psql`/`redis-cli` access.
 - **Connection passwords encrypted at rest** — `core.db_connections.config.password` is now AES-256-GCM sealed (`enc:v1:` marker) via `PRIMORA_ENCRYPTION_KEY`; decrypted only when registering the connection with DBX. Migration 00008 strips pre-existing plaintext passwords.
 - **DBX naming** — connection names now prefix the full project UUID; the previous 8-hex prefix could collide across projects and alias the wrong credentials.
+
+### Infrastructure
+
+- **One-line installer** — `install.sh` (`curl | bash`) fetches the compose files, generates secrets, pulls prebuilt GHCR images, and falls back to a source-tarball build when packages aren't published.
+- **CI image pipeline** — per-app buildx matrix with GHA layer cache, container-contents smoke checks, Trivy scans, `docker compose config` validation, and `edge`/`sha-*` GHCR publishing on master.
+- **Fixed release image pushes** — tags were rendered with the mixed-case owner (`ghcr.io/Dvorinka/...`), which GHCR rejects; owner is now lowercased, unblocking tagged releases.
 
 ## [0.5.0] - 2026-09-16
 
