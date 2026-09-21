@@ -182,7 +182,12 @@ jobs:
       - name: Create release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "$VERSION" --title "$VERSION" --notes-file notes.md dist-release/*
+        # Desktop artifacts extract to nested dirs (appimage/, deb/, ...) —
+        # a bare glob hands gh a directory and the upload dies mid-flight.
+        run: |
+          mapfile -t files < <(find dist-release -type f)
+          [ ${#files[@]} -gt 0 ] || { echo "no release assets found"; exit 1; }
+          gh release create "$VERSION" --title "$VERSION" --notes-file notes.md "${files[@]}"
 
   npm-publish:
     name: Publish to npm
