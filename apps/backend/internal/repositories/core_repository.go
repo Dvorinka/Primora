@@ -56,3 +56,35 @@ func (r *CoreRepository) GetAPIKeyByPrefix(ctx context.Context, prefix string) (
 func (r *CoreRepository) TouchAPIKey(ctx context.Context, id uuid.UUID) error {
 	return r.queries.TouchAPIKey(ctx, id)
 }
+
+// Auth-user lookups hit the better-auth tables in the public schema. They are
+// raw queries on purpose: sqlc only knows the core schema, and a view would
+// break when the backend migrates before the auth service has created its
+// tables.
+func (r *CoreRepository) GetAuthUserRole(ctx context.Context, authSubject string) (string, error) {
+	var role string
+	err := r.pool.QueryRow(ctx, `select coalesce(role, 'user') from public."user" where id = $1`, authSubject).Scan(&role)
+	return role, err
+}
+
+func (r *CoreRepository) CountAuthUsers(ctx context.Context) (int64, error) {
+	var n int64
+	err := r.pool.QueryRow(ctx, `select count(*) from public."user"`).Scan(&n)
+	return n, err
+}
+
+func (r *CoreRepository) GetSetting(ctx context.Context, key string) (db.GetSettingRow, error) {
+	return r.queries.GetSetting(ctx, key)
+}
+
+func (r *CoreRepository) ListSettings(ctx context.Context) ([]db.ListSettingsRow, error) {
+	return r.queries.ListSettings(ctx)
+}
+
+func (r *CoreRepository) UpsertSetting(ctx context.Context, params db.UpsertSettingParams) (db.CoreSetting, error) {
+	return r.queries.UpsertSetting(ctx, params)
+}
+
+func (r *CoreRepository) DeleteSetting(ctx context.Context, key string) error {
+	return r.queries.DeleteSetting(ctx, key)
+}

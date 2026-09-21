@@ -4,6 +4,7 @@ import {
   CreateInvitationRequest,
   CreateOrganizationRequest,
   HealthService,
+  InstanceService,
   OrganizationsService,
   PlatformService,
   ProjectsService,
@@ -18,6 +19,7 @@ import {
   CopyBucketObjectRequest,
   type Bucket,
   type BucketObject,
+  type InstanceSetting,
   type OrganizationSummary,
   type ProjectSummary,
 } from "@primora/api-client";
@@ -141,6 +143,7 @@ export default function App() {
   const [memberMessage, setMemberMessage] = createSignal("");
   const [apiKeySecret, setApiKeySecret] = createSignal("");
   const [collectionsMessage, setCollectionsMessage] = createSignal("");
+  const [instanceMessage, setInstanceMessage] = createSignal("");
 
   const [selectedOrganizationID, setSelectedOrganizationID] = createSignal<string | undefined>();
   const [selectedProjectID, setSelectedProjectID] = createSignal<string | undefined>();
@@ -237,6 +240,47 @@ export default function App() {
     }
   });
 
+  // Public instance state — fetched before login so the auth page can hide
+  // sign-up/social options the instance does not offer.
+  const [instancePublic] = createResource(async () => {
+    if (isDemo) return { signup_enabled: true, bootstrap_required: false, social_providers: [] };
+    try {
+      return await InstanceService.getInstancePublic();
+    } catch {
+      // Endpoint unreachable (backend down or pre-migration): keep sign-in
+      // visible rather than lock the page out.
+      return undefined;
+    }
+  });
+
+  const canSignUp = createMemo(() => {
+    const cfg = instancePublic();
+    if (!cfg) return true; // unknown — let the backend enforce
+    return cfg.bootstrap_required || cfg.signup_enabled;
+  });
+  const enabledSocialProviders = createMemo(() => instancePublic()?.social_providers ?? []);
+
+  const isPlatformAdmin = createMemo(() => {
+    const role = (session()?.data?.user as { role?: string } | undefined)?.role;
+    return isDemo || role === "admin";
+  });
+
+  const [instanceSettings, { refetch: refetchInstanceSettings }] = createResource(
+    () => (activeView() === "settings" && isPlatformAdmin() && session()?.data ? true : null),
+    async (): Promise<InstanceSetting[]> => {
+      if (isDemo) return demoService.listInstanceSettings();
+      return (await InstanceService.listInstanceSettings()).settings;
+    },
+  );
+
+  // Clamp the auth mode to what the instance permits.
+  createEffect(() => {
+    const cfg = instancePublic();
+    if (!cfg || isDemo) return;
+    if (cfg.bootstrap_required) setMode("sign-up");
+    else if (!cfg.signup_enabled) setMode("sign-in");
+  });
+
   const [platform, { refetch: refetchPlatform }] = createResource(
     () => session()?.data?.user.id ?? null,
     async () => {
@@ -312,6 +356,7 @@ export default function App() {
   const storagePending = createMemo(() => isPendingPrefix("storage-"));
   const collectionPending = createMemo(() => isPendingPrefix("collection-"));
   const documentPending = createMemo(() => isPendingPrefix("document-"));
+  const instancePending = createMemo(() => isPendingPrefix("instance-"));
 
   const [apiKeys, { refetch: refetchAPIKeys }] = createResource(
     () => activeProject()?.id ?? null,
@@ -1431,6 +1476,32 @@ export default function App() {
     });
   }
 
+  async function saveInstanceSetting(key: string, value: unknown) {
+    await runPending("instance-", async () => {
+      setInstanceMessage("");
+      try {
+        await InstanceService.updateInstanceSetting({ key, requestBody: { value } });
+        await refetchInstanceSettings();
+        setInstanceMessage("Setting saved.");
+      } catch (error) {
+        setInstanceMessage(getErrorMessage(error, "Failed to save setting"));
+      }
+    });
+  }
+
+  async function resetInstanceSetting(key: string) {
+    await runPending("instance-", async () => {
+      setInstanceMessage("");
+      try {
+        await InstanceService.deleteInstanceSetting({ key });
+        await refetchInstanceSettings();
+        setInstanceMessage(`"${key}" reverted to its env/default value.`);
+      } catch (error) {
+        setInstanceMessage(getErrorMessage(error, "Failed to reset setting"));
+      }
+    });
+  }
+
   async function startSocial(provider: "github" | "google" | "discord" | "microsoft") {
     if (isDemo) {
       setAuthMessage("Demo mode is active — social auth is simulated.");
@@ -1500,6 +1571,9 @@ export default function App() {
           name={name()}
           authMessage={authMessage()}
           authPending={authPending()}
+          canSignUp={canSignUp()}
+          bootstrapRequired={instancePublic()?.bootstrap_required ?? false}
+          enabledProviders={enabledSocialProviders()}
           onModeChange={setMode}
           onEmailChange={setEmail}
           onPasswordChange={setPassword}
@@ -1816,6 +1890,12 @@ export default function App() {
 
           <Show when={activeView() === "settings"}>
             <SettingsPage
+              isPlatformAdmin={isPlatformAdmin()}
+              instanceSettings={instanceSettings()}
+              instancePending={instancePending() || instanceSettings.loading}
+              instanceMessage={instanceMessage()}
+              onSaveInstanceSetting={(key, value) => void saveInstanceSetting(key, value)}
+              onResetInstanceSetting={(key) => void resetInstanceSetting(key)}
               apiKeys={apiKeys()}
               apiKeyName={apiKeyName()}
               apiKeyScopes={apiKeyScopes()}

@@ -18,6 +18,12 @@ interface LoginPageProps {
   name: string;
   authMessage: string;
   authPending: boolean;
+  /** False when the instance closed public sign-up (and bootstrap is done). */
+  canSignUp: boolean;
+  /** True while no user exists — the first sign-up becomes instance admin. */
+  bootstrapRequired: boolean;
+  /** Social providers the instance offers (empty on self-hosted). */
+  enabledProviders: string[];
   onModeChange: (mode: AuthMode) => void;
   onEmailChange: (value: string) => void;
   onPasswordChange: (value: string) => void;
@@ -35,7 +41,9 @@ const socialProviders: { id: Provider; label: string; logo: (p: { class?: string
 ];
 
 export function LoginPage(props: LoginPageProps) {
-  const isSignIn = () => props.mode === "sign-in";
+  const isSignIn = () => !props.bootstrapRequired && props.mode === "sign-in";
+  const providers = () =>
+    socialProviders.filter((p) => props.enabledProviders.includes(p.id));
 
   return (
     <div class="auth-wrap">
@@ -70,36 +78,47 @@ export function LoginPage(props: LoginPageProps) {
               <span class="font-semibold tracking-tight" style="color: var(--text-1)">Primora</span>
             </div>
             <h1 style="font-size: 1.25rem; letter-spacing: -0.02em;">
-              {isSignIn() ? "Sign in" : "Create your account"}
+              {isSignIn() ? "Sign in" : props.bootstrapRequired ? "Create the admin account" : "Create your account"}
             </h1>
             <p class="mt-1" style="font-size: 0.8125rem; color: var(--text-3)">
               {isSignIn()
                 ? "Access your workspace"
-                : "One account for the whole workspace"}
+                : props.bootstrapRequired
+                  ? "The first account becomes the instance administrator"
+                  : "One account for the whole workspace"}
             </p>
           </div>
 
-          {/* mode toggle */}
-          <div class="seg mb-6" role="tablist" aria-label="Authentication mode">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={isSignIn()}
-              class={`seg-item ${isSignIn() ? "active" : ""}`}
-              onClick={() => props.onModeChange("sign-in")}
-            >
-              Sign in
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={!isSignIn()}
-              class={`seg-item ${!isSignIn() ? "active" : ""}`}
-              onClick={() => props.onModeChange("sign-up")}
-            >
-              Sign up
-            </button>
-          </div>
+          {/* mode toggle — hidden during bootstrap; sign-up tab hidden when closed */}
+          <Show when={!props.bootstrapRequired}>
+            <div class="seg mb-6" role="tablist" aria-label="Authentication mode">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={isSignIn()}
+                class={`seg-item ${isSignIn() ? "active" : ""}`}
+                onClick={() => props.onModeChange("sign-in")}
+              >
+                Sign in
+              </button>
+              <Show when={props.canSignUp}>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={!isSignIn()}
+                  class={`seg-item ${!isSignIn() ? "active" : ""}`}
+                  onClick={() => props.onModeChange("sign-up")}
+                >
+                  Sign up
+                </button>
+              </Show>
+            </div>
+          </Show>
+          <Show when={props.bootstrapRequired}>
+            <div class="message message-info mb-6">
+              This instance has no users yet. Create the first account — it becomes the administrator.
+            </div>
+          </Show>
 
           <form onSubmit={props.onSubmit} class="space-y-4">
             <Show when={!isSignIn()}>
@@ -143,29 +162,43 @@ export function LoginPage(props: LoginPageProps) {
             >
               <Show
                 when={props.authPending}
-                fallback={isSignIn() ? "Sign in" : "Create account"}
+                fallback={
+                  isSignIn()
+                    ? "Sign in"
+                    : props.bootstrapRequired
+                      ? "Create admin account"
+                      : "Create account"
+                }
               >
                 <span class="spinner" /> Working…
               </Show>
             </button>
           </form>
 
-          <div class="divider my-6">or continue with</div>
+          <Show when={!props.canSignUp && !props.bootstrapRequired}>
+            <p class="mt-4 text-center" style="font-size: 0.8125rem; color: var(--text-3)">
+              Public sign-up is closed on this instance.
+            </p>
+          </Show>
 
-          <div class="grid grid-cols-4 gap-2">
-            {socialProviders.map((p) => (
-              <button
-                type="button"
-                class="btn btn-secondary btn-icon w-full"
-                onClick={() => props.onSocial(p.id)}
-                disabled={props.authPending}
-                title={`Continue with ${p.label}`}
-                aria-label={`Continue with ${p.label}`}
-              >
-                <p.logo class="w-4 h-4" />
-              </button>
-            ))}
-          </div>
+          <Show when={providers().length > 0}>
+            <div class="divider my-6">or continue with</div>
+
+            <div class={`grid gap-2 ${providers().length === 1 ? "grid-cols-1" : providers().length === 2 ? "grid-cols-2" : "grid-cols-4"}`}>
+              {providers().map((p) => (
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-icon w-full"
+                  onClick={() => props.onSocial(p.id)}
+                  disabled={props.authPending}
+                  title={`Continue with ${p.label}`}
+                  aria-label={`Continue with ${p.label}`}
+                >
+                  <p.logo class="w-4 h-4" />
+                </button>
+              ))}
+            </div>
+          </Show>
 
           <Show when={props.onTryDemo}>
             <div class="divider my-6" />

@@ -37,11 +37,24 @@ type AuthMiddleware struct {
 	Redis      *redis.Client
 	Verifier   *auth.Verifier
 	RateLimits RateLimitConfig
+	// RateLimitResolver overrides RateLimits with live instance settings when
+	// set — it resolves "user" and "api_key" limits per request (cached).
+	RateLimitResolver func(ctx context.Context, scope string) int
 }
 
 type RateLimitConfig struct {
 	APIKeyPerMinute int
 	UserPerMinute   int
+}
+
+func (m AuthMiddleware) rateLimit(ctx context.Context, scope string, fallback int) int {
+	if m.RateLimitResolver == nil {
+		return fallback
+	}
+	if v := m.RateLimitResolver(ctx, scope); v >= 0 {
+		return v
+	}
+	return fallback
 }
 
 func RequestID() gin.HandlerFunc {
@@ -105,7 +118,7 @@ func (m AuthMiddleware) ResolveActor() gin.HandlerFunc {
 				if actor.UserID != nil {
 					userIdentity = actor.UserID.String()
 				}
-				if !m.enforceRateLimit(c, "user", userIdentity, m.RateLimits.UserPerMinute, "User rate limit exceeded") {
+				if !m.enforceRateLimit(c, "user", userIdentity, m.rateLimit(c.Request.Context(), "user", m.RateLimits.UserPerMinute), "User rate limit exceeded") {
 					return
 				}
 				c.Set(actorKey, actor)
@@ -123,7 +136,7 @@ func (m AuthMiddleware) ResolveActor() gin.HandlerFunc {
 				apperrors.Abort(c, http.StatusUnauthorized, "invalid_api_key", err.Error())
 				return
 			}
-			if !m.enforceRateLimit(c, "apikey", actor.APIKeyPrefix, m.RateLimits.APIKeyPerMinute, "API key rate limit exceeded") {
+			if !m.enforceRateLimit(c, "apikey", actor.APIKeyPrefix, m.rateLimit(c.Request.Context(), "api_key", m.RateLimits.APIKeyPerMinute), "API key rate limit exceeded") {
 				return
 			}
 			if need := requiredAPIKeyScope(c.Request.Method, c.Request.URL.Path); !actor.HasScope(need) {

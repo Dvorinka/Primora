@@ -1,50 +1,53 @@
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { admin, jwt } from "better-auth/plugins";
 import { getMigrations } from "better-auth/db/migration";
-import { Pool } from "pg";
 
+import { authPool } from "./db.js";
 import { sendTransactionalEmail } from "./mail.js";
+import { getBoolSetting } from "./settings.js";
 import { env } from "./env.js";
 
-export const authPool = new Pool({
-  connectionString: env.DATABASE_URL,
-});
-
-const socialProviders = {
-  ...(env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET
-    ? {
-        github: {
-          clientId: env.GITHUB_CLIENT_ID,
-          clientSecret: env.GITHUB_CLIENT_SECRET,
-        },
-      }
-    : {}),
-  ...(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
-    ? {
-        google: {
-          clientId: env.GOOGLE_CLIENT_ID,
-          clientSecret: env.GOOGLE_CLIENT_SECRET,
-        },
-      }
-    : {}),
-  ...(env.DISCORD_CLIENT_ID && env.DISCORD_CLIENT_SECRET
-    ? {
-        discord: {
-          clientId: env.DISCORD_CLIENT_ID,
-          clientSecret: env.DISCORD_CLIENT_SECRET,
-        },
-      }
-    : {}),
-  ...(env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET
-    ? {
-        microsoft: {
-          clientId: env.MICROSOFT_CLIENT_ID,
-          clientSecret: env.MICROSOFT_CLIENT_SECRET,
-          tenantId: env.MICROSOFT_TENANT_ID,
-        },
-      }
-    : {}),
-};
+// OAuth providers exist only on the managed tier (PRIMORA_MANAGED=true).
+// Self-hosted instances are email/password only — the env keys are ignored
+// unless the managed flag is set.
+const socialProviders = env.PRIMORA_MANAGED
+  ? {
+      ...(env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET
+        ? {
+            github: {
+              clientId: env.GITHUB_CLIENT_ID,
+              clientSecret: env.GITHUB_CLIENT_SECRET,
+            },
+          }
+        : {}),
+      ...(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
+        ? {
+            google: {
+              clientId: env.GOOGLE_CLIENT_ID,
+              clientSecret: env.GOOGLE_CLIENT_SECRET,
+            },
+          }
+        : {}),
+      ...(env.DISCORD_CLIENT_ID && env.DISCORD_CLIENT_SECRET
+        ? {
+            discord: {
+              clientId: env.DISCORD_CLIENT_ID,
+              clientSecret: env.DISCORD_CLIENT_SECRET,
+            },
+          }
+        : {}),
+      ...(env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET
+        ? {
+            microsoft: {
+              clientId: env.MICROSOFT_CLIENT_ID,
+              clientSecret: env.MICROSOFT_CLIENT_SECRET,
+              tenantId: env.MICROSOFT_TENANT_ID,
+            },
+          }
+        : {}),
+    }
+  : {};
 
 export const auth = betterAuth({
   appName: "Primora",
@@ -61,6 +64,30 @@ export const auth = betterAuth({
         text: `Reset your Primora password: ${url}`,
         html: `<p>Reset your Primora password.</p><p><a href="${url}">Reset password</a></p>`,
       });
+    },
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        // Gates only the public sign-up endpoint. Users created through the
+        // admin plugin or OAuth callbacks take different paths and pass.
+        async before(user, ctx) {
+          if (ctx?.path !== "/sign-up/email") return;
+          const { rows } = await authPool.query<{ n: number }>(
+            `select count(*)::int as n from "user"`,
+          );
+          if (rows[0].n === 0) {
+            // Bootstrap: the first public signup becomes the instance admin.
+            return { data: { ...user, role: "admin" } };
+          }
+          const enabled = await getBoolSetting("auth.signup_enabled", env.SIGNUP_ENABLED);
+          if (!enabled) {
+            throw new APIError("FORBIDDEN", {
+              message: "Sign-up is disabled on this instance.",
+            });
+          }
+        },
+      },
     },
   },
   emailVerification: {

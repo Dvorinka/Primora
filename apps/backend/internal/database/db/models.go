@@ -336,6 +336,14 @@ type CoreScheduledJobRun struct {
 	FinishedAt  pgtype.Timestamptz `json:"finished_at"`
 }
 
+type CoreSetting struct {
+	Key       string             `json:"key"`
+	Value     []byte             `json:"value"`
+	Secret    bool               `json:"secret"`
+	UpdatedBy *string            `json:"updated_by"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
 type CoreUser struct {
 	ID            uuid.UUID          `json:"id"`
 	AuthSubject   string             `json:"auth_subject"`

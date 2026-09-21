@@ -2,23 +2,33 @@ import nodemailer from "nodemailer";
 import { Resend } from "resend";
 
 import { env } from "./env.js";
+import { getStringSetting } from "./settings.js";
 
-const resend = env.RESEND_API_KEY ? new Resend(env.RESEND_API_KEY) : null;
-
-const transporter =
-  !resend && env.SMTP_HOST
-    ? nodemailer.createTransport({
-        host: env.SMTP_HOST,
-        port: env.SMTP_PORT,
-        secure: false,
-        auth: env.SMTP_USER
-          ? {
-              user: env.SMTP_USER,
-              pass: env.SMTP_PASSWORD,
-            }
-          : undefined,
-      })
-    : null;
+// Mail config resolves per send: in-app setting → env var. This keeps
+// SMTP/Resend editable from the dashboard without restarting the service.
+async function resolveMailConfig() {
+  const from = (await getStringSetting("mail.from", env.MAIL_FROM))!;
+  const resendApiKey = await getStringSetting("mail.resend_api_key", env.RESEND_API_KEY);
+  if (resendApiKey) {
+    return { from, resendApiKey } as const;
+  }
+  const host = await getStringSetting("mail.smtp_host", env.SMTP_HOST);
+  const portRaw = await getStringSetting("mail.smtp_port", String(env.SMTP_PORT));
+  const user = await getStringSetting("mail.smtp_user", env.SMTP_USER);
+  const pass = await getStringSetting("mail.smtp_password", env.SMTP_PASSWORD);
+  const secureRaw = await getStringSetting("mail.smtp_secure", String(env.SMTP_SECURE));
+  return {
+    from,
+    smtp: host
+      ? {
+          host,
+          port: Number(portRaw) || 1025,
+          secure: secureRaw === "true",
+          auth: user ? { user, pass } : undefined,
+        }
+      : undefined,
+  } as const;
+}
 
 export async function sendTransactionalEmail(input: {
   to: string;
@@ -26,9 +36,12 @@ export async function sendTransactionalEmail(input: {
   text: string;
   html: string;
 }) {
-  if (resend) {
+  const cfg = await resolveMailConfig();
+
+  if ("resendApiKey" in cfg && cfg.resendApiKey) {
+    const resend = new Resend(cfg.resendApiKey);
     await resend.emails.send({
-      from: env.MAIL_FROM,
+      from: cfg.from,
       to: [input.to],
       subject: input.subject,
       text: input.text,
@@ -37,16 +50,15 @@ export async function sendTransactionalEmail(input: {
     return;
   }
 
-  if (!transporter) {
+  if (!("smtp" in cfg) || !cfg.smtp) {
     throw new Error("No mail transport configured for auth service.");
   }
 
-  await transporter.sendMail({
-    from: env.MAIL_FROM,
+  await nodemailer.createTransport(cfg.smtp).sendMail({
+    from: cfg.from,
     to: input.to,
     subject: input.subject,
     text: input.text,
     html: input.html,
   });
 }
-
