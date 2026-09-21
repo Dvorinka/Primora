@@ -19,11 +19,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check tag matches package version
+      - name: Check tag matches package versions
         run: |
           PKG=$(node -p "require('./package.json').version")
-          if [ "v$PKG" != "$VERSION" ]; then
-            echo "tag $VERSION does not match package.json version $PKG"
+          DESKTOP_PKG=$(node -p "require('./apps/desktop/package.json').version")
+          TAURI=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")
+          if [ "v$PKG" != "$VERSION" ] || [ "$DESKTOP_PKG" != "$PKG" ] || [ "$TAURI" != "$PKG" ]; then
+            echo "tag $VERSION mismatch: root=$PKG desktop=$DESKTOP_PKG tauri=$TAURI"
             exit 1
           fi
 
@@ -153,10 +155,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # build-push-action uploads "*.dockerbuild" metadata artifacts that
+      # download-artifact cannot extract — match only the real artifacts.
       - uses: actions/download-artifact@v4
         with:
-          pattern: "*"
+          pattern: "binaries-*"
           merge-multiple: true
+          path: dist-release
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "desktop-*"
+          merge-multiple: true
+          path: dist-release
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-tarballs
           path: dist-release
       - name: Extract changelog section
         run: |
