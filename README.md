@@ -21,11 +21,30 @@ Browser ──▶ Nginx ──▶ Frontend (SolidJS + Vite)
 - **Generated client** — the TypeScript client is generated from `apps/backend/openapi/openapi.yaml`, so the API contract is the source of truth.
 - **Demo mode** — a fully client-side workspace (`?demo=true` or `VITE_DEMO_MODE=true`) for trying the UI without a backend.
 
-## Quick start (Docker)
+## Install
 
 Prerequisites: Docker with the Compose plugin.
 
+### One-liner (no clone)
+
 ```bash
+curl -fsSL https://raw.githubusercontent.com/Dvorinka/Primora/master/install.sh | bash
+```
+
+Installs into `./primora`, generates secrets, and starts the stack on port 80.
+Non-interactive — configure with env vars:
+
+```bash
+DOMAIN=example.com NGINX_PORT=8080 PRIMORA_DIR=/opt/primora bash install.sh
+```
+
+The installer pulls prebuilt images from GHCR when they are published;
+otherwise it downloads the source tarball and builds locally.
+
+### From a clone
+
+```bash
+git clone https://github.com/Dvorinka/Primora.git && cd Primora
 ./scripts/setup.sh          # creates .env, generates secrets, starts the stack
 ```
 
@@ -33,12 +52,30 @@ or manually:
 
 ```bash
 cp .env.example .env        # fill JWT_SECRET and BETTER_AUTH_SECRET
-docker compose up -d --build
+docker compose up -d        # builds the three app images from source
 ```
 
-Then open `http://localhost`. Mailpit is at `http://localhost/mailpit/` for local email.
+To run published images instead of building:
+
+```bash
+docker pull ghcr.io/dvorinka/primora-{backend,auth,frontend}:latest
+docker compose up -d --no-build
+```
+
+Then open `http://localhost`. For local email capture, add the dev overlay
+(`-f docker-compose.dev.yml`) and Mailpit is at `http://localhost/mailpit/`.
 
 If ports `5432` or `6379` are already in use on your machine, set `POSTGRES_PORT` and `DRAGONFLY_PORT` in `.env` — only the host bindings change.
+
+### Useful commands
+
+```bash
+docker compose ps                  # service status + health
+docker compose logs -f backend     # follow one service
+docker compose pull && docker compose up -d   # update to latest release
+docker compose down                # stop (data persists in volumes)
+docker compose down -v             # stop and delete all data
+```
 
 ## Verification
 

@@ -29,6 +29,7 @@ services:
     restart: unless-stopped
 
   backend:
+    image: ghcr.io/dvorinka/primora-backend:latest
     build:
       context: .
       dockerfile: apps/backend/Dockerfile
@@ -56,6 +57,7 @@ services:
     restart: unless-stopped
 
   auth:
+    image: ghcr.io/dvorinka/primora-auth:latest
     build:
       context: .
       dockerfile: apps/auth/Dockerfile
@@ -81,6 +83,7 @@ services:
     restart: unless-stopped
 
   frontend:
+    image: ghcr.io/dvorinka/primora-frontend:latest
     build:
       context: .
       dockerfile: apps/frontend/Dockerfile
