@@ -130,14 +130,16 @@ jobs:
             frontend) docker run --rm --entrypoint sh primora-frontend:test -c 'test -f /usr/share/nginx/html/index.html' ;;
           esac
 
+      # Trivy via its container image — the action's binary installer is
+      # rate-limited by unauthenticated GitHub API calls on shared runners.
       - name: Scan ${{ matrix.app }} image
-        uses: aquasecurity/trivy-action@v0.33.1
-        with:
-          image-ref: primora-${{ matrix.app }}:test
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
-          exit-code: '0'
-          format: table
+        run: >-
+          docker run --rm
+          -v /var/run/docker.sock:/var/run/docker.sock
+          aquasec/trivy:0.65.0
+          image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 0
+          --format table
+          primora-${{ matrix.app }}:test
 
   docker-publish:
     name: Publish edge images
