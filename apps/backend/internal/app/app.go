@@ -92,6 +92,7 @@ func Bootstrap(ctx context.Context) (*App, error) {
 		return nil, fmt.Errorf("encryption key: %w", err)
 	}
 	platform := services.NewPlatformService(repo, store, services.NewMailer(cfg), os.Getenv("VITE_APP_URL"), dbxClient, encryptor, logger)
+	settings := services.NewSettingsService(repo, encryptor)
 
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -126,10 +127,12 @@ func Bootstrap(ctx context.Context) (*App, error) {
 			APIKeyPerMinute: cfg.APIKeyRateLimitPerMin,
 			UserPerMinute:   cfg.UserRateLimitPerMin,
 		},
+		RateLimitResolver: settings.RateLimitPerMinute,
 	}.ResolveActor())
 
 	handler := &handlers.HTTPHandler{
 		Platform: platform,
+		Settings: settings,
 		Validate: validator.New(),
 		Metrics:  metrics,
 		Readiness: func(c *gin.Context) map[string]any {

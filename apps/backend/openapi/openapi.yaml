@@ -17,6 +17,7 @@ tags:
   - name: Integrations
   - name: Webhooks
   - name: Automation
+  - name: Instance
 paths:
   /health/liveness:
     get:
@@ -66,6 +67,87 @@ paths:
               schema:
                 $ref: "#/components/schemas/MeResponse"
         "401":
+          $ref: "#/components/responses/ErrorResponse"
+  /instance/public:
+    get:
+      tags: [Instance]
+      operationId: getInstancePublic
+      summary: Public instance state for the login page — no auth required
+      responses:
+        "200":
+          description: Public instance configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstancePublicConfig"
+  /instance/settings:
+    get:
+      tags: [Instance]
+      operationId: listInstanceSettings
+      summary: List instance settings (platform admin only)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Resolved instance settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstanceSettingsResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/ErrorResponse"
+  /instance/settings/{key}:
+    put:
+      tags: [Instance]
+      operationId: updateInstanceSetting
+      summary: Set an instance setting override (platform admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateInstanceSettingRequest"
+      responses:
+        "200":
+          description: Setting stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstanceSetting"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+    delete:
+      tags: [Instance]
+      operationId: deleteInstanceSetting
+      summary: Revert a setting to its env/default value (platform admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Setting reverted
+        "403":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
           $ref: "#/components/responses/ErrorResponse"
   /bootstrap:
     post:
@@ -1952,6 +2034,54 @@ components:
               type: string
           required: [code, message]
       required: [status, error]
+    InstancePublicConfig:
+      type: object
+      properties:
+        signup_enabled:
+          type: boolean
+          description: Whether public sign-up is open (bootstrap always allowed)
+        bootstrap_required:
+          type: boolean
+          description: True when no user exists yet — first sign-up becomes instance admin
+        social_providers:
+          type: array
+          items:
+            type: string
+          description: Enabled OAuth providers — empty on self-hosted
+      required: [signup_enabled, bootstrap_required, social_providers]
+    InstanceSetting:
+      type: object
+      properties:
+        key:
+          type: string
+        type:
+          type: string
+          enum: [bool, int, string]
+        secret:
+          type: boolean
+        is_set:
+          type: boolean
+          description: True when an in-app override exists
+        source:
+          type: string
+          enum: [app, env, default]
+        value:
+          description: Effective value — never returned for secret keys
+      required: [key, type, secret, is_set, source]
+    InstanceSettingsResponse:
+      type: object
+      properties:
+        settings:
+          type: array
+          items:
+            $ref: "#/components/schemas/InstanceSetting"
+      required: [settings]
+    UpdateInstanceSettingRequest:
+      type: object
+      properties:
+        value:
+          description: JSON value matching the key's declared type
+      required: [value]
     BootstrapRequest:
       type: object
       properties:

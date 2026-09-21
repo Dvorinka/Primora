@@ -2,6 +2,15 @@
 
 All notable changes to Primora. Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Instance administration** — `core.settings` (migration 00010) stores in-app overrides that resolve ahead of `.env` and built-in defaults. New endpoints: `GET /instance/public` (unauthenticated login-page state), `GET/PUT/DELETE /instance/settings[/key]` (platform admin only — better-auth `user.role`, not org role). Manageable keys cover public sign-up, mail transport (Resend or SMTP), and API/user rate limits. Secrets are AES-256-GCM encrypted at rest, never returned by the API, and decryptable by the auth service via the shared `PRIMORA_ENCRYPTION_KEY`.
+- **Bootstrap + sign-up gating** — the first public sign-up becomes the instance admin; afterwards public sign-up is closed unless `SIGNUP_ENABLED=true` or the admin reopens it in Settings → Instance. `databaseHooks.user.create.before` gates only `/sign-up/email`, so admin-created users and OAuth flows bypass it.
+- **Managed-tier OAuth gate** — `PRIMORA_MANAGED=true` is now required for GitHub/Google/Discord/Microsoft sign-in; self-hosted instances are email/password only. The login page hides the sign-up tab and social buttons according to `GET /instance/public`.
+- **Settings → Instance tab** — platform admins edit sign-up, mail, and rate-limit settings in-app with source badges (in-app/env/default) and per-key reset.
+
 ## [0.6.0] - 2026-09-21
 
 ### Added

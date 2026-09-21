@@ -23,6 +23,7 @@ import type {
   Document,
   IntegrationAnalytics,
   IntegrationTestResult,
+  InstanceSetting,
   MeResponse,
   MetricPoint,
   OrganizationSummary,
@@ -608,6 +609,19 @@ class DemoService {
     }));
   }
   async listAuthUsers() { await this.delay(); return authUsers; }
+
+  // Mirrors InstanceService.listInstanceSettings — representative registry
+  // slice so demo mode can show the Instance settings tab.
+  async listInstanceSettings(): Promise<InstanceSetting[]> {
+    await this.delay();
+    return [
+      { key: "auth.signup_enabled", type: "bool", secret: false, is_set: false, source: "default", value: false },
+      { key: "mail.from", type: "string", secret: false, is_set: false, source: "env", value: "Primora <no-reply@primora.local>" },
+      { key: "mail.smtp_host", type: "string", secret: false, is_set: true, source: "app", value: "mailpit" },
+      { key: "mail.smtp_password", type: "string", secret: true, is_set: false, source: "default" },
+      { key: "ratelimit.user_per_minute", type: "int", secret: false, is_set: false, source: "default", value: 240 },
+    ] as InstanceSetting[];
+  }
   async listCollections() { await this.delay(); return collections; }
   async listDocuments() { await this.delay(); return documents; }
 

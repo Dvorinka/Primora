@@ -61,9 +61,31 @@ The important ones:
 | `POSTGRES_*` / `DATABASE_URL` | Postgres connection |
 | `DRAGONFLY_URL` | Cache/rate-limit store |
 | `SMTP_*` / `MAIL_FROM` | Transactional email (Mailpit in dev, or Resend via `RESEND_API_KEY`) |
-| `GITHUB_CLIENT_ID` / `GOOGLE_CLIENT_ID` / `DISCORD_*` / `MICROSOFT_*` | Optional OAuth providers |
-| `USER_RATE_LIMIT_PER_MINUTE` / `API_KEY_RATE_LIMIT_PER_MINUTE` | Throttling, `0` disables |
+| `SIGNUP_ENABLED` | Open public sign-up after bootstrap — default `false`; admins override in-app |
+| `PRIMORA_MANAGED` | Managed tier flag — enables OAuth providers when `true`; self-hosted is email/password only |
+| `USER_RATE_LIMIT_PER_MINUTE` / `API_KEY_RATE_LIMIT_PER_MINUTE` | Throttling defaults — overridable in-app |
 | `VITE_DEMO_MODE` | Enable the client-side demo workspace |
+
+### Instance administration
+
+The **first public sign-up becomes the instance admin** — on a fresh database the
+login page only offers sign-up. After that, public sign-up is closed and the
+admin can reopen it in-app.
+
+Admins get a **Settings → Instance** tab that manages the instance without a
+restart: public sign-up, mail transport (Resend or SMTP), and rate limits.
+Every setting resolves in the order **in-app value → `.env` → built-in
+default**; resetting a key reverts to env/default. Secrets (SMTP password,
+Resend key) are stored AES-256-GCM-encrypted and never displayed back.
+
+API equivalents:
+
+```bash
+GET    /api/v1/instance/public           # unauthenticated — login page state
+GET    /api/v1/instance/settings         # platform admin
+PUT    /api/v1/instance/settings/{key}   # platform admin — {"value": ...}
+DELETE /api/v1/instance/settings/{key}   # platform admin — revert to env/default
+```
 
 ## Verification
 

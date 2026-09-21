@@ -46,6 +46,7 @@ type Querier interface {
 	DeletePendingInvitationByIDForOrganization(ctx context.Context, arg DeletePendingInvitationByIDForOrganizationParams) (CoreProjectInvitation, error)
 	DeleteProjectByID(ctx context.Context, id uuid.UUID) (CoreProject, error)
 	DeleteScheduledJob(ctx context.Context, arg DeleteScheduledJobParams) (uuid.UUID, error)
+	DeleteSetting(ctx context.Context, key string) error
 	DeleteWebhook(ctx context.Context, arg DeleteWebhookParams) (CoreWebhook, error)
 	EventTotals(ctx context.Context, arg EventTotalsParams) (EventTotalsRow, error)
 	EventTypeSeries(ctx context.Context, arg EventTypeSeriesParams) ([]EventTypeSeriesRow, error)
@@ -68,6 +69,7 @@ type Querier interface {
 	GetProjectMembership(ctx context.Context, arg GetProjectMembershipParams) (GetProjectMembershipRow, error)
 	GetProjectOverview(ctx context.Context, id uuid.UUID) (GetProjectOverviewRow, error)
 	GetScheduledJobByID(ctx context.Context, id uuid.UUID) (CoreScheduledJob, error)
+	GetSetting(ctx context.Context, key string) (GetSettingRow, error)
 	GetUserByAuthSubject(ctx context.Context, authSubject string) (CoreUser, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (CoreUser, error)
 	GetWebhookByID(ctx context.Context, id uuid.UUID) (CoreWebhook, error)
@@ -97,6 +99,7 @@ type Querier interface {
 	ListProjectsForOrganization(ctx context.Context, arg ListProjectsForOrganizationParams) ([]ListProjectsForOrganizationRow, error)
 	ListScheduledJobRuns(ctx context.Context, arg ListScheduledJobRunsParams) ([]CoreScheduledJobRun, error)
 	ListScheduledJobs(ctx context.Context, projectID uuid.UUID) ([]CoreScheduledJob, error)
+	ListSettings(ctx context.Context) ([]ListSettingsRow, error)
 	ListWebhookDeliveries(ctx context.Context, arg ListWebhookDeliveriesParams) ([]CoreWebhookDelivery, error)
 	ListWebhooks(ctx context.Context, projectID uuid.UUID) ([]CoreWebhook, error)
 	ListWebhooksForEvent(ctx context.Context, arg ListWebhooksForEventParams) ([]CoreWebhook, error)
@@ -132,6 +135,7 @@ type Querier interface {
 	UpdateScheduledJob(ctx context.Context, arg UpdateScheduledJobParams) (CoreScheduledJob, error)
 	UpdateWebhook(ctx context.Context, arg UpdateWebhookParams) (CoreWebhook, error)
 	UpsertComponent(ctx context.Context, arg UpsertComponentParams) (CoreComponent, error)
+	UpsertSetting(ctx context.Context, arg UpsertSettingParams) (CoreSetting, error)
 	UpsertUser(ctx context.Context, arg UpsertUserParams) (CoreUser, error)
 }
 

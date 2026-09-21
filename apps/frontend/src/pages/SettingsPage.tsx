@@ -1,5 +1,5 @@
 import { For, Show, createSignal } from "solid-js";
-import type { ApiKey } from "@primora/api-client";
+import type { ApiKey, InstanceSetting } from "@primora/api-client";
 import { Badge } from "../components/Badge";
 import { Modal, ModalFooter } from "../components/Modal";
 import { Input } from "../components/Input";
@@ -25,6 +25,12 @@ const API_KEY_SCOPES: Array<{ value: string; label: string; hint: string }> = [
 ];
 
 interface SettingsPageProps {
+  isPlatformAdmin: boolean;
+  instanceSettings?: InstanceSetting[];
+  instancePending: boolean;
+  instanceMessage: string;
+  onSaveInstanceSetting: (key: string, value: unknown) => void;
+  onResetInstanceSetting: (key: string) => void;
   apiKeys?: ApiKey[];
   apiKeyName: string;
   apiKeyScopes: string[];
@@ -50,8 +56,27 @@ interface SettingsPageProps {
   formatDate: (value?: string | null) => string;
 }
 
+const INSTANCE_GROUPS: { prefix: string; title: string; hint: string }[] = [
+  { prefix: "auth.", title: "Authentication", hint: "Who can create accounts on this instance." },
+  { prefix: "mail.", title: "Mail", hint: "Outgoing email — Resend or SMTP. In-app values override .env." },
+  { prefix: "ratelimit.", title: "Rate limits", hint: "Requests per minute, enforced by the API." },
+];
+
+const SETTING_LABELS: Record<string, string> = {
+  "auth.signup_enabled": "Public sign-up",
+  "mail.from": "From address",
+  "mail.resend_api_key": "Resend API key",
+  "mail.smtp_host": "SMTP host",
+  "mail.smtp_port": "SMTP port",
+  "mail.smtp_user": "SMTP user",
+  "mail.smtp_password": "SMTP password",
+  "mail.smtp_secure": "SMTP TLS",
+  "ratelimit.user_per_minute": "User requests / minute",
+  "ratelimit.api_key_per_minute": "API key requests / minute",
+};
+
 export function SettingsPage(props: SettingsPageProps) {
-  const [tab, setTab] = createSignal<"api-keys" | "organization">("api-keys");
+  const [tab, setTab] = createSignal<"api-keys" | "organization" | "instance">("api-keys");
   const [copied, setCopied] = createSignal(false);
   const [createOrgOpen, setCreateOrgOpen] = createSignal(false);
   const [confirmDeleteOrg, setConfirmDeleteOrg] = createSignal(false);
@@ -94,6 +119,14 @@ export function SettingsPage(props: SettingsPageProps) {
         >
           Organization
         </button>
+        <Show when={props.isPlatformAdmin}>
+          <button
+            class={`tab ${tab() === "instance" ? "active" : ""}`}
+            onClick={() => setTab("instance")}
+          >
+            Instance
+          </button>
+        </Show>
       </div>
 
       {/* ---------------- API keys ---------------- */}
@@ -322,6 +355,53 @@ export function SettingsPage(props: SettingsPageProps) {
         </Show>
       </Show>
 
+      {/* ---------------- Instance (platform admin) ---------------- */}
+      <Show when={tab() === "instance" && props.isPlatformAdmin}>
+        <Show when={props.instanceMessage}>
+          <div class="message message-neutral">{props.instanceMessage}</div>
+        </Show>
+
+        <p class="text-xs text-text-3 mb-4">
+          In-app values override the matching environment variables. Secrets are stored encrypted
+          and never shown back.
+        </p>
+
+        <For each={INSTANCE_GROUPS}>
+          {(group) => {
+            const rows = () => (props.instanceSettings ?? []).filter((s) => s.key.startsWith(group.prefix));
+            return (
+              <Show when={rows().length > 0}>
+                <div class="card card-flush mb-4">
+                  <div class="card-header">
+                    <span class="card-header-title">{group.title}</span>
+                    <span class="card-header-description">{group.hint}</span>
+                  </div>
+                  <div class="divide-y" style="border-color:var(--border)">
+                    <For each={rows()}>
+                      {(setting) => (
+                        <SettingRow
+                          setting={setting}
+                          pending={props.instancePending}
+                          onSave={(value) => props.onSaveInstanceSetting(setting.key, value)}
+                          onReset={() => props.onResetInstanceSetting(setting.key)}
+                        />
+                      )}
+                    </For>
+                  </div>
+                </div>
+              </Show>
+            );
+          }}
+        </For>
+
+        <Show when={!props.instanceSettings}>
+          <div class="card empty-state">
+            <div class="empty-state-icon"><IconKey class="w-5 h-5" /></div>
+            <p class="empty-state-title">Loading instance settings</p>
+          </div>
+        </Show>
+      </Show>
+
       {/* API key secret modal — shown while App holds a fresh secret */}
       <Show when={props.apiKeySecret}>
         <Modal
@@ -409,6 +489,107 @@ export function SettingsPage(props: SettingsPageProps) {
           </button>
         </ModalFooter>
       </Modal>
+    </div>
+  );
+}
+
+/** Values arrive as JSON strings ("true", "240") — decode per declared type. */
+function settingText(setting: InstanceSetting): string {
+  if (setting.value === undefined || setting.value === null) return "";
+  return String(setting.value);
+}
+
+const SOURCE_BADGE: Record<string, "success" | "primary" | "neutral"> = {
+  app: "success",
+  env: "primary",
+  default: "neutral",
+};
+
+function SettingRow(props: {
+  setting: InstanceSetting;
+  pending: boolean;
+  onSave: (value: unknown) => void;
+  onReset: () => void;
+}) {
+  const s = () => props.setting;
+  const [draft, setDraft] = createSignal(settingText(props.setting));
+
+  const dirty = () => {
+    if (s().type === "bool") return false; // toggles save instantly
+    return draft() !== settingText(s());
+  };
+
+  const saveDraft = () => {
+    if (s().type === "int") {
+      const n = Number(draft());
+      if (!Number.isInteger(n) || n < 0) return;
+      props.onSave(n);
+      return;
+    }
+    props.onSave(draft());
+  };
+
+  return (
+    <div class="flex items-center gap-3 px-4 py-3 flex-wrap">
+      <div class="flex-1" style="min-width:12rem">
+        <div class="text-sm font-medium text-text-1">
+          {SETTING_LABELS[s().key] ?? s().key}
+        </div>
+        <code class="text-xs text-text-3">{s().key}</code>
+      </div>
+
+      <Badge variant={SOURCE_BADGE[s().source] ?? "neutral"}>
+        {s().is_set ? "in-app" : s().source}
+      </Badge>
+
+      <Show
+        when={s().type === "bool"}
+        fallback={
+          <div class="flex items-center gap-2">
+            <input
+              class="input input-sm"
+              style="width:12rem"
+              type={s().secret ? "password" : s().type === "int" ? "number" : "text"}
+              min={s().type === "int" ? 0 : undefined}
+              placeholder={s().secret ? (s().is_set ? "•••••••• (stored)" : "not set") : ""}
+              value={draft()}
+              onInput={(e) => setDraft(e.currentTarget.value)}
+              disabled={props.pending}
+              aria-label={SETTING_LABELS[s().key] ?? s().key}
+            />
+            <button
+              class="btn btn-secondary btn-sm"
+              onClick={saveDraft}
+              disabled={props.pending || !dirty()}
+            >
+              Save
+            </button>
+          </div>
+        }
+      >
+        <label class="flex items-center gap-2 text-sm text-text-2">
+          <input
+            type="checkbox"
+            class="accent-[var(--accent)]"
+            checked={settingText(s()) === "true"}
+            disabled={props.pending}
+            onChange={(e) => props.onSave(e.currentTarget.checked)}
+            aria-label={SETTING_LABELS[s().key] ?? s().key}
+          />
+          {settingText(s()) === "true" ? "Enabled" : "Disabled"}
+        </label>
+      </Show>
+
+      <Show when={s().is_set}>
+        <button
+          class="btn btn-ghost btn-sm"
+          onClick={props.onReset}
+          disabled={props.pending}
+          title="Remove the in-app override — env/default applies again"
+        >
+          Reset
+        </button>
+      </Show>
     </div>
   );
 }

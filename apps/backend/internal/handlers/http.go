@@ -20,6 +20,7 @@ import (
 
 type HTTPHandler struct {
 	Platform  *services.PlatformService
+	Settings  *services.SettingsService
 	Validate  *validator.Validate
 	Metrics   *observability.Metrics
 	Readiness func(*gin.Context) map[string]any
@@ -33,6 +34,10 @@ func (h *HTTPHandler) Register(router *gin.Engine) {
 
 	api := router.Group("/api/v1")
 	api.GET("/me", h.me)
+	api.GET("/instance/public", h.instancePublic)
+	api.GET("/instance/settings", h.listInstanceSettings)
+	api.PUT("/instance/settings/:key", h.updateInstanceSetting)
+	api.DELETE("/instance/settings/:key", h.deleteInstanceSetting)
 	api.POST("/bootstrap", h.bootstrap)
 	api.GET("/organizations", h.organizations)
 	api.POST("/organizations", h.createOrganization)
