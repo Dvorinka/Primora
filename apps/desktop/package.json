@@ -1,6 +1,6 @@
 {
   "name": "@primora/desktop",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "description": "Primora desktop shell — thin Tauri client for a self-hosted deployment",
   "scripts": {

@@ -2,7 +2,12 @@
 
 All notable changes to Primora. Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [0.7.0] - 2026-09-21
+
+### Changed
+
+- **Public sign-up closes by default after the first account.** On upgrade, existing instances keep their users but new public sign-ups are rejected until an admin enables them (Settings → Instance or `SIGNUP_ENABLED=true`). The oldest existing account is not automatically promoted — set `AUTH_ADMIN_EMAILS` or update `user.role` to `admin` manually if no platform admin exists.
+- **OAuth providers require `PRIMORA_MANAGED=true`.** Self-hosted deployments are email/password only; GitHub/Google/Discord/Microsoft env keys are ignored without the flag.
 
 ### Added
 
