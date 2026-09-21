@@ -20,6 +20,10 @@ NGINX_PORT="${NGINX_PORT:-80}"
 info() { echo "==> $*"; }
 die()  { echo "ERROR: $*" >&2; exit 1; }
 
+# '|' delimiter for sed: base64 output can contain '/', '+', '='.
+SED=(sed -i)
+[[ "$OSTYPE" == darwin* ]] && SED=(sed -i '')
+
 command -v docker >/dev/null 2>&1 || die "docker is not installed"
 docker compose version >/dev/null 2>&1 || die "docker compose plugin is not installed"
 command -v curl >/dev/null 2>&1 || die "curl is not installed"
@@ -41,10 +45,6 @@ if [ ! -f .env ]; then
   BETTER_AUTH_SECRET=$(openssl rand -base64 32)
   ENCRYPTION_KEY=$(openssl rand -hex 32)
   DB_PASSWORD=$(openssl rand -hex 16)
-
-  # '|' delimiter: base64 output can contain '/', '+', '='.
-  SED=(sed -i)
-  [[ "$OSTYPE" == darwin* ]] && SED=(sed -i '')
 
   "${SED[@]}" "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$DB_PASSWORD|" .env
   "${SED[@]}" "s|postgres://primora:primora@|postgres://primora:$DB_PASSWORD@|" .env
@@ -68,6 +68,9 @@ if docker pull "ghcr.io/$GHCR_OWNER/primora-backend:latest" \
   && docker pull "ghcr.io/$GHCR_OWNER/primora-auth:latest" \
   && docker pull "ghcr.io/$GHCR_OWNER/primora-frontend:latest"; then
   info "Starting prebuilt images"
+  # The source tree isn't downloaded on this path — strip build: blocks so a
+  # later `compose build`/`up --build` can't fail on missing apps/*/Dockerfile.
+  "${SED[@]}" '/^[[:space:]]*build:/,/^[[:space:]]*dockerfile:/d' docker-compose.yml
   docker compose up -d --no-build
 else
   # GHCR packages are private until first published release — build from source.
