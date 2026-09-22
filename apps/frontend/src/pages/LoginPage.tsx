@@ -124,6 +124,8 @@ export function LoginPage(props: LoginPageProps) {
             <Show when={!isSignIn()}>
               <Input
                 label="Name"
+                id="name"
+                name="name"
                 type="text"
                 placeholder="Ada Lovelace"
                 value={props.name}
@@ -134,15 +136,19 @@ export function LoginPage(props: LoginPageProps) {
             </Show>
             <Input
               label="Email"
+              id="email"
+              name="email"
               type="email"
               placeholder="you@example.com"
               value={props.email}
               onInput={(e) => props.onEmailChange(e.currentTarget.value)}
-              autocomplete="email"
+              autocomplete="username"
               required
             />
             <Input
               label="Password"
+              id="password"
+              name="password"
               type="password"
               placeholder="••••••••"
               value={props.password}

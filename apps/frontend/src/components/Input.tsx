@@ -13,16 +13,17 @@ const sizeClasses = {
 };
 
 export function Input(props: InputProps) {
-  const [local, rest] = splitProps(props, ["label", "error", "size", "class"]);
+  const [local, rest] = splitProps(props, ["label", "error", "size", "class", "id"]);
 
   const size = () => local.size ?? "md";
 
   return (
     <div class="w-full">
       <Show when={local.label}>
-        <label class="label">{local.label}</label>
+        <label class="label" for={local.id}>{local.label}</label>
       </Show>
       <input
+        id={local.id}
         class={`input ${sizeClasses[size()]} ${local.error ? "border-error focus:border-error focus:ring-error/20" : ""} ${local.class ?? ""}`}
         {...rest}
       />

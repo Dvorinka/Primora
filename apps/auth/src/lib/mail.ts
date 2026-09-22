@@ -51,7 +51,12 @@ export async function sendTransactionalEmail(input: {
   }
 
   if (!("smtp" in cfg) || !cfg.smtp) {
-    throw new Error("No mail transport configured for auth service.");
+    // Self-hosted instances may run without mail — auth still works, the
+    // email simply never goes out.
+    console.warn(
+      JSON.stringify({ level: "warn", msg: "mail_skipped_no_transport", to: input.to, subject: input.subject }),
+    );
+    return;
   }
 
   await nodemailer.createTransport(cfg.smtp).sendMail({
