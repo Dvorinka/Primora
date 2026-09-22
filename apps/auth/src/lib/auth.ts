@@ -94,12 +94,18 @@ export const auth = betterAuth({
     sendOnSignUp: true,
     autoSignInAfterVerification: true,
     async sendVerificationEmail({ user, url }) {
-      await sendTransactionalEmail({
-        to: user.email,
-        subject: "Verify your Primora email",
-        text: `Verify your Primora email: ${url}`,
-        html: `<p>Verify your Primora email.</p><p><a href="${url}">Verify email</a></p>`,
-      });
+      // Verification is optional — a misconfigured transport must not fail
+      // sign-up or sign-in.
+      try {
+        await sendTransactionalEmail({
+          to: user.email,
+          subject: "Verify your Primora email",
+          text: `Verify your Primora email: ${url}`,
+          html: `<p>Verify your Primora email.</p><p><a href="${url}">Verify email</a></p>`,
+        });
+      } catch (error) {
+        console.warn(JSON.stringify({ level: "warn", msg: "verification_email_failed", error }));
+      }
     },
   },
   // Enabled unconditionally — better-auth only turns this on when NODE_ENV is

@@ -736,7 +736,7 @@ export default function App() {
       try {
         if (mode() === "sign-up") {
           await authClient.signUp.email({ email: email(), password: password(), name: name() });
-          setAuthMessage("Account created. Check Mailpit (or your SMTP provider) for the verification email.");
+          setAuthMessage("Account created — signing you in.");
         } else {
           await authClient.signIn.email({ email: email(), password: password() });
         }
