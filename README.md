@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <a href="https://primora-landing.vercel.app">Website</a> ·
   <a href="#quick-start">Quick Start</a> ·
   <a href="QUICK_START.md">Documentation</a> ·
   <a href="https://github.com/Dvorinka/Primora/releases">Releases</a> ·
@@ -47,11 +48,16 @@ Supabase, with no hosted tier - your data stays on your hardware.
 ## Features
 
 - **Organizations & projects** - workspaces with scoped org and project roles.
-- **Auth** - email/password plus optional GitHub, Google, Discord, and Microsoft OAuth. JWTs verified by the API against JWKS.
+- **Auth** - email/password on self-hosted (no mail transport required - verification is optional and sign-up works without it). GitHub, Google, Discord, and Microsoft OAuth on the managed tier (`PRIMORA_MANAGED=true`). JWTs verified by the API against JWKS.
 - **Storage** - S3-style buckets on your local filesystem, public or private.
 - **Collections** - schema-flexible JSON documents in Postgres JSONB.
+- **Databases** - DBX-powered connection browser: schema inspector, SQL editor, Redis console.
 - **API keys** - `prm_<prefix>_<secret>` credentials, shown once.
 - **Audit log** - every mutating request recorded, with CSV/JSON export.
+- **Telemetry** - error/metric/log ingest, issue grouping, metric series, live SSE stream.
+- **Integrations** - HMAC-signed outbound webhooks, Rybbit analytics connector, deploy markers.
+- **Automation** - cron-scheduled jobs with run history and signed delivery.
+- **Instance admin** - sign-up policy, mail transport, and rate limits managed in-app; first sign-up bootstraps as admin.
 - **Demo mode** - fully client-side seeded workspace via `?demo=true`.
 
 ## Architecture
