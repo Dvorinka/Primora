@@ -1,0 +1,641 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Primora — Self-hosted backend platform</title>
+<meta name="description" content="Primora is a self-hosted backend platform: auth, Postgres-backed APIs, S3-style object storage, JSON collections, scoped API keys, and a full audit log on your own hardware.">
+<meta property="og:title" content="Primora — Self-hosted backend platform">
+<meta property="og:description" content="Auth, Postgres-backed APIs, object storage, and audit logs on your own hardware. No hosted tier.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="screenshots/overview.png">
+<link rel="icon" type="image/svg+xml" href="primora.svg">
+<style>
+  @font-face {
+    font-family: "Geist";
+    src: url("fonts/geist-sans.woff2") format("woff2");
+    font-weight: 100 900;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: "Geist Mono";
+    src: url("fonts/geist-mono.woff2") format("woff2");
+    font-weight: 100 900;
+    font-display: swap;
+  }
+
+  :root {
+    --bg: #0a0a0b;
+    --bg-panel: #0f0f11;
+    --surface: #141416;
+    --surface-2: #1b1b1f;
+    --border: #222227;
+    --border-strong: #303036;
+    --text-1: #f4f4f5;
+    --text-2: #a2a2ab;
+    --text-3: #63636d;
+    --accent: #f4693a;
+    --accent-hover: #ff7c4e;
+    --accent-fg: #1c0d05;
+    --accent-muted: rgba(244, 105, 58, 0.12);
+    --accent-border: rgba(244, 105, 58, 0.35);
+    --success: #4cc38a;
+    --font-sans: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+    --radius: 8px;
+    --radius-lg: 12px;
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: var(--font-sans);
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    letter-spacing: -0.006em;
+    background: var(--bg);
+    color: var(--text-1);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection { background: var(--accent-border); color: var(--text-1); }
+
+  a { color: inherit; text-decoration: none; }
+  code, pre, .mono { font-family: var(--font-mono); }
+
+  .wrap { max-width: 72rem; margin: 0 auto; padding: 0 1.5rem; }
+
+  /* ------------------------------ nav ------------------------------ */
+  .nav {
+    position: fixed; inset: 0 0 auto 0; z-index: 50;
+    border-bottom: 1px solid var(--border);
+    background: rgba(10, 10, 11, 0.8);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  .nav-inner {
+    display: flex; align-items: center; justify-content: space-between;
+    height: 3.5rem;
+  }
+  .nav-brand { display: flex; align-items: center; gap: 0.625rem; font-weight: 600; letter-spacing: -0.02em; }
+  .nav-brand img { width: 1.375rem; height: 1.375rem; border-radius: 5px; }
+  .nav-links { display: flex; align-items: center; gap: 1.75rem; font-size: 0.8125rem; color: var(--text-2); }
+  .nav-links a:hover { color: var(--text-1); }
+  .nav-cta {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    font-size: 0.8125rem; font-weight: 500;
+    color: var(--text-1);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    padding: 0.375rem 0.75rem;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .nav-cta:hover { border-color: var(--accent-border); background: var(--accent-muted); color: var(--text-1); }
+  .nav-cta svg { width: 0.9375rem; height: 0.9375rem; }
+  @media (max-width: 720px) { .nav-links a:not(.nav-cta) { display: none; } }
+
+  /* ------------------------------ hero ------------------------------ */
+  .hero {
+    position: relative;
+    padding: 9.5rem 0 5rem;
+    border-bottom: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .hero::before {
+    content: "";
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(to right, rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, black 30%, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, black 30%, transparent 75%);
+    pointer-events: none;
+  }
+  .hero-inner { position: relative; text-align: center; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.3125rem 0.875rem;
+    margin-bottom: 1.75rem;
+  }
+  .eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+  .hero h1 {
+    font-size: clamp(2.5rem, 6.5vw, 4.25rem);
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    line-height: 1.05;
+    max-width: 17ch;
+    margin: 0 auto 1.25rem;
+  }
+  .hero h1 em { font-style: normal; color: var(--accent); }
+  .hero-sub {
+    font-size: 1.0625rem;
+    color: var(--text-2);
+    max-width: 34rem;
+    margin: 0 auto 2.5rem;
+  }
+  .hero-actions { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    font-family: inherit;
+    font-size: 0.875rem; font-weight: 500;
+    border-radius: var(--radius);
+    padding: 0.625rem 1.125rem;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+  .btn-primary { background: var(--accent); color: var(--accent-fg); }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-secondary { background: var(--surface); border-color: var(--border-strong); color: var(--text-1); }
+  .btn-secondary:hover { border-color: var(--text-3); }
+  .btn svg { width: 1rem; height: 1rem; }
+
+  .install {
+    display: inline-flex; align-items: center; gap: 0.875rem;
+    margin-top: 2rem;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.625rem 0.625rem 0.625rem 1rem;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    color: var(--text-2);
+    max-width: 100%;
+  }
+  .install .prompt { color: var(--accent); user-select: none; }
+  .install code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .install button {
+    flex: none;
+    display: inline-flex; align-items: center; gap: 0.375rem;
+    font-family: var(--font-mono); font-size: 0.6875rem; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text-3);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.375rem 0.625rem;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .install button:hover { color: var(--text-1); border-color: var(--border-strong); }
+  .install button.copied { color: var(--success); border-color: var(--success); }
+  .install button svg { width: 0.8125rem; height: 0.8125rem; }
+  @media (max-width: 560px) {
+    .install { font-size: 0.6875rem; }
+  }
+
+  /* --------------------------- screenshot --------------------------- */
+  .shot-section { padding: 0 0 5.5rem; border-bottom: 1px solid var(--border); }
+  .shot {
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    background: var(--bg-panel);
+    box-shadow: 0 24px 64px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03);
+    margin-top: -1px;
+  }
+  .shot-bar {
+    display: flex; align-items: center; gap: 0.375rem;
+    padding: 0.625rem 0.875rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .shot-bar .led { width: 9px; height: 9px; border-radius: 50%; background: var(--surface-3); }
+  .shot-bar .url {
+    margin-left: 0.75rem;
+    font-family: var(--font-mono); font-size: 0.6875rem; color: var(--text-3);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 5px;
+    padding: 0.1875rem 0.625rem;
+  }
+  .shot img { display: block; width: 100%; }
+
+  /* ---------------------------- sections ---------------------------- */
+  section.block { padding: 5.5rem 0; border-bottom: 1px solid var(--border); }
+  .section-head { margin-bottom: 3rem; max-width: 40rem; }
+  .section-head .kicker {
+    font-family: var(--font-mono); font-size: 0.6875rem;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--accent);
+    display: block; margin-bottom: 0.875rem;
+  }
+  .section-head h2 {
+    font-size: clamp(1.625rem, 3.5vw, 2.25rem);
+    font-weight: 600; letter-spacing: -0.03em; line-height: 1.15;
+    margin-bottom: 0.75rem;
+  }
+  .section-head p { color: var(--text-2); }
+
+  /* fact strip */
+  .facts {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    border: 1px solid var(--border); border-radius: var(--radius-lg);
+    overflow: hidden; background: var(--bg-panel);
+  }
+  .fact { padding: 1.5rem; border-left: 1px solid var(--border); }
+  .fact:first-child { border-left: 0; }
+  .fact .v { font-family: var(--font-mono); font-size: 1.375rem; font-weight: 500; color: var(--text-1); font-variant-numeric: tabular-nums; }
+  .fact .v em { font-style: normal; color: var(--accent); }
+  .fact .k { font-size: 0.75rem; color: var(--text-3); margin-top: 0.25rem; }
+  @media (max-width: 720px) {
+    .facts { grid-template-columns: 1fr 1fr; }
+    .fact:nth-child(3) { border-left: 0; }
+    .fact:nth-child(n+3) { border-top: 1px solid var(--border); }
+  }
+
+  /* feature grid */
+  .grid {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    border: 1px solid var(--border); border-radius: var(--radius-lg);
+    overflow: hidden; background: var(--bg-panel);
+  }
+  .cell {
+    padding: 1.75rem;
+    border-left: 1px solid var(--border);
+    border-top: 1px solid var(--border);
+    transition: background 0.15s;
+  }
+  .cell:hover { background: var(--surface); }
+  .cell:nth-child(3n+1) { border-left: 0; }
+  .cell:nth-child(-n+3) { border-top: 0; }
+  .cell .icon {
+    width: 2rem; height: 2rem;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border-strong); border-radius: var(--radius);
+    color: var(--accent); margin-bottom: 1.125rem;
+    background: var(--accent-muted);
+    border-color: var(--accent-border);
+  }
+  .cell .icon svg { width: 1rem; height: 1rem; }
+  .cell h3 { font-size: 0.9375rem; font-weight: 600; margin-bottom: 0.375rem; }
+  .cell p { font-size: 0.8125rem; color: var(--text-2); }
+  .cell .tag {
+    display: inline-block; margin-top: 0.875rem;
+    font-family: var(--font-mono); font-size: 0.625rem; letter-spacing: 0.08em;
+    color: var(--text-3); border: 1px solid var(--border); border-radius: 4px;
+    padding: 0.125rem 0.4375rem;
+  }
+  @media (max-width: 900px) {
+    .grid { grid-template-columns: 1fr 1fr; }
+    .cell:nth-child(3n+1) { border-left: 1px solid var(--border); }
+    .cell:nth-child(odd) { border-left: 0; }
+    .cell:nth-child(-n+3) { border-top: 1px solid var(--border); }
+    .cell:nth-child(-n+2) { border-top: 0; }
+  }
+  @media (max-width: 560px) {
+    .grid { grid-template-columns: 1fr; }
+    .cell { border-left: 0 !important; border-top: 1px solid var(--border) !important; }
+    .cell:first-child { border-top: 0 !important; }
+  }
+
+  /* architecture */
+  .arch {
+    border: 1px solid var(--border); border-radius: var(--radius-lg);
+    background: var(--bg-panel);
+    padding: 2rem;
+    overflow-x: auto;
+  }
+  .arch pre {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    line-height: 1.75;
+    color: var(--text-2);
+    min-width: 40rem;
+  }
+  .arch .hl { color: var(--accent); }
+  .arch .dim { color: var(--text-3); }
+  .arch .fg { color: var(--text-1); }
+
+  /* screenshots */
+  .shots { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+  .shot-card {
+    border: 1px solid var(--border); border-radius: var(--radius-lg);
+    overflow: hidden; background: var(--bg-panel);
+    transition: border-color 0.15s;
+  }
+  .shot-card:hover { border-color: var(--border-strong); }
+  .shot-card img { display: block; width: 100%; border-bottom: 1px solid var(--border); }
+  .shot-card figcaption {
+    display: flex; align-items: baseline; justify-content: space-between;
+    padding: 0.875rem 1.125rem;
+  }
+  .shot-card figcaption b { font-size: 0.8125rem; font-weight: 600; }
+  .shot-card figcaption span { font-family: var(--font-mono); font-size: 0.6875rem; color: var(--text-3); }
+  @media (max-width: 720px) { .shots { grid-template-columns: 1fr; } }
+
+  /* ecosystem */
+  .eco { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.25rem; }
+  .eco-card {
+    border: 1px solid var(--border); border-radius: var(--radius-lg);
+    background: var(--bg-panel); padding: 1.75rem;
+  }
+  .eco-card h3 { font-size: 0.9375rem; font-weight: 600; margin-bottom: 0.375rem; display: flex; align-items: center; gap: 0.5rem; }
+  .eco-card h3 svg { width: 1rem; height: 1rem; color: var(--accent); }
+  .eco-card p { font-size: 0.8125rem; color: var(--text-2); margin-bottom: 1rem; }
+  .eco-card code.snip {
+    display: block;
+    font-size: 0.75rem; color: var(--text-2);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    padding: 0.625rem 0.875rem;
+    overflow-x: auto; white-space: nowrap;
+  }
+  .eco-card code.snip .p { color: var(--accent); }
+  @media (max-width: 720px) { .eco { grid-template-columns: 1fr; } }
+
+  /* final cta */
+  .cta { text-align: center; padding: 6rem 0; border-bottom: 1px solid var(--border); }
+  .cta h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); font-weight: 600; letter-spacing: -0.03em; margin-bottom: 0.75rem; }
+  .cta p { color: var(--text-2); margin-bottom: 2rem; }
+
+  /* footer */
+  footer { padding: 2.5rem 0; }
+  .foot { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+  .foot .left { display: flex; align-items: center; gap: 0.625rem; font-size: 0.8125rem; color: var(--text-3); }
+  .foot .left img { width: 1.125rem; height: 1.125rem; border-radius: 4px; }
+  .foot .links { display: flex; gap: 1.5rem; font-size: 0.8125rem; color: var(--text-3); }
+  .foot .links a:hover { color: var(--text-1); }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="nav-brand" href="#top">
+      <img src="primora.svg" alt="Primora logo">
+      Primora
+    </a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#screenshots">Screenshots</a>
+      <a href="#stack">Stack</a>
+      <a href="#ecosystem">Ecosystem</a>
+      <a class="nav-cta" href="https://github.com/Dvorinka/Primora" rel="noopener">
+        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        GitHub
+      </a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-inner">
+    <span class="eyebrow"><span class="dot"></span>self-hosted &middot; MIT licensed</span>
+    <h1>Your backend, <em>your hardware</em>.</h1>
+    <p class="hero-sub">
+      Primora is a self-hosted backend platform — auth, Postgres-backed APIs,
+      S3-style object storage, JSON collections, scoped API keys, and a full
+      audit log behind one dashboard. No hosted tier.
+    </p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="#install">Get started</a>
+      <a class="btn btn-secondary" href="https://github.com/Dvorinka/Primora" rel="noopener">
+        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        View on GitHub
+      </a>
+    </div>
+    <div class="install" id="install">
+      <span class="prompt">$</span>
+      <code id="install-cmd">curl -fsSL https://raw.githubusercontent.com/Dvorinka/Primora/master/install.sh | bash</code>
+      <button id="copy-btn" type="button" aria-label="Copy install command">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <span>copy</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<div class="shot-section">
+  <div class="wrap">
+    <figure class="shot">
+      <div class="shot-bar">
+        <span class="led"></span><span class="led"></span><span class="led"></span>
+        <span class="url">http://localhost</span>
+      </div>
+      <img src="screenshots/overview.png" alt="Primora project overview dashboard" loading="eager">
+    </figure>
+  </div>
+</div>
+
+<section class="block">
+  <div class="wrap">
+    <div class="facts">
+      <div class="fact"><div class="v"><em>1</em> cmd</div><div class="k">install — Docker Compose up</div></div>
+      <div class="fact"><div class="v"><em>0</em> hosted tiers</div><div class="k">data never leaves the box</div></div>
+      <div class="fact"><div class="v">MIT</div><div class="k">open source license</div></div>
+      <div class="fact"><div class="v"><em>100%</em> audit</div><div class="k">every mutation logged</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="features">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">// features</span>
+      <h2>Everything a backend needs. Nothing it doesn't.</h2>
+      <p>Inspired by the UX of Appwrite and Supabase — rebuilt as a single self-hosted stack you own outright.</p>
+    </div>
+    <div class="grid">
+      <div class="cell">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div>
+        <h3>Organizations &amp; projects</h3>
+        <p>Workspaces with scoped org and project roles. Invite members by link, assign owner/admin/developer.</p>
+        <span class="tag">rbac</span>
+      </div>
+      <div class="cell">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div>
+        <h3>Auth</h3>
+        <p>Email/password via Better Auth, optional GitHub, Google, Discord and Microsoft OAuth. JWTs verified against JWKS.</p>
+        <span class="tag">better-auth + jwks</span>
+      </div>
+      <div class="cell">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/></svg></div>
+        <h3>Object storage</h3>
+        <p>S3-style buckets on your own filesystem, public or private. Upload, move, rename, inline preview.</p>
+        <span class="tag">local fs</span>
+      </div>
+      <div class="cell">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3"/></svg></div>
+        <h3>Collections</h3>
+        <p>Schema-flexible JSON documents stored in Postgres JSONB. Query, create and update without migrations.</p>
+        <span class="tag">postgres jsonb</span>
+      </div>
+      <div class="cell">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m21 2-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78Zm0 0L15.5 7.5m3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg></div>
+        <h3>Scoped API keys</h3>
+        <p><code class="mono">prm_&lt;prefix&gt;_&lt;secret&gt;</code> credentials, shown once at creation. Revocable, rate-limited per key.</p>
+        <span class="tag">prm_*</span>
+      </div>
+      <div class="cell">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg></div>
+        <h3>Audit log</h3>
+        <p>Every mutating request recorded — actor, action, target. Filterable in the UI, exportable as CSV or JSON.</p>
+        <span class="tag">csv / json export</span>
+      </div>
+      <div class="cell">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg></div>
+        <h3>Automation</h3>
+        <p>Scheduled jobs and live event streams. Webhooks and connectors push project events to external systems.</p>
+        <span class="tag">schedules + webhooks</span>
+      </div>
+      <div class="cell">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div>
+        <h3>Instance admin</h3>
+        <p>Sign-up policy, mail transport, and rate limits managed in-app — no restart, secrets stored AES-256-GCM.</p>
+        <span class="tag">settings → instance</span>
+      </div>
+      <div class="cell">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></div>
+        <h3>Demo mode</h3>
+        <p>Fully client-side seeded workspace — append <code class="mono">?demo=true</code> to the URL, no sign-up required.</p>
+        <span class="tag">?demo=true</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="stack">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">// stack</span>
+      <h2>Boring on purpose.</h2>
+      <p>One Postgres, one API, one process boundary per concern. Everything ships in Docker Compose.</p>
+    </div>
+    <div class="arch">
+<pre><span class="fg">Browser</span> <span class="dim">──▶</span> <span class="fg">Nginx</span> <span class="dim">──┬──▶</span> <span class="hl">Frontend</span>       <span class="dim">SolidJS + Vite</span>
+                    <span class="dim">├──▶</span> <span class="hl">Auth</span>           <span class="dim">Better Auth + Hono</span>
+                    <span class="dim">└──▶</span> <span class="hl">API</span>            <span class="dim">Go + Gin</span>
+                            <span class="dim">│</span>
+                            <span class="dim">├──▶</span> <span class="fg">PostgreSQL</span>   <span class="dim">primary datastore</span>
+                            <span class="dim">├──▶</span> <span class="fg">DragonflyDB</span>  <span class="dim">cache + rate limits</span>
+                            <span class="dim">└──▶</span> <span class="fg">Local FS</span>     <span class="dim">object storage</span></pre>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="screenshots">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">// screenshots</span>
+      <h2>The console, as shipped.</h2>
+      <p>Real UI, no mockups. Every screen is dark-first, hairline-divided, and keyboard-driven.</p>
+    </div>
+    <div class="shots">
+      <figure class="shot-card">
+        <img src="screenshots/storage.png" alt="Object storage buckets and files" loading="lazy">
+        <figcaption><b>Storage</b><span>buckets / objects</span></figcaption>
+      </figure>
+      <figure class="shot-card">
+        <img src="screenshots/collections.png" alt="JSON document collections" loading="lazy">
+        <figcaption><b>Collections</b><span>jsonb documents</span></figcaption>
+      </figure>
+      <figure class="shot-card">
+        <img src="screenshots/telemetry.png" alt="Telemetry and component health" loading="lazy">
+        <figcaption><b>Telemetry</b><span>component health</span></figcaption>
+      </figure>
+      <figure class="shot-card">
+        <img src="screenshots/automation.png" alt="Scheduled automation jobs" loading="lazy">
+        <figcaption><b>Automation</b><span>schedules</span></figcaption>
+      </figure>
+      <figure class="shot-card">
+        <img src="screenshots/automation-live.png" alt="Live automation events" loading="lazy">
+        <figcaption><b>Live events</b><span>real-time stream</span></figcaption>
+      </figure>
+      <figure class="shot-card">
+        <img src="screenshots/audit.png" alt="Audit log with export" loading="lazy">
+        <figcaption><b>Audit log</b><span>csv / json export</span></figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="ecosystem">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="kicker">// ecosystem</span>
+      <h2>Beyond the browser.</h2>
+      <p>The same API powers a CLI, an MCP server, a desktop shell, and an installable PWA.</p>
+    </div>
+    <div class="eco">
+      <div class="eco-card">
+        <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></svg>CLI</h3>
+        <p><code class="mono">primora</code> manages orgs, projects, buckets, objects, keys, and audit from the terminal.</p>
+        <code class="snip"><span class="p">$</span> primora storage objects --bucket assets --limit 10</code>
+      </div>
+      <div class="eco-card">
+        <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></svg>MCP server</h3>
+        <p>Exposes <code class="mono">primora_*</code> tools to MCP clients — drive the platform from an agent.</p>
+        <code class="snip">primora_list_projects · primora_upload_object · …</code>
+      </div>
+      <div class="eco-card">
+        <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Desktop</h3>
+        <p>Tauri 2 shell that connects to your deployment, with tray presence and native notifications.</p>
+        <code class="snip">apps/desktop · tauri 2</code>
+      </div>
+      <div class="eco-card">
+        <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>PWA</h3>
+        <p>The dashboard installs on mobile and desktop browsers — same console, native frame.</p>
+        <code class="snip">installable · offline-aware shell</code>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cta">
+  <div class="wrap">
+    <h2>Run it on your own box.</h2>
+    <p>Docker with the Compose plugin is the only prerequisite. Up in one command.</p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="#install">Install Primora</a>
+      <a class="btn btn-secondary" href="https://github.com/Dvorinka/Primora/releases" rel="noopener">Releases</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot">
+    <div class="left">
+      <img src="primora.svg" alt="">
+      <span>Primora — MIT licensed</span>
+    </div>
+    <div class="links">
+      <a href="https://github.com/Dvorinka/Primora" rel="noopener">GitHub</a>
+      <a href="https://github.com/Dvorinka/Primora/blob/master/QUICK_START.md" rel="noopener">Docs</a>
+      <a href="https://github.com/Dvorinka/Primora/blob/master/CONTRIBUTING.md" rel="noopener">Contributing</a>
+      <a href="https://github.com/Dvorinka/Primora/blob/master/SECURITY.md" rel="noopener">Security</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  document.getElementById("copy-btn").addEventListener("click", async function () {
+    const cmd = document.getElementById("install-cmd").textContent;
+    try {
+      await navigator.clipboard.writeText(cmd);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = cmd;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+    }
+    this.classList.add("copied");
+    this.querySelector("span").textContent = "copied";
+    setTimeout(() => {
+      this.classList.remove("copied");
+      this.querySelector("span").textContent = "copy";
+    }, 1600);
+  });
+</script>
+
+</body>
+</html>
