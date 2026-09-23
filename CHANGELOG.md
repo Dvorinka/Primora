@@ -2,6 +2,22 @@
 
 All notable changes to Primora. Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow [SemVer](https://semver.org/).
 
+## [0.7.1] - 2026-09-23
+
+### Fixed
+
+- **Self-hosted sign-up no longer requires mail infrastructure** — `sendTransactionalEmail` warned-and-returned when no transport was configured instead of throwing, so SMTP-less instances 500'd on sign-up. `sendVerificationEmail` now also catches transport failures; a broken SMTP cannot block account creation (verification stays optional).
+- **Password managers detect the login form** — the email/password fields gained `id`/`name` attributes and `label for`/`id` pairing, and the email input uses `autocomplete="username"` (Proton Pass et al.).
+- **Installer prebuilt path strips build blocks** — `install.sh` previously kept `*-build` compose blocks when pulling prebuilt GHCR images.
+
+### Added
+
+- **Static landing page** (`landing/`) — self-contained marketing site with bundled Geist fonts and product screenshots; deployed separately from the app artifacts.
+
+### Infrastructure
+
+- **Automatic releases on merge** — merges to `master` whose root `package.json` version has no matching `v*` tag now trigger the full release pipeline (GHCR images, CLI binaries, desktop bundles, npm tarballs, GitHub Release). Tag pushes still work as before.
+
 ## [0.7.0] - 2026-09-21
 
 ### Changed

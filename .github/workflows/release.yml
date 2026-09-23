@@ -1,25 +1,54 @@
 name: Release
 
-# Triggered by semver tags: git tag v0.3.0 && git push --tags
-# Tag must match the root package.json version.
+# Triggered two ways:
+#   1. Semver tags: git tag v0.3.0 && git push --tags (must match package.json).
+#   2. workflow_run: after the CI workflow succeeds on master, the version in
+#      root package.json is released automatically if no matching tag exists.
 on:
   push:
     tags: ["v*.*.*"]
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [master]
 
 permissions:
   contents: write
   packages: write
 
-env:
-  VERSION: ${{ github.ref_name }}
-
 jobs:
   verify:
-    name: Verify tag
+    name: Verify version
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      needed: ${{ steps.check.outputs.needed }}
     steps:
       - uses: actions/checkout@v4
+      - name: Resolve version + decide whether to release
+        id: check
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            if [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
+              echo "CI did not succeed — skipping release."
+              echo "needed=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            VERSION="v$(node -p "require('./package.json').version")"
+            if git ls-remote --exit-code --tags origin "refs/tags/$VERSION" > /dev/null 2>&1; then
+              echo "$VERSION already released — nothing to do."
+              echo "needed=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          else
+            VERSION="${{ github.ref_name }}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "needed=true" >> "$GITHUB_OUTPUT"
       - name: Check tag matches package versions
+        if: steps.check.outputs.needed == 'true'
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
         run: |
           PKG=$(node -p "require('./package.json').version")
           DESKTOP_PKG=$(node -p "require('./apps/desktop/package.json').version")
@@ -32,6 +61,7 @@ jobs:
   images:
     name: Build + push ${{ matrix.app }}
     needs: verify
+    if: needs.verify.outputs.needed == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -57,7 +87,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ env.GHCR_OWNER }}/primora-${{ matrix.app }}:${{ env.VERSION }}
+            ghcr.io/${{ env.GHCR_OWNER }}/primora-${{ matrix.app }}:${{ needs.verify.outputs.version }}
             ghcr.io/${{ env.GHCR_OWNER }}/primora-${{ matrix.app }}:latest
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,mode=max,scope=${{ matrix.app }}
@@ -65,6 +95,7 @@ jobs:
   cli-binaries:
     name: Compile ${{ matrix.name }}
     needs: verify
+    if: needs.verify.outputs.needed == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -94,6 +125,7 @@ jobs:
   desktop:
     name: Desktop bundle (${{ matrix.name }})
     needs: verify
+    if: needs.verify.outputs.needed == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -130,6 +162,7 @@ jobs:
   npm-packages:
     name: Pack npm tarballs
     needs: verify
+    if: needs.verify.outputs.needed == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -151,8 +184,11 @@ jobs:
 
   release:
     name: GitHub Release
-    needs: [images, cli-binaries, desktop, npm-packages]
+    needs: [verify, images, cli-binaries, desktop, npm-packages]
+    if: needs.verify.outputs.needed == 'true'
     runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.verify.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       # build-push-action uploads "*.dockerbuild" metadata artifacts that
@@ -171,6 +207,16 @@ jobs:
         with:
           name: npm-tarballs
           path: dist-release
+      # workflow_run runs leave the release untagged — create it so the
+      # GitHub Release points at a real tag. GITHUB_TOKEN pushes do not
+      # re-trigger workflows, so this cannot recurse.
+      - name: Tag release
+        if: github.event_name == 'workflow_run'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "$VERSION"
+          git push origin "$VERSION"
       - name: Extract changelog section
         run: |
           awk -v ver="${VERSION#v}" '
