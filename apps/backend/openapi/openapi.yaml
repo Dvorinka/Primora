@@ -2142,6 +2142,31 @@ paths:
           $ref: "#/components/responses/ErrorResponse"
         "404":
           $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/emails:
+    get:
+      tags: [Email]
+      operationId: listEmailLog
+      summary: Recent transactional emails sent for this project (invitations etc.) — every send is logged with its outcome.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+      responses:
+        "200":
+          description: Email log entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailLogListResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
 components:
   securitySchemes:
     bearerAuth:
@@ -4159,3 +4184,32 @@ components:
         run_id:
           type: string
       required: [received]
+    EmailLogEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        template:
+          type: string
+        to_email:
+          type: string
+        subject:
+          type: string
+        status:
+          type: string
+          enum: [sent, failed]
+        error:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      required: [id, template, to_email, subject, status, created_at]
+    EmailLogListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmailLogEntry"
+      required: [items]

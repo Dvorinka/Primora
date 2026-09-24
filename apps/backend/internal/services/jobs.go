@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/robfig/cron/v3"
 
 	db "github.com/tdvorak/primora/apps/backend/internal/database/db"
@@ -406,6 +407,7 @@ type JobScheduler struct {
 	quit     chan struct{}
 	wg       sync.WaitGroup
 	started  sync.Once
+	leader   *leaderState
 	// onEvent fans a finished run out to webhooks and the realtime stream.
 	onEvent func(ctx context.Context, projectID uuid.UUID, eventType string, data map[string]any)
 }
@@ -415,7 +417,7 @@ type jobExec struct {
 	run db.CoreScheduledJobRun
 }
 
-func NewJobScheduler(q jobQueries, enc *secrets.Encryptor, logger *slog.Logger, onEvent func(ctx context.Context, projectID uuid.UUID, eventType string, data map[string]any)) *JobScheduler {
+func NewJobScheduler(q jobQueries, enc *secrets.Encryptor, logger *slog.Logger, onEvent func(ctx context.Context, projectID uuid.UUID, eventType string, data map[string]any), pool *pgxpool.Pool) *JobScheduler {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -428,6 +430,7 @@ func NewJobScheduler(q jobQueries, enc *secrets.Encryptor, logger *slog.Logger, 
 		queue:    make(chan jobExec, 256),
 		quit:     make(chan struct{}),
 		onEvent:  onEvent,
+		leader:   newLeaderState(pool, leaderKeyScheduler),
 	}
 }
 
@@ -452,8 +455,13 @@ func (j *JobScheduler) run(ctx context.Context) {
 		case exec := <-j.queue:
 			j.execute(exec.job, exec.run)
 		case <-ticker.C:
-			j.scan()
+			// Only the leader fires scheduled runs — manual/hook enqueues are
+			// already scoped to whichever replica received the request.
+			if j.leader.hold(ctx) {
+				j.scan()
+			}
 		case <-j.quit:
+			j.leader.stop(context.Background())
 			return
 		case <-ctx.Done():
 			return

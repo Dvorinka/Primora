@@ -83,6 +83,7 @@ func (h *HTTPHandler) Register(router *gin.Engine) {
 	api.GET("/projects/:projectID/inbound-hooks", h.listInboundHooks)
 	api.POST("/projects/:projectID/inbound-hooks", h.createInboundHook)
 	api.DELETE("/projects/:projectID/inbound-hooks/:hookID", h.deleteInboundHook)
+	api.GET("/projects/:projectID/emails", h.listEmailLog)
 	api.GET("/projects/:projectID/events", h.listEvents)
 	api.GET("/projects/:projectID/issues", h.listIssues)
 	api.GET("/projects/:projectID/components", h.listComponents)

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	db "github.com/tdvorak/primora/apps/backend/internal/database/db"
 	"github.com/tdvorak/primora/apps/backend/internal/models"
@@ -239,10 +240,11 @@ type alertEvaluator struct {
 	quit    chan struct{}
 	wg      sync.WaitGroup
 	started sync.Once
+	leader  *leaderState
 }
 
-func newAlertEvaluator(q alertQueries, publish func(ctx context.Context, projectID uuid.UUID, eventType string, data map[string]any), logger *slog.Logger) *alertEvaluator {
-	return &alertEvaluator{q: q, publish: publish, logger: logger, tick: time.Minute, quit: make(chan struct{})}
+func newAlertEvaluator(q alertQueries, publish func(ctx context.Context, projectID uuid.UUID, eventType string, data map[string]any), logger *slog.Logger, pool *pgxpool.Pool) *alertEvaluator {
+	return &alertEvaluator{q: q, publish: publish, logger: logger, tick: time.Minute, quit: make(chan struct{}), leader: newLeaderState(pool, leaderKeyAlerts)}
 }
 
 func (e *alertEvaluator) Start(ctx context.Context) {
@@ -255,8 +257,11 @@ func (e *alertEvaluator) Start(ctx context.Context) {
 			for {
 				select {
 				case <-t.C:
-					e.scan(ctx)
+					if e.leader.hold(ctx) {
+						e.scan(ctx)
+					}
 				case <-e.quit:
+					e.leader.stop(context.Background())
 					return
 				case <-ctx.Done():
 					return

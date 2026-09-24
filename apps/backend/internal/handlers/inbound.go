@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -78,6 +79,25 @@ func (h *HTTPHandler) deleteInboundHook(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+func (h *HTTPHandler) listEmailLog(c *gin.Context) {
+	actor, projectID, ok := h.actorAndProject(c)
+	if !ok {
+		return
+	}
+	var limit int64
+	if raw := c.Query("limit"); raw != "" {
+		if n, err := strconv.ParseInt(raw, 10, 64); err == nil {
+			limit = n
+		}
+	}
+	result, err := h.Platform.ListEmailLog(c.Request.Context(), actor, projectID, limit)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": result})
 }
 
 // receiveInboundHook is the public ingest endpoint — the URL token is the

@@ -243,6 +243,17 @@ type CoreDocument struct {
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
+type CoreEmailLog struct {
+	ID        uuid.UUID          `json:"id"`
+	ProjectID pgtype.UUID        `json:"project_id"`
+	Template  string             `json:"template"`
+	ToEmail   string             `json:"to_email"`
+	Subject   string             `json:"subject"`
+	Status    string             `json:"status"`
+	Error     string             `json:"error"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type CoreEvent struct {
 	ID          int64              `json:"id"`
 	ProjectID   uuid.UUID          `json:"project_id"`

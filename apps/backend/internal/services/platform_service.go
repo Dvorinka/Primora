@@ -229,12 +229,76 @@ func NewPlatformService(repo *repositories.CoreRepository, store *storage.LocalS
 	if enc != nil {
 		s.dispatcher = NewWebhookDispatcher(repo.Queries(), enc, logger)
 		s.dispatcher.Start(context.Background())
-		s.scheduler = NewJobScheduler(repo.Queries(), enc, logger, s.publishEvent)
+		s.scheduler = NewJobScheduler(repo.Queries(), enc, logger, s.publishEvent, repo.Pool())
 		s.scheduler.Start(context.Background())
-		s.alerts = newAlertEvaluator(repo.Queries(), s.publishEvent, logger)
+		s.alerts = newAlertEvaluator(repo.Queries(), s.publishEvent, logger, repo.Pool())
 		s.alerts.Start(context.Background())
 	}
 	return s
+}
+
+// sendTemplatedEmail renders a registered template, sends it, and writes an
+// email_log row with the outcome — failed sends are still logged so the
+// dashboard shows them.
+func (s *PlatformService) sendTemplatedEmail(ctx context.Context, projectID *uuid.UUID, template, to string, data map[string]string) error {
+	subject, body, err := renderMailTemplate(template, data)
+	status, errText := "sent", ""
+	if err == nil {
+		if sendErr := s.mailer.Send(ctx, to, subject, body); sendErr != nil {
+			status, errText, err = "failed", sendErr.Error(), sendErr
+		}
+	} else {
+		status, errText = "failed", err.Error()
+	}
+	var pid pgtype.UUID
+	if projectID != nil {
+		pid = pgtype.UUID{Bytes: *projectID, Valid: true}
+	}
+	_, _ = s.repo.Queries().InsertEmailLog(ctx, db.InsertEmailLogParams{
+		ProjectID: pid,
+		Template:  template,
+		ToEmail:   to,
+		Subject:   subject,
+		Status:    status,
+		Error:     errText,
+	})
+	return err
+}
+
+type EmailLogSummary struct {
+	ID        string    `json:"id"`
+	Template  string    `json:"template"`
+	ToEmail   string    `json:"to_email"`
+	Subject   string    `json:"subject"`
+	Status    string    `json:"status"`
+	Error     string    `json:"error,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func (s *PlatformService) ListEmailLog(ctx context.Context, actor *models.Actor, projectID uuid.UUID, limit int64) ([]EmailLogSummary, error) {
+	if err := s.requireProjectRole(ctx, actor, projectID, "admin", "developer", "viewer"); err != nil {
+		return nil, err
+	}
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	rows, err := s.repo.Queries().ListEmailLog(ctx, db.ListEmailLogParams{ProjectID: pgtype.UUID{Bytes: projectID, Valid: true}, Limit: int32(limit)})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]EmailLogSummary, len(rows))
+	for i, r := range rows {
+		out[i] = EmailLogSummary{
+			ID:        r.ID.String(),
+			Template:  r.Template,
+			ToEmail:   r.ToEmail,
+			Subject:   r.Subject,
+			Status:    r.Status,
+			Error:     r.Error,
+			CreatedAt: r.CreatedAt.Time,
+		}
+	}
+	return out, nil
 }
 
 // Close stops the webhook dispatcher and job scheduler. Idempotent.
@@ -913,7 +977,15 @@ func (s *PlatformService) CreateInvitation(ctx context.Context, actor *models.Ac
 	if err != nil {
 		inviteURL = strings.TrimRight(baseInviteURL, "/") + "/" + token
 	}
-	if err := s.mailer.SendInvitation(ctx, invitation.Email, "Primora", inviteURL); err != nil {
+	var inviteProject *uuid.UUID
+	if projectUUID.Valid {
+		id := uuid.UUID(projectUUID.Bytes)
+		inviteProject = &id
+	}
+	if err := s.sendTemplatedEmail(ctx, inviteProject, "invitation", invitation.Email, map[string]string{
+		"organization": "Primora",
+		"invite_url":   inviteURL,
+	}); err != nil {
 		return nil, err
 	}
 	return map[string]any{

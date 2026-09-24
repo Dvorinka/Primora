@@ -331,6 +331,28 @@ Project-scoped public ingest for external systems.
   the received body as payload (`triggered_by: "hook"`).
 - 256 KiB body cap; `last_received_at` tracked; managed from Integrations.
 
+## HA scheduler (unreleased)
+
+Multi-replica safety for the job scheduler and alert evaluator.
+
+- PostgreSQL advisory locks (session-scoped, separate keys per component)
+  on a dedicated pinned pool connection; only the leader scans for due work.
+- Manual runs and hook-triggered runs work on any replica — the lock gates
+  only the scheduled scan, so leadership loss never blocks on-demand work.
+- Released on shutdown; failover verified with a live two-replica test —
+  the survivor acquired leadership and fired the due job.
+
+## Email surface (unreleased)
+
+Reusable templates + an operational send log.
+
+- `core.email_log` (migration 00014) — every send recorded: template,
+  recipient, subject, `sent`/`failed` status, error text.
+- `Mailer` stays transport-only (Resend when configured, SMTP otherwise);
+  templates render subject + plaintext body. First template: `invitation`.
+- `GET /projects/:id/emails` lists recent sends; Members page shows an
+  "Email log" card under pending invitations.
+
 ## Future phases — candidates
 
 Ordered loosely by leverage. None committed; each gets scoped when picked.

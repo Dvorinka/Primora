@@ -1722,6 +1722,8 @@ export default function App() {
 
           <Show when={activeView() === "members"}>
             <MembersPage
+              projectID={activeProject()?.id}
+              demoMode={isDemo}
               organizationMembers={organizationMembers()}
               organizationInvitations={organizationInvitations()}
               projectMembers={projectMembers()}
