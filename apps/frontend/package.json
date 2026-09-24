@@ -10,6 +10,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@fontsource/geist": "^5.3.0",
+    "@fontsource/geist-mono": "^5.3.0",
     "@primora/api-client": "0.5.0",
     "@primora/shared-types": "0.5.0",
     "better-auth": "^1.5.6",

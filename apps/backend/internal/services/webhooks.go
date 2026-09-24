@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -31,6 +32,8 @@ const (
 	WebhookEventIssueCreated    = "issue.created"
 	WebhookEventDeployMarker    = "deploy.marker"
 	WebhookEventTest            = "webhook.test"
+	WebhookEventAlertFired      = "alert.fired"
+	WebhookEventAlertResolved   = "alert.resolved"
 	WebhookEventDocumentCreated = "document.created"
 	WebhookEventDocumentUpdated = "document.updated"
 	WebhookEventDocumentDeleted = "document.deleted"
@@ -43,6 +46,9 @@ var webhookEventTypes = map[string]bool{
 	WebhookEventIssueCreated:    true,
 	WebhookEventDeployMarker:    true,
 	WebhookEventTest:            true,
+	WebhookEventAlertFired:      true,
+	WebhookEventAlertResolved:   true,
+	WebhookEventInboundReceived: true,
 	WebhookEventJobRun:          true,
 	WebhookEventDocumentCreated: true,
 	WebhookEventDocumentUpdated: true,
@@ -160,7 +166,7 @@ func normalizeWebhookURL(raw string) (string, error) {
 	trimmed := strings.TrimSpace(raw)
 	u, err := url.Parse(trimmed)
 	if err != nil || u.Host == "" {
-		return "", errors.New("webhook url must be an https URL")
+		return "", inputErrorf("webhook url must be an https URL")
 	}
 	if u.Scheme == "https" {
 		return trimmed, nil
@@ -168,17 +174,35 @@ func normalizeWebhookURL(raw string) (string, error) {
 	if u.Scheme == "http" && isPrivateWebhookHost(u.Hostname()) {
 		return trimmed, nil
 	}
-	return "", errors.New("webhook url must be https (http allowed only for private/self-hosted targets)")
+	return "", inputErrorf("webhook url must be https (http allowed only for private/self-hosted targets)")
+}
+
+var decimalOrHexIPRe = regexp.MustCompile(`^(0x[0-9a-f]+|[0-9]+)$`)
+
+// metadataAddrs are link-local addresses that serve cloud instance
+// metadata — "private" by range but a privileged SSRF target.
+var metadataAddrs = map[string]bool{
+	"169.254.169.254": true, // AWS/GCP/Azure
+	"fd00:ec2::254":   true, // AWS IPv6 metadata
 }
 
 func isPrivateWebhookHost(host string) bool {
 	h := strings.ToLower(strings.Trim(host, "[]"))
+	if metadataAddrs[h] {
+		return false
+	}
 	if h == "localhost" || h == "host.docker.internal" ||
 		strings.HasSuffix(h, ".local") || strings.HasSuffix(h, ".internal") || strings.HasSuffix(h, ".lan") {
 		return true
 	}
 	if !strings.Contains(h, ".") && !strings.Contains(h, ":") {
-		return true // bare hostname — docker service name, unqualified LAN host
+		// Bare hostname — docker service name, unqualified LAN host. A
+		// pure decimal/hex integer is never a service name: it's a
+		// non-canonical IP encoding (2130706433 = 127.0.0.1, 0x7f000001).
+		if decimalOrHexIPRe.MatchString(h) {
+			return false
+		}
+		return true
 	}
 	ip := net.ParseIP(h)
 	if ip == nil {
@@ -187,16 +211,40 @@ func isPrivateWebhookHost(host string) bool {
 	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast()
 }
 
+// webhookEventNamespaces are the valid `<ns>.*` subscription prefixes —
+// derived from the known system event types.
+func webhookEventNamespaces() map[string]bool {
+	ns := map[string]bool{}
+	for t := range webhookEventTypes {
+		if i := strings.Index(t, "."); i > 0 {
+			ns[t[:i]] = true
+		}
+	}
+	return ns
+}
+
+// validateWebhookEvents accepts known system types, `*`, `<ns>.*` namespace
+// patterns, and `custom.*` wildcard patterns — the same grammar functions
+// use for event_pattern. Matching happens via SQL LIKE at dispatch.
 func validateWebhookEvents(events []string) ([]string, error) {
 	out := make([]string, 0, len(events))
 	seen := map[string]bool{}
+	namespaces := webhookEventNamespaces()
 	for _, e := range events {
 		e = strings.TrimSpace(e)
 		if e == "" {
 			continue
 		}
-		if !webhookEventTypes[e] {
-			return nil, fmt.Errorf("unknown event type %q", e)
+		valid := webhookEventTypes[e] || e == "*"
+		if !valid && strings.HasSuffix(e, ".*") {
+			valid = namespaces[strings.TrimSuffix(e, ".*")]
+		}
+		if !valid && strings.HasPrefix(e, "custom.") {
+			// `*` isn't in the type grammar — probe it as a literal.
+			valid = customEventTypeRe.MatchString(strings.ReplaceAll(e, "*", "x"))
+		}
+		if !valid {
+			return nil, inputErrorf("invalid event type %q — use a known type, <namespace>.*, custom.<pattern>, or *", e)
 		}
 		if !seen[e] {
 			seen[e] = true

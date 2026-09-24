@@ -10,9 +10,12 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -29,7 +32,7 @@ import (
 
 type PlatformService struct {
 	repo           *repositories.CoreRepository
-	store          *storage.LocalStore
+	store          storage.Store
 	mailer         *Mailer
 	publicURL      string
 	dbx            *dbx.Client
@@ -38,6 +41,13 @@ type PlatformService struct {
 	enc            *secrets.Encryptor
 	dispatcher     *WebhookDispatcher
 	scheduler      *JobScheduler
+	alerts         *alertEvaluator
+	functions      FunctionRunner
+	logger         *slog.Logger
+
+	// presenceMu guards presence: realtime subscriber counts per project.
+	presenceMu sync.Mutex
+	presence   map[uuid.UUID]int
 }
 
 type BootstrapInput struct {
@@ -223,15 +233,82 @@ type InvitationSummary struct {
 	Status          string     `json:"status"`
 }
 
-func NewPlatformService(repo *repositories.CoreRepository, store *storage.LocalStore, mailer *Mailer, publicURL string, dbxClient *dbx.Client, enc *secrets.Encryptor, logger *slog.Logger) *PlatformService {
-	s := &PlatformService{repo: repo, store: store, mailer: mailer, publicURL: publicURL, dbx: dbxClient, hub: NewEventHub(), realtime: NewEventHub(), enc: enc}
+func NewPlatformService(repo *repositories.CoreRepository, store storage.Store, mailer *Mailer, publicURL string, dbxClient *dbx.Client, enc *secrets.Encryptor, logger *slog.Logger, functions FunctionRunner) *PlatformService {
+	s := &PlatformService{repo: repo, store: store, mailer: mailer, publicURL: publicURL, dbx: dbxClient, hub: NewEventHub(), realtime: NewEventHub(), enc: enc, functions: functions, logger: logger, presence: map[uuid.UUID]int{}}
 	if enc != nil {
 		s.dispatcher = NewWebhookDispatcher(repo.Queries(), enc, logger)
 		s.dispatcher.Start(context.Background())
-		s.scheduler = NewJobScheduler(repo.Queries(), enc, logger, s.publishEvent)
+		s.scheduler = NewJobScheduler(repo.Queries(), enc, logger, s.publishEvent, repo.Pool())
+		s.scheduler.runFn = s.runJobFunction
 		s.scheduler.Start(context.Background())
+		s.alerts = newAlertEvaluator(repo.Queries(), s.publishEvent, logger, repo.Pool())
+		s.alerts.Start(context.Background())
 	}
 	return s
+}
+
+// sendTemplatedEmail renders a registered template, sends it, and writes an
+// email_log row with the outcome — failed sends are still logged so the
+// dashboard shows them.
+func (s *PlatformService) sendTemplatedEmail(ctx context.Context, projectID *uuid.UUID, template, to string, data map[string]string) error {
+	subject, body, err := renderMailTemplate(template, data)
+	status, errText := "sent", ""
+	if err == nil {
+		if sendErr := s.mailer.Send(ctx, to, subject, body); sendErr != nil {
+			status, errText, err = "failed", sendErr.Error(), sendErr
+		}
+	} else {
+		status, errText = "failed", err.Error()
+	}
+	var pid pgtype.UUID
+	if projectID != nil {
+		pid = pgtype.UUID{Bytes: *projectID, Valid: true}
+	}
+	_, _ = s.repo.Queries().InsertEmailLog(ctx, db.InsertEmailLogParams{
+		ProjectID: pid,
+		Template:  template,
+		ToEmail:   to,
+		Subject:   subject,
+		Status:    status,
+		Error:     errText,
+	})
+	return err
+}
+
+type EmailLogSummary struct {
+	ID        string    `json:"id"`
+	Template  string    `json:"template"`
+	ToEmail   string    `json:"to_email"`
+	Subject   string    `json:"subject"`
+	Status    string    `json:"status"`
+	Error     string    `json:"error,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func (s *PlatformService) ListEmailLog(ctx context.Context, actor *models.Actor, projectID uuid.UUID, limit int64) ([]EmailLogSummary, error) {
+	if err := s.requireProjectRole(ctx, actor, projectID, "admin", "developer", "viewer"); err != nil {
+		return nil, err
+	}
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	rows, err := s.repo.Queries().ListEmailLog(ctx, db.ListEmailLogParams{ProjectID: pgtype.UUID{Bytes: projectID, Valid: true}, Limit: int32(limit)})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]EmailLogSummary, len(rows))
+	for i, r := range rows {
+		out[i] = EmailLogSummary{
+			ID:        r.ID.String(),
+			Template:  r.Template,
+			ToEmail:   r.ToEmail,
+			Subject:   r.Subject,
+			Status:    r.Status,
+			Error:     r.Error,
+			CreatedAt: r.CreatedAt.Time,
+		}
+	}
+	return out, nil
 }
 
 // Close stops the webhook dispatcher and job scheduler. Idempotent.
@@ -241,6 +318,9 @@ func (s *PlatformService) Close() {
 	}
 	if s.scheduler != nil {
 		s.scheduler.Stop()
+	}
+	if s.alerts != nil {
+		s.alerts.Stop()
 	}
 }
 
@@ -256,18 +336,118 @@ func (s *PlatformService) publishEvent(ctx context.Context, projectID uuid.UUID,
 		})
 	}
 	s.dispatchEvent(ctx, projectID, eventType, data)
+	s.triggerFunctionsForEvent(ctx, projectID, eventType, data)
 }
 
-// SubscribeRealtime registers an SSE consumer for project domain events.
+// SubscribeRealtime registers an SSE consumer for project domain events and
+// bumps the project's presence count.
 func (s *PlatformService) SubscribeRealtime(ctx context.Context, actor *models.Actor, projectID uuid.UUID) (chan []byte, error) {
 	if err := s.requireProjectRole(ctx, actor, projectID, "admin", "developer", "viewer"); err != nil {
 		return nil, err
 	}
-	return s.realtime.Subscribe(projectID.String()), nil
+	ch := s.realtime.Subscribe(projectID.String())
+	s.bumpPresence(projectID, 1)
+	return ch, nil
 }
 
 func (s *PlatformService) UnsubscribeRealtime(projectID uuid.UUID, ch chan []byte) {
 	s.realtime.Unsubscribe(projectID.String(), ch)
+	s.bumpPresence(projectID, -1)
+}
+
+// bumpPresence adjusts the online count and broadcasts presence.update to
+// realtime subscribers only — deliberately not through publishEvent, so
+// webhooks and `event_pattern: "*"` functions don't fire on connect noise.
+func (s *PlatformService) bumpPresence(projectID uuid.UUID, delta int) {
+	s.presenceMu.Lock()
+	n := s.presence[projectID] + delta
+	if n <= 0 {
+		delete(s.presence, projectID)
+		n = 0
+	} else {
+		s.presence[projectID] = n
+	}
+	s.presenceMu.Unlock()
+	s.realtime.Broadcast(projectID.String(), map[string]any{
+		"type":        "presence.update",
+		"occurred_at": time.Now().UTC().Format(time.RFC3339),
+		"data":        map[string]any{"online": n},
+	})
+}
+
+// Presence returns the current realtime subscriber count for a project.
+func (s *PlatformService) Presence(ctx context.Context, actor *models.Actor, projectID uuid.UUID) (int, error) {
+	if err := s.requireProjectRole(ctx, actor, projectID, "admin", "developer", "viewer"); err != nil {
+		return 0, err
+	}
+	s.presenceMu.Lock()
+	defer s.presenceMu.Unlock()
+	return s.presence[projectID], nil
+}
+
+var customEventTypeRe = regexp.MustCompile(`^custom\.[a-z0-9][a-z0-9_.-]{0,62}$`)
+
+// PublishProjectEvent lets a member emit a custom domain event — realtime
+// subscribers, matching webhooks, and event_pattern functions all fire via
+// the standard publishEvent fan-out. The custom.* prefix is enforced so
+// clients can't spoof system event types (document.created etc.).
+func (s *PlatformService) PublishProjectEvent(ctx context.Context, actor *models.Actor, projectID uuid.UUID, eventType string, data map[string]any) error {
+	if err := s.requireProjectRole(ctx, actor, projectID, "admin", "developer"); err != nil {
+		return err
+	}
+	if !customEventTypeRe.MatchString(eventType) {
+		return errors.New("invalid event type: must match custom.<name> (lowercase letters, digits, dots, dashes)")
+	}
+	if data == nil {
+		data = map[string]any{}
+	}
+	s.publishEvent(ctx, projectID, eventType, data)
+	return nil
+}
+
+// ActorContext describes the caller's own scope — the self-discovery
+// endpoint for API keys, which cannot call /me. User actors get just the
+// type marker; their full view is PlatformSummary.
+type ActorContext struct {
+	Actor        string          `json:"actor"`
+	Scopes       []string        `json:"scopes,omitempty"`
+	KeyPrefix    string          `json:"key_prefix,omitempty"`
+	Organization *ContextOrgInfo `json:"organization,omitempty"`
+	Project      *ContextRef     `json:"project,omitempty"`
+}
+
+type ContextOrgInfo struct {
+	ContextRef
+	Role string `json:"role,omitempty"`
+}
+
+type ContextRef struct {
+	ID   uuid.UUID `json:"id"`
+	Slug string    `json:"slug"`
+	Name string    `json:"name"`
+}
+
+func (s *PlatformService) ActorContext(ctx context.Context, actor *models.Actor) (ActorContext, error) {
+	out := ActorContext{Actor: string(actor.Type)}
+	if actor.Type != models.ActorTypeAPIKey {
+		return out, nil
+	}
+	out.Scopes = actor.Scopes
+	out.KeyPrefix = actor.APIKeyPrefix
+	if actor.ProjectID == nil {
+		return out, nil
+	}
+	project, err := s.repo.Queries().GetProjectByID(ctx, *actor.ProjectID)
+	if err != nil {
+		return out, err
+	}
+	out.Project = &ContextRef{ID: project.ID, Slug: project.Slug, Name: project.Name}
+	org, err := s.repo.Queries().GetOrganizationByID(ctx, project.OrganizationID)
+	if err != nil {
+		return out, err
+	}
+	out.Organization = &ContextOrgInfo{ContextRef: ContextRef{ID: org.ID, Slug: org.Slug, Name: org.Name}}
+	return out, nil
 }
 
 func (s *PlatformService) Me(ctx context.Context, actor *models.Actor) (PlatformSummary, error) {
@@ -907,7 +1087,15 @@ func (s *PlatformService) CreateInvitation(ctx context.Context, actor *models.Ac
 	if err != nil {
 		inviteURL = strings.TrimRight(baseInviteURL, "/") + "/" + token
 	}
-	if err := s.mailer.SendInvitation(ctx, invitation.Email, "Primora", inviteURL); err != nil {
+	var inviteProject *uuid.UUID
+	if projectUUID.Valid {
+		id := uuid.UUID(projectUUID.Bytes)
+		inviteProject = &id
+	}
+	if err := s.sendTemplatedEmail(ctx, inviteProject, "invitation", invitation.Email, map[string]string{
+		"organization": "Primora",
+		"invite_url":   inviteURL,
+	}); err != nil {
 		return nil, err
 	}
 	return map[string]any{
@@ -1334,6 +1522,64 @@ func (s *PlatformService) GetObject(ctx context.Context, actor *models.Actor, bu
 		return db.CoreBucketObject{}, nil, err
 	}
 	return object, file, nil
+}
+
+// ErrPresignUnsupported — the configured storage driver can't mint signed
+// URLs (only the S3 driver can). Handlers map it to 400, not 500.
+var ErrPresignUnsupported = errors.New("presigned URLs require BACKEND_STORAGE_DRIVER=s3")
+
+// InputError marks a service-layer failure caused by caller input — the
+// HTTP layer maps it to 400 instead of 500.
+type InputError struct{ msg string }
+
+func (e *InputError) Error() string { return e.msg }
+
+func NewInputError(msg string) error { return &InputError{msg: msg} }
+
+func inputErrorf(format string, args ...any) error {
+	return &InputError{msg: fmt.Sprintf(format, args...)}
+}
+
+// PresignObject mints a short-lived direct-to-storage URL for a single
+// object. Requires the s3 storage driver — the local store has no external
+// URL surface to sign against.
+func (s *PlatformService) PresignObject(ctx context.Context, actor *models.Actor, bucketID uuid.UUID, objectKey, op string, ttlSeconds int) (*storage.PresignedURL, error) {
+	bucket, err := s.repo.Queries().GetBucketByID(ctx, bucketID)
+	if err != nil {
+		return nil, err
+	}
+	method := ""
+	switch op {
+	case "download", "":
+		method = http.MethodGet
+		if err := s.requireBucketRead(ctx, actor, bucket); err != nil {
+			return nil, err
+		}
+		if !objectExists(ctx, s, bucketID, objectKey) {
+			return nil, pgx.ErrNoRows
+		}
+	case "upload":
+		method = http.MethodPut
+		if err := s.requireBucketWrite(ctx, actor, bucket); err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("invalid op %q — download or upload", op)
+	}
+	p, ok := s.store.(storage.Presigner)
+	if !ok {
+		return nil, ErrPresignUnsupported
+	}
+	ttl := time.Duration(ttlSeconds) * time.Second
+	return p.Presign(ctx, bucketID.String(), objectKey, method, ttl)
+}
+
+func objectExists(ctx context.Context, s *PlatformService, bucketID uuid.UUID, key string) bool {
+	_, err := s.repo.Queries().GetBucketObjectByKey(ctx, db.GetBucketObjectByKeyParams{
+		BucketID:  bucketID,
+		ObjectKey: key,
+	})
+	return err == nil
 }
 
 func (s *PlatformService) UpdateObject(ctx context.Context, actor *models.Actor, bucketID uuid.UUID, objectKey string, input UpdateObjectInput, requestID string) (db.CoreBucketObject, error) {

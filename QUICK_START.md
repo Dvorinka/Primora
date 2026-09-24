@@ -65,6 +65,10 @@ The important ones:
 | `SIGNUP_ENABLED` | Open public sign-up after bootstrap — default `false`; admins override in-app |
 | `PRIMORA_MANAGED` | Managed tier flag — enables OAuth providers when `true`; self-hosted is email/password only |
 | `USER_RATE_LIMIT_PER_MINUTE` / `API_KEY_RATE_LIMIT_PER_MINUTE` | Throttling defaults — overridable in-app |
+| `BACKEND_STORAGE_DRIVER` | `local` (default, `BACKEND_STORAGE_ROOT`) or `s3` — S3-compatible object storage |
+| `S3_ENDPOINT` / `S3_BUCKET` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | S3 backend config (with `S3_REGION`, `S3_PREFIX`, `S3_PATH_STYLE`) |
+| `S3_PUBLIC_ENDPOINT` | Client-facing S3 host for presigned URLs when `S3_ENDPOINT` is internal-only |
+| `FUNCTIONS_RUNTIME` / `FUNCTIONS_TIMEOUT_SECONDS` | JS runtime for Functions — `auto` (default, resolves `bun`/`deno` from PATH) or a binary path; 30 s default timeout |
 | `VITE_DEMO_MODE` | Enable the client-side demo workspace |
 
 ### Instance administration

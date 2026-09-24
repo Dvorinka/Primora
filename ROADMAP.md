@@ -123,8 +123,11 @@ Follow-ups:
 
 - Verify the macOS/Windows desktop bundles produced by the `v0.5.0` CI run
   (host-verified on Linux only).
-- Desktop bundle signing + auto-updater — unsigned artifacts today; add when
-  distribution matures.
+- ~~Desktop bundle signing + auto-updater~~ ✅ — `tauri-plugin-updater`
+  wired: signed updater artifacts (`createUpdaterArtifacts`), minisign
+  keypair, `latest.json` manifest assembled on release, in-app
+  "Update & restart" on the connect screen. macOS/Windows OS-level code
+  signing (notarization/Authenticode) still open — needs paid certs.
 
 ## Phase 6 — Production hardening (v0.6.0) ✅
 
@@ -185,8 +188,9 @@ release pipeline with images + binaries + desktop bundles.
   (auto-registers from ingest).
 - ~~**DB-to-DB links**~~ ✅ — implemented and verified live (postgres →
   dragonfly transfer, key templating, TTL).
-- ~~**External object storage**~~ ✅ — constraint documented in
-  DEPLOYMENT_GUIDE.md / PRODUCTION_READINESS.md; S3 backend deferred.
+- ~~**External object storage**~~ ✅ — `BACKEND_STORAGE_DRIVER=s3` shipped
+  (Phase 10): any S3-compatible API + presigned URLs; local disk remains
+  the default.
 
 ### Testing
 
@@ -205,8 +209,10 @@ release pipeline with images + binaries + desktop bundles.
 - ~~**arm64 images**~~ ✅ — release builds `linux/amd64,linux/arm64` via
   QEMU + buildx.
 - Carried forward from Phase 5 follow-ups: macOS/Windows bundle
-  verification, signing + auto-updater.
-- Optional: SBOM + provenance attestation on release images.
+  verification; updater + minisign signing shipped (OS-level signing
+  remains open).
+- ~~Optional: SBOM~~ ✅ — CycloneDX SBOMs per published image + source
+  tree, attached to every release (`anchore/sbom-action`).
 
 ### Docs
 
@@ -304,28 +310,115 @@ Channel subscriptions over the Phase 7 SSE stream, in `@primora/client`.
   with capped backoff, `onStateChange` lifecycle.
 - `channel("documents").on("created", cb)` — namespaces `document`, `object`,
   `issue`, `deploy`, `"*"` for everything; trailing `s` optional.
-- Presence and client-broadcast deliberately deferred — protocol question,
-  no consumer yet.
+- **Presence** ✅ — server tracks realtime subscribers per project;
+  `presence.update` {online: n} broadcasts on every join/leave (realtime-only,
+  never fans out to webhooks/functions), `GET …/realtime/presence` reads the
+  count, `client.presence()` wraps it.
+- **Client events** ✅ — `POST /projects/:id/events` publishes `custom.*`
+  types through the standard fan-out (realtime + webhooks + functions);
+  `client.publish("custom.x", data)` and `primora events:send` both reach it.
+  The `custom.*` prefix is enforced so clients can't spoof system events.
+
+## Notifications — alert rules (unreleased)
+
+Telemetry-driven alerts delivered through the existing webhook dispatcher.
+
+- `core.alert_rules` (migration 00012) — `heartbeat_silence` and
+  `error_spike` kinds, per-component or project-wide scope, evaluated by a
+  60 s backend ticker.
+- Transition-based firing: `alert.fired` once on breach, `alert.resolved`
+  on recovery — no notification storms. Both are webhook event types and
+  realtime events, so any existing subscriber receives them signed.
+- CRUD via `/projects/:id/alerts`; Integrations page manages rules next to
+  webhooks and shows live `firing` state.
+
+## Inbound webhooks (unreleased)
+
+Project-scoped public ingest for external systems.
+
+- `POST /api/v1/hooks/<token>` — token is the credential; optional
+  `X-Primora-Signature` HMAC-SHA256 verification when a secret is set.
+- `event` mode republishes the body as `inbound.received` (webhooks +
+  realtime fan out for free); `job` mode enqueues a scheduled-job run with
+  the received body as payload (`triggered_by: "hook"`).
+- 256 KiB body cap; `last_received_at` tracked; managed from Integrations.
+
+## HA scheduler (unreleased)
+
+Multi-replica safety for the job scheduler and alert evaluator.
+
+- PostgreSQL advisory locks (session-scoped, separate keys per component)
+  on a dedicated pinned pool connection; only the leader scans for due work.
+- Manual runs and hook-triggered runs work on any replica — the lock gates
+  only the scheduled scan, so leadership loss never blocks on-demand work.
+- Released on shutdown; failover verified with a live two-replica test —
+  the survivor acquired leadership and fired the due job.
+
+## Email surface (unreleased)
+
+Reusable templates + an operational send log.
+
+- `core.email_log` (migration 00014) — every send recorded: template,
+  recipient, subject, `sent`/`failed` status, error text.
+- `Mailer` stays transport-only (Resend when configured, SMTP otherwise);
+  templates render subject + plaintext body. First template: `invitation`.
+- `GET /projects/:id/emails` lists recent sends; Members page shows an
+  "Email log" card under pending invitations.
 
 ## Future phases — candidates
 
 Ordered loosely by leverage. None committed; each gets scoped when picked.
 
-- **Phase 9 — Functions** — user code on schedule/event/HTTP triggers.
-  Deno or Bun isolates in a sidecar; secrets via env, payload via stdin.
-  The job runner already supplies the scheduling half.
-- **Phase 10 — Storage backends** — S3-compatible object storage behind
-  the existing bucket abstraction (deferred from Phase 6), plus
-  presigned-URL uploads for large files.
-- **Notifications** — alert rules on telemetry (error-rate thresholds,
-  heartbeat silence) fanning out through the webhook dispatcher.
-- **Inbound webhooks** — project-scoped ingest endpoints that turn
-  external events into domain events/jobs.
-- **HA mode** — leader-elected scheduler + distributed locks so two
-  backend replicas don't double-fire jobs; Postgres advisory locks are
-  enough at this scale.
-- **Email surface** — transactional templates + send log in the
-  dashboard, backed by the auth service's existing SMTP/Resend wiring.
+- **Phase 9 — Functions** — ✅ shipped: `core.functions` +
+  `core.function_runs`, bun/deno exec runner (stdin payload, env injection,
+  capped output, timeout), invoke API + dashboard page. Triggers shipped:
+  scheduled jobs (`function_id` on a job), inbound hooks (`mode:
+  "function"`), and domain events (`event_pattern`, e.g. `document.*`).
+  Runs record trigger source (`manual`/`schedule`/`hook`/`event`).
+  Isolation shipped: `FUNCTIONS_DRIVER=docker` runs every invoke in an
+  ephemeral locked-down container (no network, read-only fs, non-root).
+  Remaining candidate: Firecracker/gVisor microVMs for hostile
+  multi-tenant workloads — docker socket trust is documented.
+- **Phase 10 — Storage backends** — ✅ shipped: `BACKEND_STORAGE_DRIVER=s3`
+  + `S3_*` env vars, stdlib SigV4, verified against a real S3 server.
+  Presigned upload/download URLs shipped: `POST
+  /buckets/:id/object-presigns` mints SigV4 query-signed GET/PUT URLs
+  (`S3_PUBLIC_ENDPOINT` rewrites the client-facing host); local driver
+  returns a clear error — a presigned URL needs a real object API behind it.
+- **HA mode** — ✅ shipped: PostgreSQL advisory-lock leadership for the
+  scheduler and alert evaluator; failover verified with two replicas.
+- **Email surface** — ✅ shipped: templated sends + `core.email_log` +
+  dashboard card; more templates land as new flows need them.
+
+## Release hardening (unreleased)
+
+- **Desktop auto-updater** — `tauri-plugin-updater`: signed updater
+  artifacts, `latest.json` manifest assembled per release, in-app
+  "Update & restart" on the connect screen. Unsigned artifacts can never
+  install — no signature means no manifest.
+- **SBOMs** — CycloneDX per GHCR image + source tree, attached to every
+  GitHub Release.
+- Requires `TAURI_SIGNING_PRIVATE_KEY` repo secret (keypair generated
+  locally; private half never committed).
+
+## Sandboxed functions (unreleased)
+
+- `FUNCTIONS_DRIVER=docker` — every invoke runs in an ephemeral sibling
+  container: `--network none`, read-only rootfs, 128 MiB / 0.5 CPU / 64
+  pids, non-root, `--cap-drop ALL`. Source travels as base64 env — no
+  bind mount, so Docker Desktop and remote daemons work. Timeout
+  force-removes the named container.
+- `exec` remains the default for single-team deployments; the trust-model
+  doc describes both levels.
+
+## Client events + presence (unreleased)
+
+- `POST /projects/:id/events` — members/API keys publish `custom.*`
+  events through the standard fan-out (realtime + webhooks + functions);
+  system types can't be spoofed.
+- Presence — per-project realtime subscriber counts; `presence.update`
+  broadcasts on join/leave (stream-only), `GET …/realtime/presence`
+  reads the count. SDK: `publish()` + `presence()`; CLI: `events:send`.
 
 ---
 

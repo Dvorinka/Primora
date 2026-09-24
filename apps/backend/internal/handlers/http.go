@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	db "github.com/tdvorak/primora/apps/backend/internal/database/db"
 	"github.com/tdvorak/primora/apps/backend/internal/middleware"
@@ -35,6 +37,7 @@ func (h *HTTPHandler) Register(router *gin.Engine) {
 
 	api := router.Group("/api/v1")
 	api.GET("/me", h.me)
+	api.GET("/context", h.actorContext)
 	api.GET("/instance/public", h.instancePublic)
 	api.GET("/instance/settings", h.listInstanceSettings)
 	api.PUT("/instance/settings/:key", h.updateInstanceSetting)
@@ -79,7 +82,20 @@ func (h *HTTPHandler) Register(router *gin.Engine) {
 	api.DELETE("/collections/:collectionID/documents/:documentID", h.deleteDocument)
 	api.OPTIONS("/ingest", h.ingestOptions)
 	api.POST("/ingest", h.ingest)
+	api.POST("/hooks/:token", h.receiveInboundHook)
+	api.GET("/projects/:projectID/inbound-hooks", h.listInboundHooks)
+	api.POST("/projects/:projectID/inbound-hooks", h.createInboundHook)
+	api.DELETE("/projects/:projectID/inbound-hooks/:hookID", h.deleteInboundHook)
+	api.GET("/projects/:projectID/emails", h.listEmailLog)
+	api.GET("/projects/:projectID/functions", h.listFunctions)
+	api.POST("/projects/:projectID/functions", h.createFunction)
+	api.GET("/projects/:projectID/functions/:functionID", h.getFunction)
+	api.PUT("/projects/:projectID/functions/:functionID", h.updateFunction)
+	api.DELETE("/projects/:projectID/functions/:functionID", h.deleteFunction)
+	api.POST("/projects/:projectID/functions/:functionID/invoke", h.invokeFunction)
+	api.GET("/projects/:projectID/functions/:functionID/runs", h.listFunctionRuns)
 	api.GET("/projects/:projectID/events", h.listEvents)
+	api.POST("/projects/:projectID/events", h.publishEvent)
 	api.GET("/projects/:projectID/issues", h.listIssues)
 	api.GET("/projects/:projectID/components", h.listComponents)
 	api.DELETE("/projects/:projectID/components/:componentID", h.deleteComponent)
@@ -121,10 +137,17 @@ func (h *HTTPHandler) Register(router *gin.Engine) {
 	api.PUT("/projects/:projectID/secrets/:name", h.setProjectSecret)
 	api.DELETE("/projects/:projectID/secrets/:name", h.deleteProjectSecret)
 	api.POST("/projects/:projectID/secrets/:name/reveal", h.revealProjectSecret)
+
+	api.GET("/projects/:projectID/alerts", h.listAlertRules)
+	api.POST("/projects/:projectID/alerts", h.createAlertRule)
+	api.PUT("/projects/:projectID/alerts/:ruleID", h.updateAlertRule)
+	api.DELETE("/projects/:projectID/alerts/:ruleID", h.deleteAlertRule)
 	api.GET("/projects/:projectID/realtime/stream", h.realtimeStream)
+	api.GET("/projects/:projectID/realtime/presence", h.realtimePresence)
 	api.GET("/buckets/:bucketID/objects", h.listObjects)
 	api.POST("/buckets/:bucketID/objects", h.uploadObject)
 	api.POST("/buckets/:bucketID/object-copies", h.copyObject)
+	api.POST("/buckets/:bucketID/object-presigns", h.presignObject)
 	api.GET("/buckets/:bucketID/objects/*objectKey", h.downloadObject)
 	api.PATCH("/buckets/:bucketID/objects/*objectKey", h.updateObject)
 	api.DELETE("/buckets/:bucketID/objects/*objectKey", h.deleteObject)
@@ -154,6 +177,19 @@ func (h *HTTPHandler) me(c *gin.Context) {
 		return
 	}
 	result, err := h.Platform.Me(c.Request.Context(), actor)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *HTTPHandler) actorContext(c *gin.Context) {
+	actor, ok := middleware.RequireActor(c)
+	if !ok {
+		return
+	}
+	result, err := h.Platform.ActorContext(c.Request.Context(), actor)
 	if err != nil {
 		h.handleError(c, err)
 		return
@@ -874,6 +910,43 @@ func (h *HTTPHandler) updateObject(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+type presignObjectRequest struct {
+	Key        string `json:"key" validate:"required"`
+	Op         string `json:"op" validate:"omitempty,oneof=download upload"`
+	TTLSeconds int    `json:"ttl_seconds" validate:"omitempty,min=60,max=3600"`
+}
+
+// presignObject returns a short-lived URL clients call against storage
+// directly — keeps large transfers off the backend. S3 driver only.
+func (h *HTTPHandler) presignObject(c *gin.Context) {
+	actor, ok := middleware.RequireActor(c)
+	if !ok {
+		return
+	}
+	bucketID, ok := parseUUIDParam(c, "bucketID")
+	if !ok {
+		return
+	}
+	var body presignObjectRequest
+	if !h.bindAndValidate(c, &body) {
+		return
+	}
+	out, err := h.Platform.PresignObject(c.Request.Context(), actor, bucketID, strings.TrimSpace(body.Key), body.Op, body.TTLSeconds)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			apperrors.Abort(c, http.StatusNotFound, "not_found", "bucket or object not found")
+			return
+		}
+		if errors.Is(err, services.ErrPresignUnsupported) {
+			apperrors.Abort(c, http.StatusBadRequest, "presign_unsupported", err.Error())
+			return
+		}
+		h.handleError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, out)
+}
+
 func (h *HTTPHandler) deleteObject(c *gin.Context) {
 	actor, ok := middleware.RequireActor(c)
 	if !ok {
@@ -1207,17 +1280,58 @@ func (h *HTTPHandler) bindAndValidate(c *gin.Context, target any) bool {
 		return false
 	}
 	if err := h.Validate.Struct(target); err != nil {
-		apperrors.Abort(c, http.StatusBadRequest, "validation_failed", err.Error())
+		var valErrs validator.ValidationErrors
+		if errors.As(err, &valErrs) && len(valErrs) > 0 {
+			apperrors.Abort(c, http.StatusBadRequest, "validation_failed", formatFieldError(valErrs[0]))
+		} else {
+			apperrors.Abort(c, http.StatusBadRequest, "validation_failed", "invalid request body")
+		}
 		return false
 	}
 	return true
+}
+
+func formatFieldError(f validator.FieldError) string {
+	if f.Tag() == "required" {
+		return fmt.Sprintf("%s is required", strings.ToLower(f.Field()))
+	}
+	return fmt.Sprintf("%s failed %s validation", strings.ToLower(f.Field()), f.Tag())
 }
 
 func (h *HTTPHandler) handleError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, io.EOF):
 		apperrors.Abort(c, http.StatusBadRequest, "invalid_body", "request body is empty")
+	case errors.Is(err, pgx.ErrNoRows):
+		apperrors.Abort(c, http.StatusNotFound, "not_found", "resource not found")
 	default:
+		var inputErr *services.InputError
+		if errors.As(err, &inputErr) {
+			apperrors.Abort(c, http.StatusBadRequest, "invalid_request", inputErr.Error())
+			return
+		}
+		var valErrs validator.ValidationErrors
+		if errors.As(err, &valErrs) && len(valErrs) > 0 {
+			apperrors.Abort(c, http.StatusBadRequest, "invalid_request", formatFieldError(valErrs[0]))
+			return
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			// Structured codes — never leak raw SQLSTATE text or constraint names.
+			switch pgErr.Code {
+			case "23505":
+				apperrors.Abort(c, http.StatusConflict, "conflict", "resource already exists")
+			case "23503":
+				apperrors.Abort(c, http.StatusConflict, "conflict", "referenced resource does not exist")
+			case "22001", "54000":
+				apperrors.Abort(c, http.StatusBadRequest, "invalid_request", "value too large")
+			case "22021":
+				apperrors.Abort(c, http.StatusBadRequest, "invalid_request", "input is not valid UTF-8")
+			default:
+				apperrors.Abort(c, http.StatusInternalServerError, "request_failed", "database error")
+			}
+			return
+		}
 		status := http.StatusInternalServerError
 		message := strings.ToLower(err.Error())
 		if strings.Contains(message, "insufficient") || strings.Contains(message, "access denied") {

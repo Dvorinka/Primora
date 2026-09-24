@@ -50,3 +50,34 @@ export async function cmdProjectsCreate(
   }
   success(`Project "${project.name}" created (${project.slug})`);
 }
+
+export async function cmdProjectsRemove(
+  projectRef: string,
+  options: { org?: string; yes?: boolean; json?: boolean },
+): Promise<void> {
+  const cfg = loadConfig();
+  requireAuth(cfg);
+  configureClient(cfg);
+
+  let projectId = projectRef;
+  if (!isUuid(projectRef)) {
+    const me = await PlatformService.getMe();
+    const orgs = cfg.auth?.type === "apiKey" ? [] : me.organizations;
+    const found = orgs
+      .flatMap((o) => o.projects.map((pr) => ({ ...pr, orgId: o.id })))
+      .find((pr) => pr.id === projectRef || pr.slug === projectRef || pr.name === projectRef);
+    if (!found) throw new Error(`Project "${projectRef}" not found — pass its id directly.`);
+    projectId = found.id;
+  }
+  await confirmOrAbort(`Delete project "${projectRef}"? Buckets, secrets, and functions go with it.`, options.yes);
+  await ProjectsService.deleteProject({ projectId });
+  if (isJson(options)) {
+    printJson({ deleted: projectId });
+  } else {
+    success(`deleted project ${projectRef}`);
+  }
+}
+
+function isUuid(v: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+}

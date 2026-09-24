@@ -12,6 +12,7 @@ import { demoService } from "../lib/demo-mode";
 import { Badge } from "../components/Badge";
 import { Modal } from "../components/Modal";
 import { Select } from "../components/Input";
+import { errorMessage } from "../lib/api";
 import {
   IconChevronRight,
   IconRefresh,
@@ -25,7 +26,7 @@ interface TelemetryPageProps {
 
 type Tab = "health" | "issues" | "events" | "metrics" | "integrate";
 
-const err = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const err = (e: unknown) => errorMessage(e, String(e));
 const svc = (demo: boolean) =>
   (demo ? (demoService as unknown as typeof TelemetryService) : TelemetryService);
 

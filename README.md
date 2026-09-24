@@ -48,8 +48,12 @@ Supabase, with no hosted tier - your data stays on your hardware.
 
 - **Organizations & projects** - workspaces with scoped org and project roles.
 - **Auth** - email/password plus optional GitHub, Google, Discord, and Microsoft OAuth. JWTs verified by the API against JWKS.
-- **Storage** - S3-style buckets on your local filesystem, public or private.
-- **Collections** - schema-flexible JSON documents in Postgres JSONB.
+- **Storage** - S3-style buckets on local disk or any S3-compatible backend (AWS, MinIO, Garage, R2), public or private. With `s3` the API mints presigned upload/download URLs so large objects skip the backend.
+- **Collections** - schema-flexible JSON documents in Postgres JSONB, with filter/order queries.
+- **Functions** - project-scoped JS/TS run by bun/deno — on the host (`exec`) or in ephemeral locked-down containers (`docker` driver) — with per-run logs. Trigger them four ways: manual invoke, cron schedules (`function_id` on a job), inbound hooks (`mode: "function"`), or domain events (`event_pattern` like `document.*`).
+- **Vault** - AES-256-GCM project secrets plus an Argon2id/XChaCha20 local vault in the CLI and desktop app.
+- **Automation** - scheduled jobs, inbound webhooks, telemetry alert rules, and `secret://` refs resolved at delivery.
+- **Realtime** - SSE event stream with a typed client SDK (`@primora/client`) — channel subscriptions, presence counts, and client-published `custom.*` events that fan out to webhooks and functions.
 - **API keys** - `prm_<prefix>_<secret>` credentials, shown once.
 - **Audit log** - every mutating request recorded, with CSV/JSON export.
 - **Demo mode** - fully client-side seeded workspace via `?demo=true`.

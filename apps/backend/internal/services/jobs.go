@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/robfig/cron/v3"
 
 	db "github.com/tdvorak/primora/apps/backend/internal/database/db"
@@ -34,6 +35,7 @@ type ScheduledJobSummary struct {
 	Name       string          `json:"name"`
 	Schedule   string          `json:"schedule"`
 	URL        string          `json:"url"`
+	FunctionID *string         `json:"function_id,omitempty"`
 	Payload    json.RawMessage `json:"payload"`
 	Enabled    bool            `json:"enabled"`
 	HasSecret  bool            `json:"has_secret"`
@@ -58,21 +60,23 @@ type ScheduledJobRunSummary struct {
 }
 
 type CreateScheduledJobInput struct {
-	Name     string         `json:"name" validate:"required,min=2"`
-	Schedule string         `json:"schedule" validate:"required"`
-	URL      string         `json:"url" validate:"required,url"`
-	Secret   string         `json:"secret"`
-	Payload  map[string]any `json:"payload"`
-	Enabled  *bool          `json:"enabled"`
+	Name       string         `json:"name" validate:"required,min=2"`
+	Schedule   string         `json:"schedule" validate:"required"`
+	URL        string         `json:"url" validate:"required_without=FunctionID,omitempty,url"`
+	FunctionID string         `json:"function_id" validate:"omitempty,uuid"`
+	Secret     string         `json:"secret"`
+	Payload    map[string]any `json:"payload"`
+	Enabled    *bool          `json:"enabled"`
 }
 
 type UpdateScheduledJobInput struct {
-	Name    *string        `json:"name" validate:"omitempty,min=2"`
-	Schedule *string        `json:"schedule"`
-	URL     *string        `json:"url" validate:"omitempty,url"`
-	Secret  *string        `json:"secret"`
-	Payload map[string]any `json:"payload"`
-	Enabled *bool          `json:"enabled"`
+	Name       *string        `json:"name" validate:"omitempty,min=2"`
+	Schedule   *string        `json:"schedule"`
+	URL        *string        `json:"url" validate:"omitempty,url"`
+	FunctionID *string        `json:"function_id" validate:"omitempty,uuid"`
+	Secret     *string        `json:"secret"`
+	Payload    map[string]any `json:"payload"`
+	Enabled    *bool          `json:"enabled"`
 }
 
 func toJobSummary(row db.CoreScheduledJob) ScheduledJobSummary {
@@ -86,6 +90,10 @@ func toJobSummary(row db.CoreScheduledJob) ScheduledJobSummary {
 		Enabled:    row.Enabled,
 		HasSecret:  len(row.Secret) > 0,
 		CreatedAt:  row.CreatedAt.Time,
+	}
+	if row.FunctionID.Valid {
+		id := uuid.UUID(row.FunctionID.Bytes).String()
+		out.FunctionID = &id
 	}
 	if row.LastRunAt.Valid {
 		t := row.LastRunAt.Time
@@ -175,9 +183,25 @@ func (s *PlatformService) CreateScheduledJob(ctx context.Context, actor *models.
 	if err := s.requireProjectRole(ctx, actor, projectID, "admin", "developer"); err != nil {
 		return ScheduledJobSummary{}, err
 	}
-	jobURL, err := normalizeWebhookURL(input.URL)
-	if err != nil {
-		return ScheduledJobSummary{}, err
+	jobURL := ""
+	var functionID pgtype.UUID
+	if input.FunctionID != "" {
+		fid, err := uuid.Parse(input.FunctionID)
+		if err != nil {
+			return ScheduledJobSummary{}, fmt.Errorf("invalid function_id")
+		}
+		fn, err := s.repo.Queries().GetFunction(ctx, fid)
+		if err != nil || fn.ProjectID != projectID {
+			return ScheduledJobSummary{}, fmt.Errorf("function not found in this project")
+		}
+		functionID = pgtype.UUID{Bytes: fid, Valid: true}
+		jobURL = "function://" + fid.String()
+	} else {
+		var err error
+		jobURL, err = normalizeWebhookURL(input.URL)
+		if err != nil {
+			return ScheduledJobSummary{}, err
+		}
 	}
 	sched, err := parseSchedule(input.Schedule)
 	if err != nil {
@@ -221,6 +245,7 @@ func (s *PlatformService) CreateScheduledJob(ctx context.Context, actor *models.
 		Enabled:         enabled,
 		NextRunAt:       next,
 		CreatedByUserID: createdBy,
+		FunctionID:      functionID,
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "scheduled_jobs_project_id_name_key") {
@@ -257,6 +282,28 @@ func (s *PlatformService) UpdateScheduledJob(ctx context.Context, actor *models.
 	if input.URL != nil {
 		if jobURL, err = normalizeWebhookURL(*input.URL); err != nil {
 			return ScheduledJobSummary{}, err
+		}
+	}
+	rotateFunction := input.FunctionID != nil
+	functionID := row.FunctionID
+	if rotateFunction {
+		raw := strings.TrimSpace(*input.FunctionID)
+		if raw == "" {
+			functionID = pgtype.UUID{} // explicit clear → back to URL delivery
+			if input.URL == nil && strings.HasPrefix(jobURL, "function://") {
+				return ScheduledJobSummary{}, fmt.Errorf("clearing function_id requires a url")
+			}
+		} else {
+			fid, ferr := uuid.Parse(raw)
+			if ferr != nil {
+				return ScheduledJobSummary{}, fmt.Errorf("invalid function_id")
+			}
+			fn, ferr := s.repo.Queries().GetFunction(ctx, fid)
+			if ferr != nil || fn.ProjectID != projectID {
+				return ScheduledJobSummary{}, fmt.Errorf("function not found in this project")
+			}
+			functionID = pgtype.UUID{Bytes: fid, Valid: true}
+			jobURL = "function://" + fid.String()
 		}
 	}
 	enabled := row.Enabled
@@ -301,6 +348,8 @@ func (s *PlatformService) UpdateScheduledJob(ctx context.Context, actor *models.
 		Secret:    secretBytes,
 		Column10:  rotatePayload,
 		Payload:   payload,
+		Column12:  rotateFunction,
+		FunctionID: functionID,
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "scheduled_jobs_project_id_name_key") {
@@ -406,8 +455,13 @@ type JobScheduler struct {
 	quit     chan struct{}
 	wg       sync.WaitGroup
 	started  sync.Once
+	leader   *leaderState
 	// onEvent fans a finished run out to webhooks and the realtime stream.
 	onEvent func(ctx context.Context, projectID uuid.UUID, eventType string, data map[string]any)
+	// runFn delivers to a function instead of HTTP when job.FunctionID is set.
+	// The function receives the resolved job payload, not the run envelope.
+	// Owned by PlatformService — the scheduler stays transport-agnostic.
+	runFn func(ctx context.Context, job db.CoreScheduledJob, run db.CoreScheduledJobRun, payload json.RawMessage) (*int32, error)
 }
 
 type jobExec struct {
@@ -415,7 +469,7 @@ type jobExec struct {
 	run db.CoreScheduledJobRun
 }
 
-func NewJobScheduler(q jobQueries, enc *secrets.Encryptor, logger *slog.Logger, onEvent func(ctx context.Context, projectID uuid.UUID, eventType string, data map[string]any)) *JobScheduler {
+func NewJobScheduler(q jobQueries, enc *secrets.Encryptor, logger *slog.Logger, onEvent func(ctx context.Context, projectID uuid.UUID, eventType string, data map[string]any), pool *pgxpool.Pool) *JobScheduler {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -428,6 +482,7 @@ func NewJobScheduler(q jobQueries, enc *secrets.Encryptor, logger *slog.Logger, 
 		queue:    make(chan jobExec, 256),
 		quit:     make(chan struct{}),
 		onEvent:  onEvent,
+		leader:   newLeaderState(pool, leaderKeyScheduler),
 	}
 }
 
@@ -452,8 +507,13 @@ func (j *JobScheduler) run(ctx context.Context) {
 		case exec := <-j.queue:
 			j.execute(exec.job, exec.run)
 		case <-ticker.C:
-			j.scan()
+			// Only the leader fires scheduled runs — manual/hook enqueues are
+			// already scoped to whichever replica received the request.
+			if j.leader.hold(ctx) {
+				j.scan()
+			}
 		case <-j.quit:
+			j.leader.stop(context.Background())
 			return
 		case <-ctx.Done():
 			return
@@ -551,7 +611,8 @@ func (j *JobScheduler) markRan(ctx context.Context, job db.CoreScheduledJob, sta
 	}
 }
 
-// deliver POSTs the job payload to its URL, signed like a webhook delivery.
+// deliver POSTs the job payload to its URL — or invokes the target function
+// when the job carries a function_id.
 func (j *JobScheduler) deliver(ctx context.Context, job db.CoreScheduledJob, run db.CoreScheduledJobRun) (*int32, error) {
 	data, err := resolveSecretRefs(ctx, j.repo.ListProjectSecretValues, j.enc, job.ProjectID, job.Payload)
 	if err != nil {
@@ -567,6 +628,12 @@ func (j *JobScheduler) deliver(ctx context.Context, job db.CoreScheduledJob, run
 		"occurred_at":  time.Now().UTC().Format(time.RFC3339),
 		"data":         data,
 	})
+	if job.FunctionID.Valid {
+		if j.runFn == nil {
+			return nil, fmt.Errorf("functions runtime not configured")
+		}
+		return j.runFn(ctx, job, run, data)
+	}
 	secret := ""
 	if len(job.Secret) > 0 && j.enc != nil {
 		if plain, err := j.enc.Decrypt(job.Secret); err == nil {

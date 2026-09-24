@@ -1,8 +1,8 @@
 import { CreateBucketRequest, StorageService } from "@primora/api-client";
 
 import { loadConfig } from "../config.js";
-import { configureClient, requireAuth, requireProject } from "../http.js";
-import { isJson, printJson, printTable, success } from "../out.js";
+import { configureClient, requireAuth, requireProject, resolveBucketId } from "../http.js";
+import { confirmOrAbort, isJson, printJson, printTable, success } from "../out.js";
 
 export async function cmdBucketsList(options: {
   project?: string;
@@ -53,4 +53,23 @@ export async function cmdBucketsCreate(
     return;
   }
   success(`Bucket "${bucket.name}" created (${bucket.slug}, ${bucket.visibility})`);
+}
+
+export async function cmdBucketsRemove(
+  bucketRef: string,
+  options: { project?: string; yes?: boolean; json?: boolean },
+): Promise<void> {
+  const cfg = loadConfig();
+  requireAuth(cfg);
+  configureClient(cfg);
+
+  const projectId = requireProject(cfg, options.project);
+  const bucketId = await resolveBucketId(projectId, bucketRef);
+  await confirmOrAbort(`Delete bucket "${bucketRef}" and all its objects?`, options.yes);
+  await StorageService.deleteBucket({ bucketId });
+  if (isJson(options)) {
+    printJson({ deleted: bucketId });
+  } else {
+    success(`deleted bucket ${bucketRef}`);
+  }
 }

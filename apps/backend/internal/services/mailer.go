@@ -11,6 +11,9 @@ import (
 	"github.com/tdvorak/primora/apps/backend/internal/config"
 )
 
+// Mailer is transport-only: Resend when configured, plain SMTP otherwise.
+// Templates render (subject, body) from data; sends are logged to
+// core.email_log by the service layer so operators can see what went out.
 type Mailer struct {
 	cfg    config.Config
 	resend *resend.Client
@@ -24,9 +27,30 @@ func NewMailer(cfg config.Config) *Mailer {
 	return &Mailer{cfg: cfg, resend: resendClient}
 }
 
-func (m *Mailer) SendInvitation(ctx context.Context, toEmail, organizationName, inviteURL string) error {
-	subject := fmt.Sprintf("You were invited to %s on Primora", organizationName)
-	text := "You have been invited to Primora.\n\nOpen this link to accept the invitation:\n" + inviteURL + "\n"
+// mailTemplate renders a subject + plaintext body from template data.
+type mailTemplate func(data map[string]string) (subject string, body string)
+
+var mailTemplates = map[string]mailTemplate{
+	"invitation": func(d map[string]string) (string, string) {
+		subject := fmt.Sprintf("You were invited to %s on Primora", d["organization"])
+		body := fmt.Sprintf(
+			"You have been invited to Primora.\n\nOpen this link to accept the invitation:\n%s\n\nThis link expires in 72 hours.\n",
+			d["invite_url"],
+		)
+		return subject, body
+	},
+}
+
+func renderMailTemplate(template string, data map[string]string) (string, string, error) {
+	tpl, ok := mailTemplates[template]
+	if !ok {
+		return "", "", fmt.Errorf("unknown email template %q", template)
+	}
+	subject, body := tpl(data)
+	return subject, body, nil
+}
+
+func (m *Mailer) Send(ctx context.Context, toEmail, subject, text string) error {
 	if m.resend != nil {
 		_, err := m.resend.Emails.SendWithContext(ctx, &resend.SendEmailRequest{
 			From:    m.cfg.MailFrom,

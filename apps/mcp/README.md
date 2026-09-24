@@ -27,8 +27,12 @@ Secrets are agent-safe by design — values are never returned by any tool:
 - `primora_vault_status` / `primora_vault_list` — local-vault state and
   metadata (names/urls/notes only); requires `primora vault unlock` on the host.
 - `primora_vault_exec` — runs `primora` commands with a vault secret injected
-  into the child's env; `vault`/`secrets`/`inject`/`agent`/`login`/`use` and
-  `keys:create` are denied so no response can carry a credential.
+  into the child's env. A strict allow-list (read-mostly commands like
+  `whoami`, `context`, `orgs:list`, `buckets:list`, `jobs:list`,
+  `audit:list`, `events:send`) — nothing that reads, writes, or moves a
+  credential can run; file/path flags are rejected and the injected env
+  name must be a safe identifier (loader hooks like `NODE_OPTIONS` are
+  blocked).
 - `primora_secrets_list` / `primora_secrets_set` — project-vault metadata and
   write-only storage. No reveal or delete: agents consume secrets through
   `secret://NAME` references in job payloads, resolved server-side at delivery.

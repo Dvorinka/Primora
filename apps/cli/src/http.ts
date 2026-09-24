@@ -60,6 +60,8 @@ export function configureClient(cfg: CliConfig): void {
   OpenAPI.BASE = `${cfg.baseUrl}/api/v1`;
   OpenAPI.HEADERS = undefined;
   OpenAPI.TOKEN = undefined;
+  // encodeURI leaves ?#& intact in path params — smuggles query segments.
+  OpenAPI.ENCODE_PATH = encodeURIComponent;
 
   if (cfg.auth?.type === "apiKey") {
     OpenAPI.HEADERS = { "X-API-Key": cfg.auth.key };

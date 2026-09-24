@@ -10,6 +10,7 @@ interface LoginOptions {
   email?: string;
   password?: string;
   apiKey?: string;
+  json?: boolean;
 }
 
 function cancel(): never {
@@ -39,9 +40,22 @@ export async function cmdLogin(options: LoginOptions): Promise<void> {
       throw new CliError("Malformed API key.", "Expected the full key, e.g. prm_xxxx_…");
     }
     cfg.auth = { type: "apiKey", key: options.apiKey };
+    // Validate the key against the instance before saving — a stored-but-
+    // dead key is a worse failure than a rejected login.
+    configureClient(cfg);
+    const ctx = await PlatformService.getActorContext();
+    if (ctx.organization) cfg.organizationId = ctx.organization.id;
+    if (ctx.project) cfg.projectId = ctx.project.id;
     saveConfig(cfg);
-    success(`Saved API key credentials to ${configFilePath()}`);
-    dim("API keys are project-scoped — set context with `primora use --org <id> --project <id>`.");
+    if (isJson(options)) {
+      printJson(ctx);
+      return;
+    }
+    success(`API key verified — ${ctx.key_prefix}… (scopes: ${ctx.scopes?.join(", ") || "none"})`);
+    if (ctx.organization && ctx.project) {
+      success(`Context → ${ctx.organization.slug} / ${ctx.project.slug}`);
+    }
+    dim(`Config written to ${configFilePath()}`);
     return;
   }
 
@@ -94,6 +108,10 @@ export async function cmdLogin(options: LoginOptions): Promise<void> {
 
   configureClient(cfg);
   const me = await PlatformService.getMe();
+  if (isJson(options)) {
+    printJson(me);
+    return;
+  }
   success(`Signed in as ${me.user.email}`);
   dim(`Config written to ${configFilePath()}`);
 }
@@ -108,6 +126,23 @@ export async function cmdLogout(): Promise<void> {
 export async function cmdWhoami(options: { json?: boolean }): Promise<void> {
   const cfg = loadConfig();
   configureClient(cfg);
+  if (cfg.auth?.type === "apiKey") {
+    const ctx = await PlatformService.getActorContext();
+    if (isJson(options)) {
+      printJson(ctx);
+      return;
+    }
+    printTable(["KEY", "SCOPES", "ORGANIZATION", "PROJECT"], [
+      [
+        `${ctx.key_prefix}…`,
+        ctx.scopes?.join(", ") || "—",
+        ctx.organization?.slug ?? "—",
+        ctx.project?.slug ?? "—",
+      ],
+    ]);
+    dim(`\n${cfg.baseUrl} · auth: api_key`);
+    return;
+  }
   const me = await PlatformService.getMe();
 
   if (isJson(options)) {

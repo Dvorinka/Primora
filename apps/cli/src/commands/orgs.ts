@@ -38,3 +38,31 @@ export async function cmdOrgsCreate(
   }
   success(`Organization "${org.name}" created (${org.slug})`);
 }
+
+export async function cmdOrgsRemove(
+  orgRef: string,
+  options: { yes?: boolean; json?: boolean },
+): Promise<void> {
+  const cfg = loadConfig();
+  requireAuth(cfg);
+  configureClient(cfg);
+
+  let organizationId = orgRef;
+  if (!isUuid(orgRef)) {
+    const me = await PlatformService.getMe();
+    const found = me.organizations.find((o) => o.id === orgRef || o.slug === orgRef || o.name === orgRef);
+    if (!found) throw new Error(`Organization "${orgRef}" not found — pass its id directly.`);
+    organizationId = found.id;
+  }
+  await confirmOrAbort(`Delete organization "${orgRef}"? Every project inside goes with it.`, options.yes);
+  await OrganizationsService.deleteOrganization({ organizationId });
+  if (isJson(options)) {
+    printJson({ deleted: organizationId });
+  } else {
+    success(`deleted organization ${orgRef}`);
+  }
+}
+
+function isUuid(v: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+}

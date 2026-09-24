@@ -17,8 +17,9 @@ INSERT INTO core.scheduled_jobs (
   payload,
   enabled,
   next_run_at,
-  created_by_user_id
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+  created_by_user_id,
+  function_id
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING *;
 
 -- name: UpdateScheduledJob :one
@@ -30,6 +31,7 @@ SET name = $3,
     next_run_at = $7,
     secret = CASE WHEN $8::boolean THEN $9 ELSE secret END,
     payload = CASE WHEN $10::boolean THEN $11 ELSE payload END,
+    function_id = CASE WHEN $12::boolean THEN $13 ELSE function_id END,
     updated_at = NOW()
 WHERE id = $1
   AND project_id = $2

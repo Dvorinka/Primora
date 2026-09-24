@@ -23,24 +23,30 @@ type Querier interface {
 	CountOrganizations(ctx context.Context) (int64, error)
 	CountProjectAdmins(ctx context.Context, projectID uuid.UUID) (int64, error)
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (CoreApiKey, error)
+	CreateAlertRule(ctx context.Context, arg CreateAlertRuleParams) (CoreAlertRule, error)
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) (CoreAuditLog, error)
 	CreateBucket(ctx context.Context, arg CreateBucketParams) (CoreBucket, error)
 	CreateBucketObject(ctx context.Context, arg CreateBucketObjectParams) (CoreBucketObject, error)
 	CreateCollection(ctx context.Context, arg CreateCollectionParams) (CoreCollection, error)
 	CreateDBConnection(ctx context.Context, arg CreateDBConnectionParams) (CoreDbConnection, error)
 	CreateDocument(ctx context.Context, arg CreateDocumentParams) (CoreDocument, error)
+	CreateFunction(ctx context.Context, arg CreateFunctionParams) (CoreFunction, error)
+	CreateInboundHook(ctx context.Context, arg CreateInboundHookParams) (CoreInboundHook, error)
 	CreateIntegration(ctx context.Context, arg CreateIntegrationParams) (CoreIntegration, error)
 	CreateInvitation(ctx context.Context, arg CreateInvitationParams) (CoreProjectInvitation, error)
 	CreateOrganization(ctx context.Context, arg CreateOrganizationParams) (CoreOrganization, error)
 	CreateProject(ctx context.Context, arg CreateProjectParams) (CoreProject, error)
 	CreateScheduledJob(ctx context.Context, arg CreateScheduledJobParams) (CoreScheduledJob, error)
 	CreateWebhook(ctx context.Context, arg CreateWebhookParams) (CoreWebhook, error)
+	DeleteAlertRule(ctx context.Context, arg DeleteAlertRuleParams) error
 	DeleteBucketByID(ctx context.Context, id uuid.UUID) (CoreBucket, error)
 	DeleteBucketObjectByKey(ctx context.Context, arg DeleteBucketObjectByKeyParams) (CoreBucketObject, error)
 	DeleteCollection(ctx context.Context, arg DeleteCollectionParams) error
 	DeleteComponent(ctx context.Context, arg DeleteComponentParams) error
 	DeleteDBConnection(ctx context.Context, arg DeleteDBConnectionParams) (CoreDbConnection, error)
 	DeleteDocument(ctx context.Context, arg DeleteDocumentParams) error
+	DeleteFunction(ctx context.Context, arg DeleteFunctionParams) error
+	DeleteInboundHook(ctx context.Context, arg DeleteInboundHookParams) error
 	DeleteIntegration(ctx context.Context, arg DeleteIntegrationParams) (CoreIntegration, error)
 	DeleteOrganizationByID(ctx context.Context, id uuid.UUID) (CoreOrganization, error)
 	DeletePendingInvitationByIDForOrganization(ctx context.Context, arg DeletePendingInvitationByIDForOrganizationParams) (CoreProjectInvitation, error)
@@ -54,6 +60,7 @@ type Querier interface {
 	FinishScheduledJobRun(ctx context.Context, arg FinishScheduledJobRunParams) (CoreScheduledJobRun, error)
 	GetAPIKeyByIDForProject(ctx context.Context, arg GetAPIKeyByIDForProjectParams) (CoreApiKey, error)
 	GetAPIKeyByPrefix(ctx context.Context, prefix string) (GetAPIKeyByPrefixRow, error)
+	GetAlertRule(ctx context.Context, arg GetAlertRuleParams) (CoreAlertRule, error)
 	GetBucketByID(ctx context.Context, id uuid.UUID) (GetBucketByIDRow, error)
 	GetBucketObjectByKey(ctx context.Context, arg GetBucketObjectByKeyParams) (CoreBucketObject, error)
 	GetCollectionByID(ctx context.Context, id uuid.UUID) (CoreCollection, error)
@@ -62,9 +69,14 @@ type Querier interface {
 	GetDBConnectionByID(ctx context.Context, id uuid.UUID) (CoreDbConnection, error)
 	GetDBConnectionByName(ctx context.Context, arg GetDBConnectionByNameParams) (CoreDbConnection, error)
 	GetDocumentByID(ctx context.Context, arg GetDocumentByIDParams) (CoreDocument, error)
+	GetFunction(ctx context.Context, id uuid.UUID) (CoreFunction, error)
+	GetFunctionByName(ctx context.Context, arg GetFunctionByNameParams) (CoreFunction, error)
+	GetInboundHook(ctx context.Context, arg GetInboundHookParams) (CoreInboundHook, error)
+	GetInboundHookByToken(ctx context.Context, token string) (CoreInboundHook, error)
 	GetIntegrationByID(ctx context.Context, id uuid.UUID) (CoreIntegration, error)
 	GetInvitationByIDForOrganization(ctx context.Context, arg GetInvitationByIDForOrganizationParams) (CoreProjectInvitation, error)
 	GetInvitationByTokenHash(ctx context.Context, tokenHash string) (CoreProjectInvitation, error)
+	GetOrganizationByID(ctx context.Context, id uuid.UUID) (CoreOrganization, error)
 	GetOrganizationMembership(ctx context.Context, arg GetOrganizationMembershipParams) (GetOrganizationMembershipRow, error)
 	GetProjectByID(ctx context.Context, id uuid.UUID) (CoreProject, error)
 	GetProjectMembership(ctx context.Context, arg GetProjectMembershipParams) (GetProjectMembershipRow, error)
@@ -77,10 +89,15 @@ type Querier interface {
 	GetWebhookByID(ctx context.Context, id uuid.UUID) (CoreWebhook, error)
 	GetWebhookDeliveryByID(ctx context.Context, id uuid.UUID) (CoreWebhookDelivery, error)
 	HasFingerprintSeen(ctx context.Context, arg HasFingerprintSeenParams) (bool, error)
+	InsertEmailLog(ctx context.Context, arg InsertEmailLogParams) (CoreEmailLog, error)
 	InsertEvent(ctx context.Context, arg InsertEventParams) (CoreEvent, error)
+	InsertFunctionRun(ctx context.Context, arg InsertFunctionRunParams) (CoreFunctionRun, error)
 	InsertScheduledJobRun(ctx context.Context, arg InsertScheduledJobRunParams) (CoreScheduledJobRun, error)
 	InsertWebhookDelivery(ctx context.Context, arg InsertWebhookDeliveryParams) (CoreWebhookDelivery, error)
+	// Per-component most recent heartbeat — heartbeat_silence detection.
+	LastHeartbeats(ctx context.Context, projectID uuid.UUID) ([]LastHeartbeatsRow, error)
 	ListAPIKeysForProject(ctx context.Context, projectID uuid.UUID) ([]CoreApiKey, error)
+	ListAlertRules(ctx context.Context, projectID uuid.UUID) ([]CoreAlertRule, error)
 	ListAuditLogsForProject(ctx context.Context, arg ListAuditLogsForProjectParams) ([]CoreAuditLog, error)
 	ListBucketObjects(ctx context.Context, arg ListBucketObjectsParams) ([]CoreBucketObject, error)
 	ListBucketsForOrganization(ctx context.Context, organizationID uuid.UUID) ([]uuid.UUID, error)
@@ -90,8 +107,14 @@ type Querier interface {
 	ListDBConnections(ctx context.Context, projectID uuid.UUID) ([]CoreDbConnection, error)
 	ListDocuments(ctx context.Context, arg ListDocumentsParams) ([]CoreDocument, error)
 	ListDueScheduledJobs(ctx context.Context, nextRunAt pgtype.Timestamptz) ([]CoreScheduledJob, error)
+	ListEmailLog(ctx context.Context, arg ListEmailLogParams) ([]CoreEmailLog, error)
+	ListEnabledAlertRules(ctx context.Context) ([]CoreAlertRule, error)
 	ListErrorGroups(ctx context.Context, arg ListErrorGroupsParams) ([]ListErrorGroupsRow, error)
 	ListEvents(ctx context.Context, arg ListEventsParams) ([]ListEventsRow, error)
+	ListFunctionRuns(ctx context.Context, arg ListFunctionRunsParams) ([]CoreFunctionRun, error)
+	ListFunctions(ctx context.Context, projectID uuid.UUID) ([]CoreFunction, error)
+	ListFunctionsForEvent(ctx context.Context, arg ListFunctionsForEventParams) ([]CoreFunction, error)
+	ListInboundHooks(ctx context.Context, projectID uuid.UUID) ([]CoreInboundHook, error)
 	ListIntegrations(ctx context.Context, projectID uuid.UUID) ([]CoreIntegration, error)
 	ListInvitationsForOrganization(ctx context.Context, organizationID uuid.UUID) ([]ListInvitationsForOrganizationRow, error)
 	ListOrganizationMembers(ctx context.Context, organizationID uuid.UUID) ([]ListOrganizationMembersRow, error)
@@ -114,10 +137,13 @@ type Querier interface {
 	MetricSeries(ctx context.Context, arg MetricSeriesParams) ([]MetricSeriesRow, error)
 	MoveBucketObject(ctx context.Context, arg MoveBucketObjectParams) (CoreBucketObject, error)
 	PruneScheduledJobRuns(ctx context.Context, arg PruneScheduledJobRunsParams) error
+	// Per-component error count inside a sliding window — error_spike detection.
+	RecentErrorCounts(ctx context.Context, arg RecentErrorCountsParams) ([]RecentErrorCountsRow, error)
 	RemoveOrganizationMember(ctx context.Context, arg RemoveOrganizationMemberParams) (CoreOrganizationMember, error)
 	RemoveProjectMember(ctx context.Context, arg RemoveProjectMemberParams) (CoreProjectMember, error)
 	RemoveProjectMembershipsForOrganizationUser(ctx context.Context, arg RemoveProjectMembershipsForOrganizationUserParams) error
 	RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) (CoreApiKey, error)
+	SetAlertRuleState(ctx context.Context, arg SetAlertRuleStateParams) error
 	SweepExpiredAuditLogs(ctx context.Context) (int64, error)
 	// Per-project retention sweeps. A retention of 0 days disables the sweep for
 	// that stream. Pending webhook deliveries are never swept — they may still be
@@ -128,9 +154,12 @@ type Querier interface {
 	SweepExpiredOrgAuditLogs(ctx context.Context) (int64, error)
 	SweepExpiredWebhookDeliveries(ctx context.Context) (int64, error)
 	TouchAPIKey(ctx context.Context, id uuid.UUID) error
+	TouchInboundHook(ctx context.Context, id uuid.UUID) error
+	UpdateAlertRule(ctx context.Context, arg UpdateAlertRuleParams) (CoreAlertRule, error)
 	UpdateBucketByID(ctx context.Context, arg UpdateBucketByIDParams) (CoreBucket, error)
 	UpdateCollection(ctx context.Context, arg UpdateCollectionParams) (CoreCollection, error)
 	UpdateDocument(ctx context.Context, arg UpdateDocumentParams) (CoreDocument, error)
+	UpdateFunction(ctx context.Context, arg UpdateFunctionParams) (CoreFunction, error)
 	UpdateIntegrationHealth(ctx context.Context, arg UpdateIntegrationHealthParams) error
 	UpdateOrganizationByID(ctx context.Context, arg UpdateOrganizationByIDParams) (CoreOrganization, error)
 	UpdateOrganizationMemberRole(ctx context.Context, arg UpdateOrganizationMemberRoleParams) (CoreOrganizationMember, error)

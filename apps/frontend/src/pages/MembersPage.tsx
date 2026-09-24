@@ -1,8 +1,10 @@
-import { For, Show, createMemo, createSignal } from "solid-js";
-import type {
-  OrganizationInvitation,
-  OrganizationMember,
-  ProjectMember,
+import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
+import {
+  EmailService,
+  type EmailLogEntry,
+  type OrganizationInvitation,
+  type OrganizationMember,
+  type ProjectMember,
 } from "@primora/api-client";
 import { Badge } from "../components/Badge";
 import { Modal, ModalFooter } from "../components/Modal";
@@ -22,6 +24,8 @@ interface InvitationInput {
 }
 
 interface MembersPageProps {
+  projectID?: string;
+  demoMode?: boolean;
   organizationMembers?: OrganizationMember[];
   organizationInvitations?: OrganizationInvitation[];
   projectMembers?: ProjectMember[];
@@ -80,6 +84,15 @@ export function MembersPage(props: MembersPageProps) {
   const [tab, setTab] = createSignal<"org" | "project">("org");
   const [inviteOpen, setInviteOpen] = createSignal(false);
   const [query, setQuery] = createSignal("");
+  const [emails, setEmails] = createSignal<EmailLogEntry[]>([]);
+
+  createEffect(() => {
+    const pid = props.projectID;
+    if (!pid || props.demoMode) return;
+    void EmailService.listEmailLog({ projectId: pid, limit: 20 })
+      .then((res) => setEmails(res.items ?? []))
+      .catch(() => {});
+  });
 
   const filteredOrgMembers = createMemo(() => {
     const q = query().toLowerCase();
@@ -359,6 +372,49 @@ export function MembersPage(props: MembersPageProps) {
                           </button>
                         </Show>
                       </td>
+                    </tr>
+                  )}
+                </For>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </Show>
+
+      <Show when={emails().length > 0}>
+        <div class="card card-flush">
+          <div class="card-header" style="padding:1.25rem 1.25rem 1rem;margin-bottom:0;border-bottom:1px solid var(--border)">
+            <span class="card-header-title">Email log</span>
+            <span class="card-header-description">
+              Transactional email sent for this project — every send is recorded, including failures.
+            </span>
+          </div>
+          <div class="table-container">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>To</th>
+                  <th>Subject</th>
+                  <th>Template</th>
+                  <th>Status</th>
+                  <th>Sent</th>
+                </tr>
+              </thead>
+              <tbody>
+                <For each={emails()}>
+                  {(mail) => (
+                    <tr>
+                      <td class="font-medium text-text-1">{mail.to_email}</td>
+                      <td class="text-text-2" style="max-width:18rem;overflow:hidden;text-overflow:ellipsis" title={mail.error || mail.subject}>
+                        {mail.subject}
+                      </td>
+                      <td>
+                        <Badge variant="neutral">{mail.template}</Badge>
+                      </td>
+                      <td>
+                        <Badge variant={mail.status === "sent" ? "success" : "error"}>{mail.status}</Badge>
+                      </td>
+                      <td class="text-text-3">{formatDate(mail.created_at)}</td>
                     </tr>
                   )}
                 </For>

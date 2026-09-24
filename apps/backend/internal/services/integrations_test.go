@@ -104,4 +104,39 @@ func TestValidateWebhookEvents(t *testing.T) {
 	if _, err := validateWebhookEvents([]string{"bogus.event"}); err == nil {
 		t.Error("expected unknown event rejected")
 	}
+	for _, ok := range [][]string{
+		{"*"},
+		{"document.*"},
+		{"custom.deploy.done"},
+		{"custom.*"},
+		{"custom.deploy.*"},
+	} {
+		if _, err := validateWebhookEvents(ok); err != nil {
+			t.Errorf("expected %v accepted, got %v", ok, err)
+		}
+	}
+	for _, bad := range [][]string{
+		{"banana.*"}, {"custom..*"}, {"custom.UPPER"}, {"document.exploded"},
+	} {
+		if _, err := validateWebhookEvents(bad); err == nil {
+			t.Errorf("expected %v rejected", bad)
+		}
+	}
+}
+
+func TestPrivateWebhookHostHardening(t *testing.T) {
+	private := []string{"localhost", "minio", "echo-svc", "host.docker.internal",
+		"10.0.0.4", "172.16.5.5", "192.168.1.10", "fe80::1", "svc.local", "db.internal"}
+	public := []string{"169.254.169.254", "fd00:ec2::254", "2130706433", "0x7f000001",
+		"8.8.8.8", "example.com", "999999999999"}
+	for _, h := range private {
+		if !isPrivateWebhookHost(h) {
+			t.Errorf("expected %q private", h)
+		}
+	}
+	for _, h := range public {
+		if isPrivateWebhookHost(h) {
+			t.Errorf("expected %q public/blocked", h)
+		}
+	}
 }

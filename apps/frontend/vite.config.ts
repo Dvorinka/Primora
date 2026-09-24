@@ -38,15 +38,6 @@ export default defineConfig({
             urlPattern: /\/(api|auth|mailpit)(\/|$)/,
             handler: "NetworkOnly",
           },
-          {
-            // Geist font files + CSS from Google Fonts — long-lived static assets.
-            urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\//,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "primora-fonts",
-              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 },
-            },
-          },
         ],
       },
     }),

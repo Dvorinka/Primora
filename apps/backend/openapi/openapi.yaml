@@ -68,6 +68,22 @@ paths:
                 $ref: "#/components/schemas/MeResponse"
         "401":
           $ref: "#/components/responses/ErrorResponse"
+  /context:
+    get:
+      tags: [Platform]
+      operationId: getActorContext
+      summary: Caller scope — self-discovery for API keys, which cannot call /me
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Actor type, scopes, and resolved org/project for API keys
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActorContext"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
   /instance/public:
     get:
       tags: [Instance]
@@ -677,6 +693,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BucketObject"
+  /buckets/{bucketID}/object-presigns:
+    post:
+      tags: [Storage]
+      operationId: presignBucketObject
+      description: >-
+        Mint a short-lived URL the client calls against object storage
+        directly — keeps large transfers off the backend. Requires
+        BACKEND_STORAGE_DRIVER=s3; the URL's host comes from
+        S3_PUBLIC_ENDPOINT (or S3_ENDPOINT when unset). Signatures bind the
+        host — a presigned URL is valid only at the endpoint it was minted
+        for.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/BucketID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PresignObjectRequest"
+      responses:
+        "200":
+          description: Presigned URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PresignedURL"
+        "404":
+          description: Bucket or object not found (download)
   /buckets/{bucketID}:
     patch:
       tags: [Storage]
@@ -1300,6 +1347,37 @@ paths:
                 $ref: "#/components/schemas/TelemetryEventListResponse"
         "401":
           $ref: "#/components/responses/ErrorResponse"
+    post:
+      tags: [Automation]
+      operationId: publishProjectEvent
+      summary: Publishes a client-authored domain event. Type must be in the custom.* namespace; the event fans out to realtime subscribers, matching webhooks, and event_pattern functions.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PublishEventRequest"
+      responses:
+        "202":
+          description: Event accepted for fan-out
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  published:
+                    type: string
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/ErrorResponse"
   /projects/{projectID}/issues:
     get:
       tags: [Telemetry]
@@ -1856,6 +1934,28 @@ paths:
           description: text/event-stream of {type, occurred_at, data} messages
         "401":
           $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/realtime/presence:
+    get:
+      tags: [Automation]
+      operationId: getRealtimePresence
+      summary: Count of clients currently subscribed to the project's realtime stream. The stream also emits presence.update events on every join/leave.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "200":
+          description: Online subscriber count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  online:
+                    type: integer
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
   /projects/{projectID}/secrets:
     get:
       tags: [Secrets]
@@ -1939,6 +2039,408 @@ paths:
                 $ref: "#/components/schemas/RevealProjectSecretResponse"
         "401":
           $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/alerts:
+    get:
+      tags: [Alerts]
+      operationId: listAlertRules
+      summary: Lists telemetry alert rules for the project.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "200":
+          description: Alert rules
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertRuleListResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+    post:
+      tags: [Alerts]
+      operationId: createAlertRule
+      summary: Creates an alert rule. Rules fire `alert.fired`/`alert.resolved` domain events on state transitions — subscribe a webhook to those event types to receive them.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertAlertRuleRequest"
+      responses:
+        "201":
+          description: Alert rule created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertRule"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/alerts/{ruleID}:
+    put:
+      tags: [Alerts]
+      operationId: updateAlertRule
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - name: ruleID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertAlertRuleRequest"
+      responses:
+        "200":
+          description: Alert rule updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertRule"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+    delete:
+      tags: [Alerts]
+      operationId: deleteAlertRule
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - name: ruleID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Alert rule deleted
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/inbound-hooks:
+    get:
+      tags: [Inbound]
+      operationId: listInboundHooks
+      summary: Lists inbound webhook endpoints for the project.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "200":
+          description: Inbound hooks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboundHookListResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+    post:
+      tags: [Inbound]
+      operationId: createInboundHook
+      summary: Creates an inbound hook. `event` mode republishes bodies as `inbound.received` domain events; `job` mode triggers a scheduled-job run with the body as its payload. Set `secret` to require `X-Primora-Signature` (HMAC-SHA256 over the raw body).
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInboundHookRequest"
+      responses:
+        "201":
+          description: Inbound hook created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboundHook"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/inbound-hooks/{hookID}:
+    delete:
+      tags: [Inbound]
+      operationId: deleteInboundHook
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - name: hookID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Inbound hook deleted
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+  /hooks/{token}:
+    post:
+      tags: [Inbound]
+      operationId: receiveInboundHook
+      summary: Public ingest endpoint — the URL token is the credential. Body must be JSON (max 256 KiB); sign with X-Primora-Signature when the hook has a secret.
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: X-Primora-Signature
+          in: header
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "202":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboundReceiveResponse"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/emails:
+    get:
+      tags: [Email]
+      operationId: listEmailLog
+      summary: Recent transactional emails sent for this project (invitations etc.) — every send is logged with its outcome.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+      responses:
+        "200":
+          description: Email log entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailLogListResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/functions:
+    get:
+      tags: [Functions]
+      operationId: listFunctions
+      summary: List functions in a project.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "200":
+          description: Functions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FunctionListResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+    post:
+      tags: [Functions]
+      operationId: createFunction
+      summary: Create a function (name, JS/TS code, runtime bun|deno).
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFunctionRequest"
+      responses:
+        "201":
+          description: Created function
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Function"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/functions/{functionID}:
+    get:
+      tags: [Functions]
+      operationId: getFunction
+      summary: Function metadata plus its source code.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - name: functionID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Function with code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FunctionDetailResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+    put:
+      tags: [Functions]
+      operationId: updateFunction
+      summary: Update function code and/or enabled state.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - name: functionID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFunctionRequest"
+      responses:
+        "200":
+          description: Updated function
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Function"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+    delete:
+      tags: [Functions]
+      operationId: deleteFunction
+      summary: Delete a function and its run history.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - name: functionID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/functions/{functionID}/invoke:
+    post:
+      tags: [Functions]
+      operationId: invokeFunction
+      summary: Execute the function with a JSON payload on stdin; returns the recorded run. 502 when the run fails or times out.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - name: functionID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvokeFunctionRequest"
+      responses:
+        "200":
+          description: Recorded run (status success)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FunctionRun"
+        "502":
+          description: Recorded run (status error|timeout)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FunctionRun"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/functions/{functionID}/runs:
+    get:
+      tags: [Functions]
+      operationId: listFunctionRuns
+      summary: Recent runs for a function.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - name: functionID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+      responses:
+        "200":
+          description: Function runs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FunctionRunListResponse"
         "404":
           $ref: "#/components/responses/ErrorResponse"
 components:
@@ -2290,6 +2792,34 @@ components:
           items:
             $ref: "#/components/schemas/OrganizationSummary"
       required: [user, organizations]
+    ActorContext:
+      type: object
+      properties:
+        actor:
+          type: string
+          enum: [user, api_key]
+        scopes:
+          type: array
+          items:
+            type: string
+        key_prefix:
+          type: string
+        organization:
+          $ref: "#/components/schemas/ContextRef"
+        project:
+          $ref: "#/components/schemas/ContextRef"
+      required: [actor]
+    ContextRef:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+      required: [id, slug, name]
     OrganizationMembership:
       type: object
       properties:
@@ -2728,6 +3258,48 @@ components:
           format: uuid
           nullable: true
       required: [objectKey, newObjectKey]
+    PresignObjectRequest:
+      type: object
+      properties:
+        key:
+          type: string
+          description: Object key inside the bucket.
+        op:
+          type: string
+          enum: [download, upload]
+          default: download
+          description: download → GET URL (object must exist); upload → PUT URL (creates/overwrites).
+        ttl_seconds:
+          type: integer
+          minimum: 60
+          maximum: 3600
+          default: 900
+      required: [key]
+    PresignedURL:
+      type: object
+      properties:
+        url:
+          type: string
+          description: Fully-signed URL — call it with the returned method, no auth header needed.
+        method:
+          type: string
+          enum: [GET, PUT]
+        expires_at:
+          type: string
+          format: date-time
+      required: [url, method, expires_at]
+    PublishEventRequest:
+      type: object
+      properties:
+        type:
+          type: string
+          pattern: '^custom\.[a-z0-9][a-z0-9_.-]{0,62}$'
+          description: Event type in the custom.* namespace — realtime subscribers, matching webhooks, and event_pattern functions all fire.
+        data:
+          type: object
+          additionalProperties: true
+          description: Arbitrary JSON payload carried to subscribers.
+      required: [type]
     PaginationMetadata:
       type: object
       properties:
@@ -3512,7 +4084,7 @@ components:
           type: array
           items:
             type: string
-          description: Event filter (issue.created, deploy.marker, webhook.test, job.run, document.*, object.*). Empty means all events.
+          description: Event filter (issue.created, deploy.marker, webhook.test, job.run, alert.fired, alert.resolved, inbound.received, document.*, object.*). Empty means all events.
         enabled:
           type: boolean
         has_secret:
@@ -3534,7 +4106,7 @@ components:
           type: array
           items:
             type: string
-            enum: [issue.created, deploy.marker, webhook.test, job.run, document.created, document.updated, document.deleted, object.created, object.updated, object.deleted]
+            enum: [issue.created, deploy.marker, webhook.test, job.run, alert.fired, alert.resolved, inbound.received, document.created, document.updated, document.deleted, object.created, object.updated, object.deleted]
         enabled:
           type: boolean
       required: [url]
@@ -3551,7 +4123,7 @@ components:
           type: array
           items:
             type: string
-            enum: [issue.created, deploy.marker, webhook.test, job.run, document.created, document.updated, document.deleted, object.created, object.updated, object.deleted]
+            enum: [issue.created, deploy.marker, webhook.test, job.run, alert.fired, alert.resolved, inbound.received, document.created, document.updated, document.deleted, object.created, object.updated, object.deleted]
         enabled:
           type: boolean
     WebhookCreateResponse:
@@ -3656,6 +4228,11 @@ components:
           description: Cron expression (5-field) or descriptor (@hourly, @every 30m).
         url:
           type: string
+        function_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: When set, the schedule invokes this function instead of POSTing url.
         payload:
           type: object
           description: Static JSON payload merged into every delivery's data field.
@@ -3691,6 +4268,11 @@ components:
         url:
           type: string
           format: uri
+          description: Delivery target. Required unless function_id is set.
+        function_id:
+          type: string
+          format: uuid
+          description: Invoke this function on schedule instead of POSTing url.
         secret:
           type: string
           description: HMAC key for X-Primora-Signature. Generated when omitted.
@@ -3700,7 +4282,7 @@ components:
         enabled:
           type: boolean
           default: true
-      required: [name, schedule, url]
+      required: [name, schedule]
     UpdateScheduledJobRequest:
       type: object
       properties:
@@ -3712,6 +4294,11 @@ components:
         url:
           type: string
           format: uri
+        function_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Set to retarget at a function; send "" to clear back to url delivery.
         secret:
           type: string
           description: Replace the signing secret. Omit to keep the current one.
@@ -3821,3 +4408,275 @@ components:
         value:
           type: string
       required: [name, value]
+    AlertRuleConfig:
+      type: object
+      properties:
+        component:
+          type: string
+          description: Restrict the rule to one component name; empty = all components.
+        threshold_minutes:
+          type: integer
+          description: heartbeat_silence — fire when a component has not heartbeated for this many minutes (1–10080).
+        threshold_count:
+          type: integer
+          format: int64
+          description: error_spike — fire when a component logs at least this many errors inside the window.
+        window_minutes:
+          type: integer
+          description: error_spike — sliding window size (default 15, 1–1440).
+    AlertRule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        kind:
+          type: string
+          enum: [heartbeat_silence, error_spike]
+        config:
+          $ref: "#/components/schemas/AlertRuleConfig"
+        enabled:
+          type: boolean
+        firing:
+          type: array
+          items:
+            type: string
+          description: Component names currently in breached state.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required: [id, project_id, name, kind, config, enabled, firing, created_at, updated_at]
+    AlertRuleListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlertRule"
+      required: [items]
+    UpsertAlertRuleRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Env-var-safe name ([A-Za-z_][A-Za-z0-9_]*).
+        kind:
+          type: string
+          enum: [heartbeat_silence, error_spike]
+        config:
+          $ref: "#/components/schemas/AlertRuleConfig"
+        enabled:
+          type: boolean
+      required: [name, kind]
+    InboundHook:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        token:
+          type: string
+        url:
+          type: string
+          description: Full ingest URL — POST here from the external system.
+        mode:
+          type: string
+          enum: [event, job, function]
+        job_id:
+          type: string
+        function_id:
+          type: string
+        has_secret:
+          type: boolean
+        enabled:
+          type: boolean
+        last_received_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+      required: [id, project_id, name, token, url, mode, has_secret, enabled, created_at]
+    InboundHookListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/InboundHook"
+      required: [items]
+    CreateInboundHookRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        mode:
+          type: string
+          enum: [event, job, function]
+          default: event
+        job_id:
+          type: string
+          description: Required when mode=job — scheduled job to trigger.
+        function_id:
+          type: string
+          description: Required when mode=function — invoked with the received body.
+        secret:
+          type: string
+          description: Optional — stored encrypted; callers must then sign bodies with X-Primora-Signature.
+        enabled:
+          type: boolean
+      required: [name]
+    InboundReceiveResponse:
+      type: object
+      properties:
+        received:
+          type: boolean
+        event:
+          type: string
+        run_id:
+          type: string
+      required: [received]
+    EmailLogEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        template:
+          type: string
+        to_email:
+          type: string
+        subject:
+          type: string
+        status:
+          type: string
+          enum: [sent, failed]
+        error:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      required: [id, template, to_email, subject, status, created_at]
+    EmailLogListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmailLogEntry"
+      required: [items]
+    Function:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        runtime:
+          type: string
+          enum: [bun, deno]
+        enabled:
+          type: boolean
+        event_pattern:
+          type: string
+          description: 'Domain-event pattern that triggers this function — "document.*", "*", exact type. Empty = never.'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required: [id, name, runtime, enabled, created_at, updated_at]
+    FunctionListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Function"
+      required: [items]
+    FunctionDetailResponse:
+      type: object
+      properties:
+        function:
+          $ref: "#/components/schemas/Function"
+        code:
+          type: string
+      required: [function, code]
+    CreateFunctionRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        code:
+          type: string
+        runtime:
+          type: string
+          enum: [bun, deno]
+          default: bun
+        event_pattern:
+          type: string
+          description: 'Optional — "document.*", "*", or an exact event type.'
+      required: [name, code]
+    UpdateFunctionRequest:
+      type: object
+      properties:
+        code:
+          type: string
+        enabled:
+          type: boolean
+        event_pattern:
+          type: string
+          description: Replace the trigger pattern; "" disables event triggers.
+    InvokeFunctionRequest:
+      type: object
+      properties:
+        payload: {}
+    FunctionRun:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        trigger:
+          type: string
+          enum: [manual, schedule, hook, event]
+        status:
+          type: string
+          enum: [success, error, timeout]
+        exit_code:
+          type: integer
+          nullable: true
+        stdout:
+          type: string
+        stderr:
+          type: string
+        duration_ms:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+      required: [id, trigger, status, stdout, stderr, duration_ms, created_at]
+    FunctionRunListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/FunctionRun"
+      required: [items]

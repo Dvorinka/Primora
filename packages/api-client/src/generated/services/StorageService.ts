@@ -7,6 +7,8 @@ import type { BucketObject } from '../models/BucketObject';
 import type { BucketObjectListResponse } from '../models/BucketObjectListResponse';
 import type { CopyBucketObjectRequest } from '../models/CopyBucketObjectRequest';
 import type { CreateBucketRequest } from '../models/CreateBucketRequest';
+import type { PresignedURL } from '../models/PresignedURL';
+import type { PresignObjectRequest } from '../models/PresignObjectRequest';
 import type { UpdateBucketObjectRequest } from '../models/UpdateBucketObjectRequest';
 import type { UpdateBucketRequest } from '../models/UpdateBucketRequest';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -129,6 +131,31 @@ export class StorageService {
             },
             body: requestBody,
             mediaType: 'application/json',
+        });
+    }
+    /**
+     * Mint a short-lived URL the client calls against object storage directly — keeps large transfers off the backend. Requires BACKEND_STORAGE_DRIVER=s3; the URL's host comes from S3_PUBLIC_ENDPOINT (or S3_ENDPOINT when unset). Signatures bind the host — a presigned URL is valid only at the endpoint it was minted for.
+     * @returns PresignedURL Presigned URL
+     * @throws ApiError
+     */
+    public static presignBucketObject({
+        bucketId,
+        requestBody,
+    }: {
+        bucketId: string,
+        requestBody: PresignObjectRequest,
+    }): CancelablePromise<PresignedURL> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/buckets/{bucketID}/object-presigns',
+            path: {
+                'bucketID': bucketId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                404: `Bucket or object not found (download)`,
+            },
         });
     }
     /**

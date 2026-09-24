@@ -13,6 +13,7 @@ import { demoService } from "../lib/demo-mode";
 import { Badge } from "../components/Badge";
 import { Modal, ModalFooter } from "../components/Modal";
 import { Input, Select, Textarea } from "../components/Input";
+import { errorMessage } from "../lib/api";
 import {
   IconChevronRight,
   IconDatabases,
@@ -57,7 +58,7 @@ const emptyForm: ConnForm = {
 const dbTypes = Object.values(CreateDBConnectionRequest.db_type);
 const sqlish = (t?: string) => t !== "redis";
 
-const err = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const err = (e: unknown) => errorMessage(e, String(e));
 
 /* the demo service mirrors the generated DatabasesService call shapes */
 const svc = (demo: boolean) =>
@@ -933,6 +934,7 @@ export function DatabasesPage(props: DatabasesPageProps) {
       <Modal
         open={addOpen()}
         onClose={() => setAddOpen(false)}
+        error={error()}
         title="Add connection"
         description="Credentials are stored server-side and never sent back to the browser."
       >
@@ -1024,6 +1026,7 @@ export function DatabasesPage(props: DatabasesPageProps) {
       <Modal
         open={!!confirmDelete()}
         onClose={() => setConfirmDelete(undefined)}
+        error={error()}
         title="Delete connection"
         size="sm"
       >

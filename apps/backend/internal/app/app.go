@@ -81,9 +81,31 @@ func Bootstrap(ctx context.Context) (*App, error) {
 		}
 	}
 
-	store, err := storage.NewLocalStore(cfg.StorageRoot)
-	if err != nil {
-		return nil, err
+	var store storage.Store
+	if cfg.StorageDriver == "s3" {
+		s3Store, err := storage.NewS3Store(storage.S3Config{
+			Endpoint:        cfg.S3Endpoint,
+			Region:          cfg.S3Region,
+			Bucket:          cfg.S3Bucket,
+			AccessKeyID:     cfg.S3AccessKeyID,
+			SecretAccessKey: cfg.S3SecretAccessKey,
+			PublicEndpoint:  cfg.S3PublicEndpoint,
+			Prefix:          cfg.S3Prefix,
+			PathStyle:       cfg.S3PathStyle,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("s3 storage: %w", err)
+		}
+		if err := s3Store.EnsureBucket(context.Background()); err != nil {
+			return nil, err
+		}
+		store = s3Store
+	} else {
+		localStore, err := storage.NewLocalStore(cfg.StorageRoot)
+		if err != nil {
+			return nil, err
+		}
+		store = localStore
 	}
 	dbxClient := dbx.NewClient(logger, cfg.DBXDataDir)
 	repo := repositories.NewCoreRepository(dbPool)
@@ -91,7 +113,13 @@ func Bootstrap(ctx context.Context) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("encryption key: %w", err)
 	}
-	platform := services.NewPlatformService(repo, store, services.NewMailer(cfg), os.Getenv("VITE_APP_URL"), dbxClient, encryptor, logger)
+	var fnRunner services.FunctionRunner
+	if cfg.FunctionsDriver == "docker" {
+		fnRunner = services.NewDockerRunner(cfg.FunctionsTimeout, cfg.FunctionsMaxBytes)
+	} else {
+		fnRunner = services.NewExecRunner(cfg.FunctionsRuntime, cfg.FunctionsTimeout, cfg.FunctionsMaxBytes)
+	}
+	platform := services.NewPlatformService(repo, store, services.NewMailer(cfg), os.Getenv("VITE_APP_URL"), dbxClient, encryptor, logger, fnRunner)
 	settings := services.NewSettingsService(repo, encryptor)
 
 	if cfg.Env == "production" {

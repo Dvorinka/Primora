@@ -140,6 +140,18 @@ func (ns NullCoreProjectRole) Value() (driver.Value, error) {
 	return string(ns.CoreProjectRole), nil
 }
 
+type CoreAlertRule struct {
+	ID        uuid.UUID          `json:"id"`
+	ProjectID uuid.UUID          `json:"project_id"`
+	Name      string             `json:"name"`
+	Kind      string             `json:"kind"`
+	Config    []byte             `json:"config"`
+	Enabled   bool               `json:"enabled"`
+	State     []byte             `json:"state"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
 type CoreApiKey struct {
 	ID              uuid.UUID          `json:"id"`
 	ProjectID       uuid.UUID          `json:"project_id"`
@@ -231,6 +243,17 @@ type CoreDocument struct {
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
+type CoreEmailLog struct {
+	ID        uuid.UUID          `json:"id"`
+	ProjectID pgtype.UUID        `json:"project_id"`
+	Template  string             `json:"template"`
+	ToEmail   string             `json:"to_email"`
+	Subject   string             `json:"subject"`
+	Status    string             `json:"status"`
+	Error     string             `json:"error"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type CoreEvent struct {
 	ID          int64              `json:"id"`
 	ProjectID   uuid.UUID          `json:"project_id"`
@@ -241,6 +264,45 @@ type CoreEvent struct {
 	Payload     []byte             `json:"payload"`
 	Fingerprint string             `json:"fingerprint"`
 	Ts          pgtype.Timestamptz `json:"ts"`
+}
+
+type CoreFunction struct {
+	ID           uuid.UUID          `json:"id"`
+	ProjectID    uuid.UUID          `json:"project_id"`
+	Name         string             `json:"name"`
+	Code         string             `json:"code"`
+	Runtime      string             `json:"runtime"`
+	Enabled      bool               `json:"enabled"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	EventPattern string             `json:"event_pattern"`
+}
+
+type CoreFunctionRun struct {
+	ID         uuid.UUID          `json:"id"`
+	FunctionID uuid.UUID          `json:"function_id"`
+	Trigger    string             `json:"trigger"`
+	Status     string             `json:"status"`
+	ExitCode   *int32             `json:"exit_code"`
+	Stdout     string             `json:"stdout"`
+	Stderr     string             `json:"stderr"`
+	DurationMs int32              `json:"duration_ms"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
+type CoreInboundHook struct {
+	ID             uuid.UUID          `json:"id"`
+	ProjectID      uuid.UUID          `json:"project_id"`
+	Name           string             `json:"name"`
+	Token          string             `json:"token"`
+	Mode           string             `json:"mode"`
+	JobID          pgtype.UUID        `json:"job_id"`
+	Secret         []byte             `json:"secret"`
+	Enabled        bool               `json:"enabled"`
+	LastReceivedAt pgtype.Timestamptz `json:"last_received_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	FunctionID     pgtype.UUID        `json:"function_id"`
 }
 
 type CoreIntegration struct {
@@ -333,6 +395,7 @@ type CoreScheduledJob struct {
 	CreatedByUserID pgtype.UUID        `json:"created_by_user_id"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	FunctionID      pgtype.UUID        `json:"function_id"`
 }
 
 type CoreScheduledJobRun struct {

@@ -41,7 +41,14 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 | `AUTH_BASE_URL` / `BETTER_AUTH_URL` | public auth URL (`https://host/auth`) | yes |
 | `AUTH_INTERNAL_BASE_URL` | backend → auth internal URL (`http://auth:3001`) | yes |
 | `VITE_APP_URL` / `VITE_AUTH_BASE_URL` / `VITE_API_BASE_URL` | frontend public URLs — **baked into the frontend image at build time** | yes |
-| `BACKEND_STORAGE_ROOT` | object storage directory inside the backend container | yes |
+| `BACKEND_STORAGE_ROOT` | object storage directory inside the backend container (local driver) | yes |
+| `BACKEND_STORAGE_DRIVER` | `local` (default) or `s3` — S3-compatible object storage | no |
+| `S3_ENDPOINT` / `S3_REGION` / `S3_BUCKET` | S3 API endpoint (empty endpoint → AWS `s3.<region>.amazonaws.com`), region, bucket | with `s3` |
+| `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | S3 credentials | with `s3` |
+| `S3_PREFIX` / `S3_PATH_STYLE` | optional key prefix; path-style URLs (default `true`, needed by MinIO/Garage — set `false` for AWS virtual-hosted) | no |
+| `S3_PUBLIC_ENDPOINT` | client-facing S3 endpoint used for presigned URLs when `S3_ENDPOINT` is internal-only (e.g. `http://minio:9000`); signatures bind the public host | no |
+| `FUNCTIONS_DRIVER` | Function execution driver: `exec` (default — runtime binary on the backend host; code runs with backend privileges) or `docker` — each invoke runs in an ephemeral locked-down container (no network, read-only fs, 128 MiB, non-root). Docker mode needs `/var/run/docker.sock` mounted into the backend (see the commented volume in `docker-compose.yml`) and the runtime images pulled (`oven/bun`, `denoland/deno`). Source code is capped at 256 KiB under the docker driver | no |
+| `FUNCTIONS_RUNTIME` / `FUNCTIONS_TIMEOUT_SECONDS` / `FUNCTIONS_MAX_OUTPUT_BYTES` | Functions: runtime binary (`auto` resolves `bun`/`deno` — exec driver only; docker driver uses the matching official image), per-run timeout (default 30 s), captured-output cap (default 64 KiB) | no |
 | `AUTH_ADMIN_EMAILS` | comma-separated emails promoted to auth admin on boot | no |
 | `USER_RATE_LIMIT_PER_MINUTE` / `API_KEY_RATE_LIMIT_PER_MINUTE` | per-identity API rate limits (defaults 240 / 600) | no |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_SECURE` / `MAIL_FROM` | transactional mail; without it verification/reset emails go nowhere | production |
@@ -127,10 +134,27 @@ docker compose up -d                      # 3. rolling recreate; backend migrate
 
 ## Storage constraint
 
-Object storage is the **local filesystem** (`backend_storage` volume). There
-is no S3-compatible backend yet — the volume must be on durable, backed-up
-disk, and a single host serves all objects. Plan capacity accordingly;
-multi-node deployments need an external object store first.
+Object storage defaults to the **local filesystem** (`backend_storage`
+volume) — durable, backed-up disk on a single host. For multi-node or
+external object stores set `BACKEND_STORAGE_DRIVER=s3` + the `S3_*`
+variables above (AWS, MinIO, Garage, R2 all work).
+
+## Functions trust model
+
+Two drivers, two trust levels:
+
+- **`exec` (default)** — function code runs as a child process of the
+  backend: same host, same privileges, no sandbox. Treat every project
+  member who can edit a function as holding a shell on the backend host.
+  Appropriate for single-team self-hosted deployments.
+- **`docker`** — each invoke runs in an ephemeral container: no network,
+  read-only rootfs, 128 MiB memory, half a CPU, 64 pids, non-root, all
+  capabilities dropped. Requires the Docker socket mounted into the
+  backend (commented volume in `docker-compose.yml`) — note the socket is
+  itself root-equivalent on the host, so this isolates *function code*,
+  not operators. Source code capped at 256 KiB. For hostile multi-tenant
+  workloads, a dedicated microVM runtime (Firecracker/gVisor) remains the
+  roadmap item.
 
 ## Observability
 

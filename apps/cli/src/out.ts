@@ -17,9 +17,27 @@ export function dim(message: string): void {
   process.stdout.write(pc.dim(message) + "\n");
 }
 
+/** Destructive-action gate — requires --yes in scripts, prompts on a TTY. */
+export async function confirmOrAbort(message: string, yes?: boolean): Promise<void> {
+  if (yes) return;
+  if (!process.stdin.isTTY) {
+    throw new Error(`${message} — pass --yes to confirm in non-interactive mode`);
+  }
+  const answer = await p.confirm({ message });
+  if (p.isCancel(answer) || !answer) {
+    p.cancel("Aborted.");
+    process.exit(1);
+  }
+}
+
 export function fail(error: unknown): never {
-  const err = error as { message?: string; hint?: string; status?: number; body?: unknown };
+  const err = error as { message?: string; hint?: string; status?: number; body?: unknown; cause?: { code?: string } };
   let message = err?.message ?? "unknown error";
+  // undici TypeError "fetch failed" — the useful part is the cause code.
+  if (message === "fetch failed" || message.startsWith("fetch failed")) {
+    const code = err?.cause?.code;
+    message = `could not reach the instance${code ? ` (${code})` : ""} — check \`primora context\` and that it is running`;
+  }
   // generated client throws ApiError with a parsed body
   const body = err?.body as { error?: { message?: string } } | undefined;
   if (body?.error?.message) message = body.error.message;

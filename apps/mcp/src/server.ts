@@ -22,7 +22,16 @@ import {
 import { configureClient, loadConfig, type McpConfig } from "./config.js";
 
 const cfg = loadConfig();
-configureClient(cfg);
+try {
+  configureClient(cfg);
+} catch (e) {
+  // Missing credentials must not kill the server — initialize/tools/list
+  // still work, and every call surfaces the actionable error through the
+  // normal tool error path instead of an uncaught startup exception.
+  OpenAPI.TOKEN = async () => {
+    throw e;
+  };
+}
 
 const TEXT_TYPES = /^(text\/|application\/(json|xml|yaml|javascript|x-ndjson))/;
 
@@ -41,13 +50,61 @@ function fail(error: unknown) {
   return { content: [{ type: "text" as const, text: `error: ${message}` }], isError: true };
 }
 
-function projectId(override?: string): string {
-  const id = override ?? cfg.projectId;
+async function projectId(override?: string): Promise<string> {
+  // API keys are hard-scoped to one project — a stored `primora use`
+  // selection for a different project can never authorize, so /context
+  // wins. Session actors keep the stored choice (users switch projects).
+  const id =
+    override ??
+    (cfg.auth?.type === "apiKey"
+      ? ((await contextProjectId()) ?? cfg.projectId)
+      : (cfg.projectId ?? (await contextProjectId())));
   if (!id) {
     throw new Error("no project selected — pass projectId, run `primora use`, or set PRIMORA_PROJECT");
   }
   return id;
 }
+
+async function orgId(override?: string): Promise<string> {
+  const id =
+    override ??
+    (cfg.auth?.type === "apiKey"
+      ? ((await contextOrgId()) ?? cfg.organizationId)
+      : (cfg.organizationId ?? (await contextOrgId())));
+  if (!id) {
+    throw new Error("no organization selected — pass organizationId or run `primora use`");
+  }
+  return id;
+}
+
+// API keys are project-scoped — /context resolves the project without /me.
+async function actorContext(): Promise<ActorContext | undefined> {
+  if (ctxCache) return ctxCache;
+  try {
+    const res = await apiFetch("/context");
+    ctxCache = (await res.json()) as ActorContext;
+  } catch {
+    return undefined;
+  }
+  return ctxCache;
+}
+
+async function contextProjectId(): Promise<string | undefined> {
+  return (await actorContext())?.project?.id;
+}
+
+async function contextOrgId(): Promise<string | undefined> {
+  return (await actorContext())?.organization?.id;
+}
+
+interface ActorContext {
+  actor: string;
+  scopes?: string[];
+  key_prefix?: string;
+  organization?: { id: string; slug: string; name: string; role?: string };
+  project?: { id: string; slug: string; name: string };
+}
+let ctxCache: ActorContext | undefined;
 
 async function bucketIdFor(project: string, ref: string): Promise<string> {
   const { items } = await StorageService.listBuckets({ projectId: project });
@@ -83,6 +140,11 @@ server.registerTool(
   { description: "Current identity, organizations and projects visible to the credentials" },
   async () => {
     try {
+      // API keys can't call /me — /context is the actor-aware self-discovery.
+      if (cfg.auth?.type === "apiKey") {
+        const res = await apiFetch("/context");
+        return ok(await res.json());
+      }
       return ok(await PlatformService.getMe());
     } catch (e) {
       return fail(e);
@@ -110,9 +172,7 @@ server.registerTool(
   },
   async ({ organizationId }) => {
     try {
-      const org = organizationId ?? cfg.organizationId;
-      if (!org) throw new Error("no organization selected — pass organizationId or run `primora use`");
-      return ok(await ProjectsService.listProjects({ organizationId: org }));
+      return ok(await ProjectsService.listProjects({ organizationId: await orgId(organizationId) }));
     } catch (e) {
       return fail(e);
     }
@@ -132,11 +192,9 @@ server.registerTool(
   },
   async ({ name, slug, description, organizationId }) => {
     try {
-      const org = organizationId ?? cfg.organizationId;
-      if (!org) throw new Error("no organization selected — pass organizationId or run `primora use`");
       return ok(
         await ProjectsService.createProject({
-          organizationId: org,
+          organizationId: await orgId(organizationId),
           requestBody: { name, slug: slug ?? slugify(name), description },
         }),
       );
@@ -154,7 +212,7 @@ server.registerTool(
   },
   async ({ projectId: p }) => {
     try {
-      return ok(await StorageService.listBuckets({ projectId: projectId(p) }));
+      return ok(await StorageService.listBuckets({ projectId: await projectId(p) }));
     } catch (e) {
       return fail(e);
     }
@@ -176,7 +234,7 @@ server.registerTool(
     try {
       return ok(
         await StorageService.createBucket({
-          projectId: projectId(p),
+          projectId: await projectId(p),
           requestBody: {
             name,
             slug: slug ?? slugify(name),
@@ -208,7 +266,7 @@ server.registerTool(
   },
   async ({ bucket, projectId: p, q, limit, offset }) => {
     try {
-      const bucketId = await bucketIdFor(projectId(p), bucket);
+      const bucketId = await bucketIdFor(await projectId(p), bucket);
       return ok(await StorageService.listBucketObjects({ bucketId, q, limit, offset }));
     } catch (e) {
       return fail(e);
@@ -231,10 +289,16 @@ server.registerTool(
   },
   async ({ bucket, key, content, contentBase64, contentType, projectId: p }) => {
     try {
-      const bucketId = await bucketIdFor(projectId(p), bucket);
+      const bucketId = await bucketIdFor(await projectId(p), bucket);
       let blob: Blob;
       if (contentBase64 !== undefined) {
-        blob = new Blob([Buffer.from(contentBase64, "base64")], {
+        // Buffer.from(..., "base64") silently drops invalid chars — strict-
+        // validate so corrupt input can't silently store garbage bytes.
+        const clean = contentBase64.replace(/\s/g, "");
+        if (!/^[A-Za-z0-9+/]*={0,2}$/.test(clean) || clean.length % 4 !== 0) {
+          throw new Error("contentBase64 is not valid base64");
+        }
+        blob = new Blob([Buffer.from(clean, "base64")], {
           type: contentType ?? "application/octet-stream",
         });
       } else if (content !== undefined) {
@@ -266,7 +330,7 @@ server.registerTool(
   },
   async ({ bucket, key, projectId: p }) => {
     try {
-      const bucketId = await bucketIdFor(projectId(p), bucket);
+      const bucketId = await bucketIdFor(await projectId(p), bucket);
       const res = await apiFetch(`/buckets/${bucketId}/objects/${encodeURIComponent(key)}`);
       const type = res.headers.get("content-type") ?? "application/octet-stream";
       if (TEXT_TYPES.test(type)) {
@@ -292,7 +356,7 @@ server.registerTool(
   },
   async ({ bucket, key, projectId: p }) => {
     try {
-      const bucketId = await bucketIdFor(projectId(p), bucket);
+      const bucketId = await bucketIdFor(await projectId(p), bucket);
       await StorageService.deleteBucketObject({ bucketId, objectKey: key });
       return ok({ deleted: key });
     } catch (e) {
@@ -309,7 +373,7 @@ server.registerTool(
   },
   async ({ projectId: p }) => {
     try {
-      return ok(await ProjectsService.listApiKeys({ projectId: projectId(p) }));
+      return ok(await ProjectsService.listApiKeys({ projectId: await projectId(p) }));
     } catch (e) {
       return fail(e);
     }
@@ -324,7 +388,7 @@ server.registerTool(
   },
   async ({ name, projectId: p }) => {
     try {
-      return ok(await ProjectsService.createApiKey({ projectId: projectId(p), requestBody: { name } }));
+      return ok(await ProjectsService.createApiKey({ projectId: await projectId(p), requestBody: { name } }));
     } catch (e) {
       return fail(e);
     }
@@ -339,7 +403,7 @@ server.registerTool(
   },
   async ({ apiKeyId, projectId: p }) => {
     try {
-      await ProjectsService.revokeApiKey({ projectId: projectId(p), apiKeyId });
+      await ProjectsService.revokeApiKey({ projectId: await projectId(p), apiKeyId });
       return ok({ revoked: apiKeyId });
     } catch (e) {
       return fail(e);
@@ -362,7 +426,7 @@ server.registerTool(
   async ({ projectId: p, q, action, limit, offset }) => {
     try {
       return ok(
-        await ProjectsService.listAuditLogs({ projectId: projectId(p), q, action, limit, offset }),
+        await ProjectsService.listAuditLogs({ projectId: await projectId(p), q, action, limit, offset }),
       );
     } catch (e) {
       return fail(e);
@@ -383,7 +447,7 @@ server.registerTool(
   },
   async ({ projectId: p, days }) => {
     try {
-      return ok(await TelemetryService.listTelemetryIssues({ projectId: projectId(p), days }));
+      return ok(await TelemetryService.listTelemetryIssues({ projectId: await projectId(p), days }));
     } catch (e) {
       return fail(e);
     }
@@ -407,7 +471,7 @@ server.registerTool(
     try {
       return ok(
         await TelemetryService.listTelemetryEvents({
-          projectId: projectId(p),
+          projectId: await projectId(p),
           type,
           component,
           fingerprint,
@@ -432,7 +496,7 @@ server.registerTool(
   },
   async ({ projectId: p, window }) => {
     try {
-      return ok(await TelemetryService.getTelemetryStats({ projectId: projectId(p), window }));
+      return ok(await TelemetryService.getTelemetryStats({ projectId: await projectId(p), window }));
     } catch (e) {
       return fail(e);
     }
@@ -452,7 +516,7 @@ server.registerTool(
   async ({ projectId: p, name, window }) => {
     try {
       return ok(
-        await TelemetryService.getTelemetryMetricSeries({ projectId: projectId(p), name, window }),
+        await TelemetryService.getTelemetryMetricSeries({ projectId: await projectId(p), name, window }),
       );
     } catch (e) {
       return fail(e);
@@ -474,7 +538,7 @@ server.registerTool(
   },
   async ({ projectId: p }) => {
     try {
-      return ok(await IntegrationsService.listIntegrations({ projectId: projectId(p) }));
+      return ok(await IntegrationsService.listIntegrations({ projectId: await projectId(p) }));
     } catch (e) {
       return fail(e);
     }
@@ -498,7 +562,7 @@ server.registerTool(
     try {
       return ok(
         await IntegrationsService.createIntegration({
-          projectId: projectId(p),
+          projectId: await projectId(p),
           requestBody: {
             name,
             type: CreateIntegrationRequest.type.RYBBIT,
@@ -522,7 +586,7 @@ server.registerTool(
   },
   async ({ integrationId, projectId: p }) => {
     try {
-      await IntegrationsService.deleteIntegration({ projectId: projectId(p), integrationId });
+      await IntegrationsService.deleteIntegration({ projectId: await projectId(p), integrationId });
       return ok({ deleted: integrationId });
     } catch (e) {
       return fail(e);
@@ -538,7 +602,7 @@ server.registerTool(
   },
   async ({ integrationId, projectId: p }) => {
     try {
-      return ok(await IntegrationsService.testIntegration({ projectId: projectId(p), integrationId }));
+      return ok(await IntegrationsService.testIntegration({ projectId: await projectId(p), integrationId }));
     } catch (e) {
       return fail(e);
     }
@@ -561,7 +625,7 @@ server.registerTool(
     try {
       return ok(
         await IntegrationsService.getIntegrationAnalytics({
-          projectId: projectId(p),
+          projectId: await projectId(p),
           integrationId,
           site,
           days,
@@ -603,7 +667,7 @@ server.registerTool(
   },
   async ({ projectId: p }) => {
     try {
-      return ok(await WebhooksService.listWebhooks({ projectId: projectId(p) }));
+      return ok(await WebhooksService.listWebhooks({ projectId: await projectId(p) }));
     } catch (e) {
       return fail(e);
     }
@@ -627,7 +691,7 @@ server.registerTool(
     try {
       return ok(
         await WebhooksService.createWebhook({
-          projectId: projectId(p),
+          projectId: await projectId(p),
           requestBody: { url, secret, events, enabled },
         }),
       );
@@ -655,7 +719,7 @@ server.registerTool(
     try {
       return ok(
         await WebhooksService.updateWebhook({
-          projectId: projectId(p),
+          projectId: await projectId(p),
           webhookId,
           requestBody: { url, secret, events, enabled },
         }),
@@ -674,7 +738,7 @@ server.registerTool(
   },
   async ({ webhookId, projectId: p }) => {
     try {
-      await WebhooksService.deleteWebhook({ projectId: projectId(p), webhookId });
+      await WebhooksService.deleteWebhook({ projectId: await projectId(p), webhookId });
       return ok({ deleted: webhookId });
     } catch (e) {
       return fail(e);
@@ -696,7 +760,7 @@ server.registerTool(
     try {
       return ok(
         await WebhooksService.listWebhookDeliveries({
-          projectId: projectId(p),
+          projectId: await projectId(p),
           webhookId,
           limit,
         }),
@@ -715,7 +779,7 @@ server.registerTool(
   },
   async ({ webhookId, projectId: p }) => {
     try {
-      return ok(await WebhooksService.testWebhook({ projectId: projectId(p), webhookId }));
+      return ok(await WebhooksService.testWebhook({ projectId: await projectId(p), webhookId }));
     } catch (e) {
       return fail(e);
     }
@@ -740,7 +804,7 @@ server.registerTool(
       if (!version && !ref) throw new Error("pass version or ref");
       return ok(
         await WebhooksService.createDeployMarker({
-          projectId: projectId(p),
+          projectId: await projectId(p),
           requestBody: { version, ref, environment, note },
         }),
       );
@@ -764,7 +828,7 @@ server.registerTool(
   },
   async ({ projectId: p }) => {
     try {
-      return ok(await AutomationService.listScheduledJobs({ projectId: projectId(p) }));
+      return ok(await AutomationService.listScheduledJobs({ projectId: await projectId(p) }));
     } catch (e) {
       return fail(e);
     }
@@ -792,7 +856,7 @@ server.registerTool(
     try {
       return ok(
         await AutomationService.createScheduledJob({
-          projectId: projectId(p),
+          projectId: await projectId(p),
           requestBody: { name, schedule, url, secret, payload, enabled },
         }),
       );
@@ -821,7 +885,7 @@ server.registerTool(
     try {
       return ok(
         await AutomationService.updateScheduledJob({
-          projectId: projectId(p),
+          projectId: await projectId(p),
           jobId,
           requestBody: { name, schedule, url, secret, payload, enabled },
         }),
@@ -840,7 +904,7 @@ server.registerTool(
   },
   async ({ jobId, projectId: p }) => {
     try {
-      await AutomationService.deleteScheduledJob({ projectId: projectId(p), jobId });
+      await AutomationService.deleteScheduledJob({ projectId: await projectId(p), jobId });
       return ok({ deleted: jobId });
     } catch (e) {
       return fail(e);
@@ -861,7 +925,7 @@ server.registerTool(
   async ({ jobId, limit, projectId: p }) => {
     try {
       return ok(
-        await AutomationService.listScheduledJobRuns({ projectId: projectId(p), jobId, limit }),
+        await AutomationService.listScheduledJobRuns({ projectId: await projectId(p), jobId, limit }),
       );
     } catch (e) {
       return fail(e);
@@ -877,7 +941,7 @@ server.registerTool(
   },
   async ({ jobId, projectId: p }) => {
     try {
-      return ok(await AutomationService.runScheduledJob({ projectId: projectId(p), jobId }));
+      return ok(await AutomationService.runScheduledJob({ projectId: await projectId(p), jobId }));
     } catch (e) {
       return fail(e);
     }
@@ -939,20 +1003,65 @@ server.registerTool(
   },
 );
 
-// Commands that would move a secret into the response are denied outright —
-// the CLI is the broker; the model sees results, not credentials.
-const EXEC_DENY_FIRST = new Set(["vault", "secrets", "inject", "agent", "login", "logout", "use"]);
-const EXEC_DENY_PAIR = new Set(["keys:create"]);
+// vault_exec allow-list — read/non-destructive commands an agent may run
+// under an injected secret. Deny-lists lose (a colon-form `secrets:get`
+// already bypassed a pair-match once); only these verbs execute.
+// Commands touching host files (upload/download --out, secrets import) and
+// anything that moves a secret into output are intentionally absent.
+const EXEC_ALLOW = new Set([
+  "whoami",
+  "context",
+  "orgs:list",
+  "projects:list",
+  "buckets:list",
+  "objects:list",
+  "documents:list",
+  "jobs:list",
+  "jobs:runs",
+  "audit:list",
+  "keys:list",
+  "events:send",
+]);
+
+// Flags that could redirect output into host files — none of the allowed
+// commands need them, so reject the whole set defensively.
+const EXEC_ARG_DENY = /^--?(out|file|path|dir|env-file|output|write)\b/;
+
+// Env names that must never carry an injected secret — preload/runtime
+// hooks and interpreter variables turn an env injection into code exec
+// (NODE_OPTIONS, LD_*, BASH_ENV, PYTHONPATH, …). PRIMORA_* stays allowed:
+// the injected VALUE comes from the vault, and those names are its purpose.
+const ENV_NAME_DENY =
+  /^(NODE_|LD_|DYLD_|BASH|ENV$|IFS$|PATH$|HOME$|SHELL$|CDPATH$|SHELLOPTS$|BASHOPTS$|PYTHON|PERL|RUBY|GIT_|SSL_CERT|XDG_)/;
+
+function execAllowed(raw: string[]): { args: string[]; verb: string } {
+  // Normalize colon-form: ["objects:list","b"] ≡ ["objects","list","b"].
+  const args = [...raw];
+  if (args[0].includes(":") && !args[0].startsWith("-")) {
+    args.splice(0, 1, ...args[0].split(":"));
+  }
+  const verb = args.length > 1 && !args[1].startsWith("-") ? `${args[0]}:${args[1]}` : args[0];
+  if (!EXEC_ALLOW.has(verb)) {
+    throw new Error(`denied: "${verb}" is not on the vault_exec allow-list (read-only commands only)`);
+  }
+  for (const a of args) {
+    if (a.includes("\0")) throw new Error("denied: NUL byte in argument");
+    if (a.includes("..") || EXEC_ARG_DENY.test(a)) {
+      throw new Error(`denied: argument "${a}" could redirect to host files`);
+    }
+  }
+  return { args, verb };
+}
 
 server.registerTool(
   "primora_vault_exec",
   {
     description:
-      "Run a primora CLI command with a vault secret injected into its environment (default secret: PRIMORA_API_KEY). The secret never appears in arguments or the response — only the command output is returned.",
+      "Run a read-only primora CLI command with a vault secret injected into its environment (default secret: PRIMORA_API_KEY). Allow-listed commands only; the secret never appears in arguments or the response.",
     inputSchema: {
       command: z
         .array(z.string())
-        .describe('primora arguments, e.g. ["objects","list","mybucket"] — vault/secrets/inject/agent/login/logout/use and keys:create are denied'),
+        .describe('primora arguments, e.g. ["objects","list","mybucket"] — allow-listed read commands only'),
       secret: z
         .string()
         .optional()
@@ -962,17 +1071,16 @@ server.registerTool(
   async ({ command, secret }) => {
     try {
       if (!command.length) throw new Error("empty command");
-      const first = command[0];
-      const pair = `${first}:${command[1] ?? ""}`;
-      if (EXEC_DENY_FIRST.has(first) || EXEC_DENY_PAIR.has(pair) || EXEC_DENY_PAIR.has(first)) {
-        throw new Error(`denied: "${first}" would expose credentials or config`);
-      }
+      const { args } = execAllowed(command);
       const secretName = secret ?? "PRIMORA_API_KEY";
+      if (!/^[A-Z_][A-Z0-9_]{0,63}$/.test(secretName) || ENV_NAME_DENY.test(secretName)) {
+        throw new Error(`denied: "${secretName}" is not a safe env name to inject`);
+      }
       const got = runCli(["secrets", "get", secretName]);
       if (got.code !== 0) {
         throw new Error(got.stderr.trim() || `vault locked or "${secretName}" missing`);
       }
-      const r = runCli(command, { [secretName]: got.stdout.trimEnd() });
+      const r = runCli(args, { [secretName]: got.stdout.trimEnd() });
       return ok({ exitCode: r.code, stdout: r.stdout, stderr: r.stderr });
     } catch (e) {
       return fail(e);
@@ -992,7 +1100,7 @@ server.registerTool(
   },
   async ({ projectId: p }) => {
     try {
-      return ok(await SecretsService.listProjectSecrets({ projectId: projectId(p) }));
+      return ok(await SecretsService.listProjectSecrets({ projectId: await projectId(p) }));
     } catch (e) {
       return fail(e);
     }
@@ -1015,7 +1123,7 @@ server.registerTool(
   async ({ name, value, url, notes, projectId: p }) => {
     try {
       const res = await SecretsService.setProjectSecret({
-        projectId: projectId(p),
+        projectId: await projectId(p),
         name,
         requestBody: { value, url, notes },
       });

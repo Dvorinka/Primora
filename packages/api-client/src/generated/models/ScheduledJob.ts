@@ -12,6 +12,10 @@ export type ScheduledJob = {
     schedule: string;
     url: string;
     /**
+     * When set, the schedule invokes this function instead of POSTing url.
+     */
+    function_id?: string | null;
+    /**
      * Static JSON payload merged into every delivery's data field.
      */
     payload: Record<string, any>;

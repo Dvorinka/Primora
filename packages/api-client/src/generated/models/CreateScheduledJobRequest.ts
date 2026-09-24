@@ -8,7 +8,14 @@ export type CreateScheduledJobRequest = {
      * Cron expression, e.g. "*15 * * * *", or descriptor like "@every 1h".
      */
     schedule: string;
-    url: string;
+    /**
+     * Delivery target. Required unless function_id is set.
+     */
+    url?: string;
+    /**
+     * Invoke this function on schedule instead of POSTing url.
+     */
+    function_id?: string;
     /**
      * HMAC key for X-Primora-Signature. Generated when omitted.
      */

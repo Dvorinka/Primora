@@ -1,15 +1,18 @@
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 import {
   AutomationService,
+  FunctionsService,
   OpenAPI,
   type ScheduledJob,
   type ScheduledJobRun,
+  type Function as PrimoraFunction,
 } from "@primora/api-client";
 import { fetchApiToken } from "../lib/auth-client";
 import { demoService } from "../lib/demo-mode";
 import { Badge } from "../components/Badge";
 import { Modal } from "../components/Modal";
 import { Input, Textarea } from "../components/Input";
+import { errorMessage } from "../lib/api";
 import {
   IconPlus,
   IconRefresh,
@@ -35,7 +38,7 @@ interface RealtimeEvent {
   data: Record<string, unknown>;
 }
 
-const err = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const err = (e: unknown) => errorMessage(e, String(e));
 const svc = (demo: boolean) =>
   (demo ? (demoService as unknown as typeof AutomationService) : AutomationService);
 
@@ -63,7 +66,8 @@ export function AutomationPage(props: AutomationPageProps) {
   const [runs, setRuns] = createSignal<Record<string, ScheduledJobRun[]>>({});
   const [expandedJob, setExpandedJob] = createSignal<string>();
   const [showCreate, setShowCreate] = createSignal(false);
-  const [jobForm, setJobForm] = createSignal({ name: "", schedule: "", url: "", payload: "", secret: "", enabled: true });
+  const [jobForm, setJobForm] = createSignal({ name: "", schedule: "", url: "", payload: "", secret: "", enabled: true, target: "url" as "url" | "function", function_id: "" });
+  const [functions, setFunctions] = createSignal<PrimoraFunction[]>([]);
   const [createdSecret, setCreatedSecret] = createSignal("");
   const [loading, setLoading] = createSignal(false);
   const [busy, setBusy] = createSignal<string>();
@@ -82,6 +86,10 @@ export function AutomationPage(props: AutomationPageProps) {
     try {
       const res = await svc(props.demoMode).listScheduledJobs({ projectId: props.projectID });
       setJobs(res.items ?? []);
+      if (!props.demoMode) {
+        const fr = await FunctionsService.listFunctions({ projectId: props.projectID });
+        setFunctions(fr.items ?? []);
+      }
     } catch (e) {
       setError(err(e));
     } finally {
@@ -199,14 +207,15 @@ export function AutomationPage(props: AutomationPageProps) {
         requestBody: {
           name: form.name.trim(),
           schedule: form.schedule.trim(),
-          url: form.url.trim(),
+          url: form.target === "url" ? form.url.trim() : undefined,
+          function_id: form.target === "function" ? form.function_id : undefined,
           secret: form.secret.trim() || undefined,
           payload,
           enabled: form.enabled,
         },
       });
       if (created.secret) setCreatedSecret(created.secret);
-      setJobForm({ name: "", schedule: "", url: "", payload: "", secret: "", enabled: true });
+      setJobForm({ name: "", schedule: "", url: "", payload: "", secret: "", enabled: true, target: "url", function_id: "" });
       setShowCreate(false);
     }, "Schedule created");
   };
@@ -335,7 +344,9 @@ export function AutomationPage(props: AutomationPageProps) {
                             <code class="text-xs">{job.schedule}</code>
                           </td>
                           <td class="text-text-2" style="max-width:14rem;overflow:hidden;text-overflow:ellipsis">
-                            {job.url}
+                            {job.function_id
+                              ? `ƒ ${functions().find((f) => f.id === job.function_id)?.name ?? "function"}`
+                              : job.url}
                           </td>
                           <td class="hidden md:table-cell text-text-2">{job.enabled ? fmtTime(job.next_run_at) : "—"}</td>
                           <td class="hidden md:table-cell">
@@ -522,7 +533,7 @@ export function AutomationPage(props: AutomationPageProps) {
         </div>
       </Show>
 
-      <Modal open={showCreate()} onClose={() => setShowCreate(false)} title="New schedule" size="md">
+      <Modal error={error()} open={showCreate()} onClose={() => setShowCreate(false)} title="New schedule" size="md">
         <form onSubmit={createJob} class="space-y-4">
           <Input
             label="Name"
@@ -545,16 +556,56 @@ export function AutomationPage(props: AutomationPageProps) {
             </p>
           </div>
           <div>
-            <Input
-              label="Target URL"
-              value={jobForm().url}
-              onInput={(e) => setJobForm((c) => ({ ...c, url: e.currentTarget.value }))}
-              placeholder="https://api.example.com/jobs/rollup"
-              required
-            />
-            <p class="label-hint">
-              HTTPS for public endpoints; plain HTTP allowed for private/self-hosted targets.
-            </p>
+            <span class="label">Target</span>
+            <div class="flex gap-2 mb-2">
+              <button
+                type="button"
+                class={`btn btn-sm ${jobForm().target === "url" ? "btn-primary" : "btn-secondary"}`}
+                onClick={() => setJobForm((c) => ({ ...c, target: "url" }))}
+              >
+                Webhook URL
+              </button>
+              <button
+                type="button"
+                class={`btn btn-sm ${jobForm().target === "function" ? "btn-primary" : "btn-secondary"}`}
+                onClick={() => setJobForm((c) => ({ ...c, target: "function" }))}
+              >
+                Function
+              </button>
+            </div>
+            <Show
+              when={jobForm().target === "function"}
+              fallback={
+                <>
+                  <Input
+                    label="Target URL"
+                    value={jobForm().url}
+                    onInput={(e) => setJobForm((c) => ({ ...c, url: e.currentTarget.value }))}
+                    placeholder="https://api.example.com/jobs/rollup"
+                    required
+                  />
+                  <p class="label-hint">
+                    HTTPS for public endpoints; plain HTTP allowed for private/self-hosted targets.
+                  </p>
+                </>
+              }
+            >
+              <select
+                class="input"
+                value={jobForm().function_id}
+                onChange={(e) => setJobForm((c) => ({ ...c, function_id: e.currentTarget.value }))}
+                required
+              >
+                <option value="">Select a function…</option>
+                <For each={functions()}>
+                  {(f) => <option value={f.id}>{f.name} ({f.runtime})</option>}
+                </For>
+              </select>
+              <p class="label-hint">
+                The function receives the resolved payload as JSON. Runs appear under the function's
+                history.
+              </p>
+            </Show>
           </div>
           <Textarea
             label="Payload (optional JSON)"

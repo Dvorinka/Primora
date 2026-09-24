@@ -27,13 +27,20 @@ RUN npm run build
 # Stage 2: Serve with Nginx
 FROM nginx:1.27-alpine
 COPY --from=builder /app/apps/frontend/dist /usr/share/nginx/html
-# Add simple nginx config for SPA routing
+# Add simple nginx config for SPA routing. index.html must always revalidate —
+# it references hashed assets that change every deploy. Hashed /assets files are
+# immutable and safe to cache long-term.
 RUN echo 'server { \
     listen 80; \
+    root /usr/share/nginx/html; \
+    index index.html; \
+    location /assets/ { \
+        try_files $uri =404; \
+        add_header Cache-Control "public, max-age=31536000, immutable"; \
+    } \
     location / { \
-        root /usr/share/nginx/html; \
-        index index.html; \
         try_files $uri $uri/ /index.html; \
+        add_header Cache-Control "no-cache, must-revalidate"; \
     } \
 }' > /etc/nginx/conf.d/default.conf
 

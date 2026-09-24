@@ -21,7 +21,14 @@ project interactively.
 ## Commands
 
 `orgs`, `projects`, `buckets`, `objects` (list/upload/download/rm), `keys`,
-`jobs`, `audit list --follow`. Every command accepts `--json`.
+`jobs`, `events:send`, `audit list --follow`. Every command accepts `--json`.
+
+```sh
+primora events:send custom.deploy.done --data '{"sha":"abc123"}'
+```
+
+`events:send` publishes a `custom.*` event — realtime subscribers, matching
+webhooks, and `event_pattern` functions all fire.
 
 ```sh
 primora documents list --collection users \
