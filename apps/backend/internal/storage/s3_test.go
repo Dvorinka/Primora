@@ -57,14 +57,14 @@ func (f *fakeS3) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		out.WriteString(`</ListBucketResult>`)
 		w.Header().Set("Content-Type", "application/xml")
-		w.Write([]byte(out.String()))
+		_, _ = w.Write([]byte(out.String()))
 	case r.Method == http.MethodGet:
 		body, ok := f.objects[key]
 		if !ok {
 			http.Error(w, "no such key", http.StatusNotFound)
 			return
 		}
-		w.Write(body)
+		_, _ = w.Write(body)
 	case r.Method == http.MethodDelete:
 		delete(f.objects, key)
 		w.WriteHeader(http.StatusNoContent)
