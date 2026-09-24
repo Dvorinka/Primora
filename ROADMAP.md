@@ -123,8 +123,11 @@ Follow-ups:
 
 - Verify the macOS/Windows desktop bundles produced by the `v0.5.0` CI run
   (host-verified on Linux only).
-- Desktop bundle signing + auto-updater — unsigned artifacts today; add when
-  distribution matures.
+- ~~Desktop bundle signing + auto-updater~~ ✅ — `tauri-plugin-updater`
+  wired: signed updater artifacts (`createUpdaterArtifacts`), minisign
+  keypair, `latest.json` manifest assembled on release, in-app
+  "Update & restart" on the connect screen. macOS/Windows OS-level code
+  signing (notarization/Authenticode) still open — needs paid certs.
 
 ## Phase 6 — Production hardening (v0.6.0) ✅
 
@@ -205,8 +208,10 @@ release pipeline with images + binaries + desktop bundles.
 - ~~**arm64 images**~~ ✅ — release builds `linux/amd64,linux/arm64` via
   QEMU + buildx.
 - Carried forward from Phase 5 follow-ups: macOS/Windows bundle
-  verification, signing + auto-updater.
-- Optional: SBOM + provenance attestation on release images.
+  verification; updater + minisign signing shipped (OS-level signing
+  remains open).
+- ~~Optional: SBOM~~ ✅ — CycloneDX SBOMs per published image + source
+  tree, attached to every release (`anchore/sbom-action`).
 
 ### Docs
 

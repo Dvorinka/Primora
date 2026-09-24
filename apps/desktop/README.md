@@ -44,3 +44,21 @@ file, one crypto implementation — terminal and desktop always agree. Requires
 Injection and the credential broker stay CLI-only (`primora inject`,
 `primora agent`).
 - Deep links / push notifications: deliberately omitted — nothing needs them yet.
+
+## Auto-updates
+
+`tauri-plugin-updater` checks `releases/latest/download/latest.json` on the
+GitHub repo when the connect screen loads; if a newer signed release exists
+it offers "Update & restart" — download, minisign verification, install,
+relaunch. No update manifest or signature failure = silent no-op; unsigned
+artifacts can never install.
+
+Release side (already wired in `.github/workflows/release.yml`): the desktop
+job signs updater artifacts with `TAURI_SIGNING_PRIVATE_KEY` (+ optional
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`) repo secrets, uploads the `.sig`
+files, and the release job assembles `latest.json` from them. Without the
+secret the build still succeeds but emits no signatures — and no manifest.
+
+The matching public key is embedded in `tauri.conf.json`. The private key
+lives only in repo secrets and on the maintainer's machine — regenerate with
+`npx tauri signer generate` and update both if it is ever lost.

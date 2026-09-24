@@ -28,6 +28,10 @@
       <p id="err" class="err" hidden></p>
       <p class="hint">The desktop app renders the console served by your own server. Nothing is hosted by us.</p>
       <p class="hint"><a href="#" id="vault-link" class="vlink">Open the local Secrets Vault</a></p>
+      <div id="update" hidden>
+        <p class="hint" id="update-text"></p>
+        <button type="button" id="update-install">Update &amp; restart</button>
+      </div>
     </main>
 
     <script type="module">
@@ -44,12 +48,52 @@
         button.textContent = "Connect";
       };
 
+      // Updater — check before auto-connecting: a saved URL redirects
+      // immediately, so the check must resolve first or it never shows.
+      // Bounded at 5s; failures are silent (dev builds, offline, no
+      // manifest). Unsigned artifacts can never install — minisign is
+      // enforced by the plugin against the pubkey baked into the bundle.
+      const updateP = (tauri?.updater && tauri?.process)
+        ? Promise.race([
+            tauri.updater.check().catch(() => null),
+            new Promise((r) => setTimeout(() => r(null), 5000)),
+          ])
+        : Promise.resolve(null);
+
       if (!tauri) {
         fail("This page is meant to run inside the Primora desktop app.");
       } else {
-        // A saved deployment URL means "skip the form" on every launch.
-        const saved = await tauri.core.invoke("get_server_url").catch(() => null);
-        if (saved) location.replace(saved);
+        // A saved deployment URL means "skip the form" on every launch —
+        // unless an update is waiting, which wins the redirect.
+        const update = await updateP;
+        if (update) {
+          const box = document.getElementById("update");
+          const text = document.getElementById("update-text");
+          const install = document.getElementById("update-install");
+          text.textContent = `Update available — v${update.version} (you have ${update.currentVersion}).`;
+          box.hidden = false;
+          install.addEventListener("click", async () => {
+            install.disabled = true;
+            install.textContent = "Downloading…";
+            try {
+              await update.downloadAndInstall();
+              await tauri.process.relaunch();
+            } catch (e) {
+              install.disabled = false;
+              install.textContent = "Update & restart";
+              text.textContent = `Update failed: ${e}`;
+            }
+          });
+          // "Not now" continues to the saved server.
+          const later = document.createElement("button");
+          later.type = "button";
+          later.textContent = "Not now";
+          later.style.marginLeft = "0.5rem";
+          later.addEventListener("click", () => { const saved = _savedUrl; if (saved) location.replace(saved); });
+          box.appendChild(later);
+        }
+        const _savedUrl = await tauri.core.invoke("get_server_url").catch(() => null);
+        if (_savedUrl && !update) location.replace(_savedUrl);
       }
 
       document.getElementById("vault-link").addEventListener("click", (e) => {
