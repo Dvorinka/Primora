@@ -188,8 +188,9 @@ release pipeline with images + binaries + desktop bundles.
   (auto-registers from ingest).
 - ~~**DB-to-DB links**~~ ✅ — implemented and verified live (postgres →
   dragonfly transfer, key templating, TTL).
-- ~~**External object storage**~~ ✅ — constraint documented in
-  DEPLOYMENT_GUIDE.md / PRODUCTION_READINESS.md; S3 backend deferred.
+- ~~**External object storage**~~ ✅ — `BACKEND_STORAGE_DRIVER=s3` shipped
+  (Phase 10): any S3-compatible API + presigned URLs; local disk remains
+  the default.
 
 ### Testing
 
@@ -374,8 +375,10 @@ Ordered loosely by leverage. None committed; each gets scoped when picked.
   scheduled jobs (`function_id` on a job), inbound hooks (`mode:
   "function"`), and domain events (`event_pattern`, e.g. `document.*`).
   Runs record trigger source (`manual`/`schedule`/`hook`/`event`).
-  Remaining candidate: isolated runtimes (sidecar/Firecracker) for
-  untrusted code — functions still execute with backend host privileges.
+  Isolation shipped: `FUNCTIONS_DRIVER=docker` runs every invoke in an
+  ephemeral locked-down container (no network, read-only fs, non-root).
+  Remaining candidate: Firecracker/gVisor microVMs for hostile
+  multi-tenant workloads — docker socket trust is documented.
 - **Phase 10 — Storage backends** — ✅ shipped: `BACKEND_STORAGE_DRIVER=s3`
   + `S3_*` env vars, stdlib SigV4, verified against a real S3 server.
   Presigned upload/download URLs shipped: `POST
@@ -386,6 +389,36 @@ Ordered loosely by leverage. None committed; each gets scoped when picked.
   scheduler and alert evaluator; failover verified with two replicas.
 - **Email surface** — ✅ shipped: templated sends + `core.email_log` +
   dashboard card; more templates land as new flows need them.
+
+## Release hardening (unreleased)
+
+- **Desktop auto-updater** — `tauri-plugin-updater`: signed updater
+  artifacts, `latest.json` manifest assembled per release, in-app
+  "Update & restart" on the connect screen. Unsigned artifacts can never
+  install — no signature means no manifest.
+- **SBOMs** — CycloneDX per GHCR image + source tree, attached to every
+  GitHub Release.
+- Requires `TAURI_SIGNING_PRIVATE_KEY` repo secret (keypair generated
+  locally; private half never committed).
+
+## Sandboxed functions (unreleased)
+
+- `FUNCTIONS_DRIVER=docker` — every invoke runs in an ephemeral sibling
+  container: `--network none`, read-only rootfs, 128 MiB / 0.5 CPU / 64
+  pids, non-root, `--cap-drop ALL`. Source travels as base64 env — no
+  bind mount, so Docker Desktop and remote daemons work. Timeout
+  force-removes the named container.
+- `exec` remains the default for single-team deployments; the trust-model
+  doc describes both levels.
+
+## Client events + presence (unreleased)
+
+- `POST /projects/:id/events` — members/API keys publish `custom.*`
+  events through the standard fan-out (realtime + webhooks + functions);
+  system types can't be spoofed.
+- Presence — per-project realtime subscriber counts; `presence.update`
+  broadcasts on join/leave (stream-only), `GET …/realtime/presence`
+  reads the count. SDK: `publish()` + `presence()`; CLI: `events:send`.
 
 ---
 
