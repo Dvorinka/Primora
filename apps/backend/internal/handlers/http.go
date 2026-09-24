@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	db "github.com/tdvorak/primora/apps/backend/internal/database/db"
 	"github.com/tdvorak/primora/apps/backend/internal/middleware"
 	"github.com/tdvorak/primora/apps/backend/internal/observability"
 	apperrors "github.com/tdvorak/primora/apps/backend/internal/response"
@@ -1057,12 +1058,19 @@ func (h *HTTPHandler) listDocuments(c *gin.Context) {
 		return
 	}
 	actor, _ := middleware.ActorFromContext(c)
-	result, err := h.Platform.ListDocuments(c.Request.Context(), actor, collectionID, limit, offset)
-	if err != nil {
-		h.handleError(c, err)
-		return
+	var result []db.CoreDocument
+	var total int64
+	var err error
+	// PostgREST-style filter/order switches to the dynamic-query path; the
+	// plain list keeps using the sqlc queries it always has.
+	if filter := c.Query("filter"); filter != "" || c.Query("order") != "" {
+		result, total, err = h.Platform.SearchDocuments(c.Request.Context(), actor, collectionID, filter, c.Query("order"), limit, offset)
+	} else {
+		result, err = h.Platform.ListDocuments(c.Request.Context(), actor, collectionID, limit, offset)
+		if err == nil {
+			total, err = h.Platform.CountDocuments(c.Request.Context(), actor, collectionID)
+		}
 	}
-	total, err := h.Platform.CountDocuments(c.Request.Context(), actor, collectionID)
 	if err != nil {
 		h.handleError(c, err)
 		return

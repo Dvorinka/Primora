@@ -281,6 +281,20 @@ Arca-inspired secrets management, clean-room — every surface covered.
   `secrets:* --remote` CLI mode, and MCP tools that are metadata/write-only
   so agents never hold plaintext.
 
+## Phase 11 — Document queries (unreleased)
+
+PostgREST-style filtering and ordering on collection documents.
+
+- `GET /collections/:id/documents?filter=…&order=…` — `filter` is a
+  comma-separated `field.op.value` list (ops `eq neq gt gte lt lte like in
+  is`), `order` a `field.asc|field.desc` list. Dotted paths index into
+  document data (`meta.city.eq.Prague`); `id`/`created_at`/`updated_at` are
+  filterable columns.
+- Whitelisted field/operator parsing, parameterized values, JSONB
+  extraction — no interpolated SQL. Plain lists keep the sqlc path.
+- `primora documents list --collection <slug> --filter … --order …` in the
+  CLI; `filter`/`order` params in the generated client.
+
 ## Future phases — candidates
 
 Ordered loosely by leverage. None committed; each gets scoped when picked.
@@ -295,9 +309,6 @@ Ordered loosely by leverage. None committed; each gets scoped when picked.
 - **Phase 10 — Storage backends** — S3-compatible object storage behind
   the existing bucket abstraction (deferred from Phase 6), plus
   presigned-URL uploads for large files.
-- **Phase 11 — Generated REST per collection** — PostgREST-style
-  auto-CRUD + filtering over Collections documents; a clean read layer
-  on data that already exists.
 - **Notifications** — alert rules on telemetry (error-rate thresholds,
   heartbeat silence) fanning out through the webhook dispatcher.
 - **Inbound webhooks** — project-scoped ingest endpoints that turn

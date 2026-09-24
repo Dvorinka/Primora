@@ -23,6 +23,16 @@ project interactively.
 `orgs`, `projects`, `buckets`, `objects` (list/upload/download/rm), `keys`,
 `jobs`, `audit list --follow`. Every command accepts `--json`.
 
+```sh
+primora documents list --collection users \
+  --filter "status.eq.active,age.gt.18" --order "age.desc"
+```
+
+`--filter` takes comma-separated `field.op.value` terms — ops `eq neq gt gte lt
+lte like in is`; dotted paths index into document data (`meta.city.eq.Prague`),
+`id`/`created_at`/`updated_at` are also filterable. `--order` is a
+`field.asc|field.desc` list.
+
 ## Vault
 
 A local encrypted vault for secrets the CLI holds - API keys, deployment `.env`
