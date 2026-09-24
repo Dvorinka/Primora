@@ -48,8 +48,11 @@ type Config struct {
 	S3Prefix         string
 	S3PathStyle      bool
 
-	// Functions runtime: binary name/path ("auto" resolves per-function
-	// runtime from PATH — "bun" or "deno"), timeout and output cap.
+	// Functions runtime: driver "exec" (runtime binary on the backend host)
+	// or "docker" (ephemeral locked-down container), binary name/path for
+	// exec ("auto" resolves per-function runtime from PATH), timeout and
+	// output cap.
+	FunctionsDriver   string
 	FunctionsRuntime  string
 	FunctionsTimeout  time.Duration
 	FunctionsMaxBytes int64
@@ -89,6 +92,7 @@ func Load() (Config, error) {
 		S3SecretAccessKey:     os.Getenv("S3_SECRET_ACCESS_KEY"),
 		S3PublicEndpoint:      os.Getenv("S3_PUBLIC_ENDPOINT"),
 		S3Prefix:              os.Getenv("S3_PREFIX"),
+		FunctionsDriver:       getenv("FUNCTIONS_DRIVER", "exec"),
 		FunctionsRuntime:      getenv("FUNCTIONS_RUNTIME", "auto"),
 		FunctionsMaxBytes:     65536,
 	}
@@ -134,6 +138,12 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("parse FUNCTIONS_TIMEOUT_SECONDS: %w", err)
 	}
 	cfg.FunctionsTimeout = time.Duration(fnTimeout) * time.Second
+
+	switch cfg.FunctionsDriver {
+	case "exec", "docker":
+	default:
+		return Config{}, fmt.Errorf("FUNCTIONS_DRIVER %q must be exec or docker", cfg.FunctionsDriver)
+	}
 
 	var missing []string
 	if cfg.DatabaseURL == "" {

@@ -48,6 +48,10 @@ services:
         condition: service_started
     volumes:
       - backend_storage:/data/storage
+      # Uncomment for FUNCTIONS_DRIVER=docker — sibling containers for
+      # sandboxed function runs. Socket access is root-equivalent on the
+      # host; leave commented unless you run untrusted function code.
+      # - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/api/v1/health/liveness || exit 1"]
       interval: 15s

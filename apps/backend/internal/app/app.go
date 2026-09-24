@@ -113,7 +113,13 @@ func Bootstrap(ctx context.Context) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("encryption key: %w", err)
 	}
-	platform := services.NewPlatformService(repo, store, services.NewMailer(cfg), os.Getenv("VITE_APP_URL"), dbxClient, encryptor, logger, services.NewExecRunner(cfg.FunctionsRuntime, cfg.FunctionsTimeout, cfg.FunctionsMaxBytes))
+	var fnRunner services.FunctionRunner
+	if cfg.FunctionsDriver == "docker" {
+		fnRunner = services.NewDockerRunner(cfg.FunctionsTimeout, cfg.FunctionsMaxBytes)
+	} else {
+		fnRunner = services.NewExecRunner(cfg.FunctionsRuntime, cfg.FunctionsTimeout, cfg.FunctionsMaxBytes)
+	}
+	platform := services.NewPlatformService(repo, store, services.NewMailer(cfg), os.Getenv("VITE_APP_URL"), dbxClient, encryptor, logger, fnRunner)
 	settings := services.NewSettingsService(repo, encryptor)
 
 	if cfg.Env == "production" {
