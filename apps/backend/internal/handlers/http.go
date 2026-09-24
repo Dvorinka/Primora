@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	db "github.com/tdvorak/primora/apps/backend/internal/database/db"
 	"github.com/tdvorak/primora/apps/backend/internal/middleware"
@@ -35,6 +37,7 @@ func (h *HTTPHandler) Register(router *gin.Engine) {
 
 	api := router.Group("/api/v1")
 	api.GET("/me", h.me)
+	api.GET("/context", h.actorContext)
 	api.GET("/instance/public", h.instancePublic)
 	api.GET("/instance/settings", h.listInstanceSettings)
 	api.PUT("/instance/settings/:key", h.updateInstanceSetting)
@@ -174,6 +177,19 @@ func (h *HTTPHandler) me(c *gin.Context) {
 		return
 	}
 	result, err := h.Platform.Me(c.Request.Context(), actor)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *HTTPHandler) actorContext(c *gin.Context) {
+	actor, ok := middleware.RequireActor(c)
+	if !ok {
+		return
+	}
+	result, err := h.Platform.ActorContext(c.Request.Context(), actor)
 	if err != nil {
 		h.handleError(c, err)
 		return
@@ -921,6 +937,10 @@ func (h *HTTPHandler) presignObject(c *gin.Context) {
 			apperrors.Abort(c, http.StatusNotFound, "not_found", "bucket or object not found")
 			return
 		}
+		if errors.Is(err, services.ErrPresignUnsupported) {
+			apperrors.Abort(c, http.StatusBadRequest, "presign_unsupported", err.Error())
+			return
+		}
 		h.handleError(c, err)
 		return
 	}
@@ -1260,17 +1280,58 @@ func (h *HTTPHandler) bindAndValidate(c *gin.Context, target any) bool {
 		return false
 	}
 	if err := h.Validate.Struct(target); err != nil {
-		apperrors.Abort(c, http.StatusBadRequest, "validation_failed", err.Error())
+		var valErrs validator.ValidationErrors
+		if errors.As(err, &valErrs) && len(valErrs) > 0 {
+			apperrors.Abort(c, http.StatusBadRequest, "validation_failed", formatFieldError(valErrs[0]))
+		} else {
+			apperrors.Abort(c, http.StatusBadRequest, "validation_failed", "invalid request body")
+		}
 		return false
 	}
 	return true
+}
+
+func formatFieldError(f validator.FieldError) string {
+	if f.Tag() == "required" {
+		return fmt.Sprintf("%s is required", strings.ToLower(f.Field()))
+	}
+	return fmt.Sprintf("%s failed %s validation", strings.ToLower(f.Field()), f.Tag())
 }
 
 func (h *HTTPHandler) handleError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, io.EOF):
 		apperrors.Abort(c, http.StatusBadRequest, "invalid_body", "request body is empty")
+	case errors.Is(err, pgx.ErrNoRows):
+		apperrors.Abort(c, http.StatusNotFound, "not_found", "resource not found")
 	default:
+		var inputErr *services.InputError
+		if errors.As(err, &inputErr) {
+			apperrors.Abort(c, http.StatusBadRequest, "invalid_request", inputErr.Error())
+			return
+		}
+		var valErrs validator.ValidationErrors
+		if errors.As(err, &valErrs) && len(valErrs) > 0 {
+			apperrors.Abort(c, http.StatusBadRequest, "invalid_request", formatFieldError(valErrs[0]))
+			return
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			// Structured codes — never leak raw SQLSTATE text or constraint names.
+			switch pgErr.Code {
+			case "23505":
+				apperrors.Abort(c, http.StatusConflict, "conflict", "resource already exists")
+			case "23503":
+				apperrors.Abort(c, http.StatusConflict, "conflict", "referenced resource does not exist")
+			case "22001", "54000":
+				apperrors.Abort(c, http.StatusBadRequest, "invalid_request", "value too large")
+			case "22021":
+				apperrors.Abort(c, http.StatusBadRequest, "invalid_request", "input is not valid UTF-8")
+			default:
+				apperrors.Abort(c, http.StatusInternalServerError, "request_failed", "database error")
+			}
+			return
+		}
 		status := http.StatusInternalServerError
 		message := strings.ToLower(err.Error())
 		if strings.Contains(message, "insufficient") || strings.Contains(message, "access denied") {

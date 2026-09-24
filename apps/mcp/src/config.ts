@@ -49,6 +49,8 @@ async function mintSessionToken(cfg: McpConfig): Promise<string> {
 
 export function configureClient(cfg: McpConfig): void {
   OpenAPI.BASE = `${cfg.baseUrl}/api/v1`;
+  // encodeURI leaves ?#& intact in path params — smuggles query segments.
+  OpenAPI.ENCODE_PATH = encodeURIComponent;
   if (cfg.auth?.type === "apiKey") {
     OpenAPI.HEADERS = { "X-API-Key": cfg.auth.key };
     return;

@@ -22,7 +22,16 @@ import {
 import { configureClient, loadConfig, type McpConfig } from "./config.js";
 
 const cfg = loadConfig();
-configureClient(cfg);
+try {
+  configureClient(cfg);
+} catch (e) {
+  // Missing credentials must not kill the server — initialize/tools/list
+  // still work, and every call surfaces the actionable error through the
+  // normal tool error path instead of an uncaught startup exception.
+  OpenAPI.TOKEN = async () => {
+    throw e;
+  };
+}
 
 const TEXT_TYPES = /^(text\/|application\/(json|xml|yaml|javascript|x-ndjson))/;
 
@@ -234,7 +243,13 @@ server.registerTool(
       const bucketId = await bucketIdFor(projectId(p), bucket);
       let blob: Blob;
       if (contentBase64 !== undefined) {
-        blob = new Blob([Buffer.from(contentBase64, "base64")], {
+        // Buffer.from(..., "base64") silently drops invalid chars — strict-
+        // validate so corrupt input can't silently store garbage bytes.
+        const clean = contentBase64.replace(/\s/g, "");
+        if (!/^[A-Za-z0-9+/]*={0,2}$/.test(clean) || clean.length % 4 !== 0) {
+          throw new Error("contentBase64 is not valid base64");
+        }
+        blob = new Blob([Buffer.from(clean, "base64")], {
           type: contentType ?? "application/octet-stream",
         });
       } else if (content !== undefined) {
@@ -939,20 +954,65 @@ server.registerTool(
   },
 );
 
-// Commands that would move a secret into the response are denied outright —
-// the CLI is the broker; the model sees results, not credentials.
-const EXEC_DENY_FIRST = new Set(["vault", "secrets", "inject", "agent", "login", "logout", "use"]);
-const EXEC_DENY_PAIR = new Set(["keys:create"]);
+// vault_exec allow-list — read/non-destructive commands an agent may run
+// under an injected secret. Deny-lists lose (a colon-form `secrets:get`
+// already bypassed a pair-match once); only these verbs execute.
+// Commands touching host files (upload/download --out, secrets import) and
+// anything that moves a secret into output are intentionally absent.
+const EXEC_ALLOW = new Set([
+  "whoami",
+  "context",
+  "orgs:list",
+  "projects:list",
+  "buckets:list",
+  "objects:list",
+  "documents:list",
+  "jobs:list",
+  "jobs:runs",
+  "audit:list",
+  "keys:list",
+  "events:send",
+]);
+
+// Flags that could redirect output into host files — none of the allowed
+// commands need them, so reject the whole set defensively.
+const EXEC_ARG_DENY = /^--?(out|file|path|dir|env-file|output|write)\b/;
+
+// Env names that must never carry an injected secret — preload/runtime
+// hooks and interpreter variables turn an env injection into code exec
+// (NODE_OPTIONS, LD_*, BASH_ENV, PYTHONPATH, …). PRIMORA_* stays allowed:
+// the injected VALUE comes from the vault, and those names are its purpose.
+const ENV_NAME_DENY =
+  /^(NODE_|LD_|DYLD_|BASH|ENV$|IFS$|PATH$|HOME$|SHELL$|CDPATH$|SHELLOPTS$|BASHOPTS$|PYTHON|PERL|RUBY|GIT_|SSL_CERT|XDG_)/;
+
+function execAllowed(raw: string[]): { args: string[]; verb: string } {
+  // Normalize colon-form: ["objects:list","b"] ≡ ["objects","list","b"].
+  const args = [...raw];
+  if (args[0].includes(":") && !args[0].startsWith("-")) {
+    args.splice(0, 1, ...args[0].split(":"));
+  }
+  const verb = args.length > 1 && !args[1].startsWith("-") ? `${args[0]}:${args[1]}` : args[0];
+  if (!EXEC_ALLOW.has(verb)) {
+    throw new Error(`denied: "${verb}" is not on the vault_exec allow-list (read-only commands only)`);
+  }
+  for (const a of args) {
+    if (a.includes("\0")) throw new Error("denied: NUL byte in argument");
+    if (a.includes("..") || EXEC_ARG_DENY.test(a)) {
+      throw new Error(`denied: argument "${a}" could redirect to host files`);
+    }
+  }
+  return { args, verb };
+}
 
 server.registerTool(
   "primora_vault_exec",
   {
     description:
-      "Run a primora CLI command with a vault secret injected into its environment (default secret: PRIMORA_API_KEY). The secret never appears in arguments or the response — only the command output is returned.",
+      "Run a read-only primora CLI command with a vault secret injected into its environment (default secret: PRIMORA_API_KEY). Allow-listed commands only; the secret never appears in arguments or the response.",
     inputSchema: {
       command: z
         .array(z.string())
-        .describe('primora arguments, e.g. ["objects","list","mybucket"] — vault/secrets/inject/agent/login/logout/use and keys:create are denied'),
+        .describe('primora arguments, e.g. ["objects","list","mybucket"] — allow-listed read commands only'),
       secret: z
         .string()
         .optional()
@@ -962,17 +1022,16 @@ server.registerTool(
   async ({ command, secret }) => {
     try {
       if (!command.length) throw new Error("empty command");
-      const first = command[0];
-      const pair = `${first}:${command[1] ?? ""}`;
-      if (EXEC_DENY_FIRST.has(first) || EXEC_DENY_PAIR.has(pair) || EXEC_DENY_PAIR.has(first)) {
-        throw new Error(`denied: "${first}" would expose credentials or config`);
-      }
+      const { args } = execAllowed(command);
       const secretName = secret ?? "PRIMORA_API_KEY";
+      if (!/^[A-Z_][A-Z0-9_]{0,63}$/.test(secretName) || ENV_NAME_DENY.test(secretName)) {
+        throw new Error(`denied: "${secretName}" is not a safe env name to inject`);
+      }
       const got = runCli(["secrets", "get", secretName]);
       if (got.code !== 0) {
         throw new Error(got.stderr.trim() || `vault locked or "${secretName}" missing`);
       }
-      const r = runCli(command, { [secretName]: got.stdout.trimEnd() });
+      const r = runCli(args, { [secretName]: got.stdout.trimEnd() });
       return ok({ exitCode: r.code, stdout: r.stdout, stderr: r.stderr });
     } catch (e) {
       return fail(e);

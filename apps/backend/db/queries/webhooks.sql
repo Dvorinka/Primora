@@ -11,7 +11,10 @@ WHERE id = $1;
 SELECT * FROM core.webhooks
 WHERE project_id = $1
   AND enabled
-  AND (cardinality(events) = 0 OR $2::text = ANY(events));
+  AND (cardinality(events) = 0 OR EXISTS (
+    SELECT 1 FROM unnest(events) AS e
+    WHERE e = '*' OR $2::text LIKE REPLACE(e, '*', '%')
+  ));
 
 -- name: CreateWebhook :one
 INSERT INTO core.webhooks (

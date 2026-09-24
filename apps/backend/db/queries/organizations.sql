@@ -147,3 +147,7 @@ WHERE p.organization_id = $1;
 DELETE FROM core.organizations
 WHERE id = $1
 RETURNING *;
+
+-- name: GetOrganizationByID :one
+SELECT * FROM core.organizations
+WHERE id = $1;

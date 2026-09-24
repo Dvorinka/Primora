@@ -405,6 +405,51 @@ func (s *PlatformService) PublishProjectEvent(ctx context.Context, actor *models
 	return nil
 }
 
+// ActorContext describes the caller's own scope — the self-discovery
+// endpoint for API keys, which cannot call /me. User actors get just the
+// type marker; their full view is PlatformSummary.
+type ActorContext struct {
+	Actor        string          `json:"actor"`
+	Scopes       []string        `json:"scopes,omitempty"`
+	KeyPrefix    string          `json:"key_prefix,omitempty"`
+	Organization *ContextOrgInfo `json:"organization,omitempty"`
+	Project      *ContextRef     `json:"project,omitempty"`
+}
+
+type ContextOrgInfo struct {
+	ContextRef
+	Role string `json:"role,omitempty"`
+}
+
+type ContextRef struct {
+	ID   uuid.UUID `json:"id"`
+	Slug string    `json:"slug"`
+	Name string    `json:"name"`
+}
+
+func (s *PlatformService) ActorContext(ctx context.Context, actor *models.Actor) (ActorContext, error) {
+	out := ActorContext{Actor: string(actor.Type)}
+	if actor.Type != models.ActorTypeAPIKey {
+		return out, nil
+	}
+	out.Scopes = actor.Scopes
+	out.KeyPrefix = actor.APIKeyPrefix
+	if actor.ProjectID == nil {
+		return out, nil
+	}
+	project, err := s.repo.Queries().GetProjectByID(ctx, *actor.ProjectID)
+	if err != nil {
+		return out, err
+	}
+	out.Project = &ContextRef{ID: project.ID, Slug: project.Slug, Name: project.Name}
+	org, err := s.repo.Queries().GetOrganizationByID(ctx, project.OrganizationID)
+	if err != nil {
+		return out, err
+	}
+	out.Organization = &ContextOrgInfo{ContextRef: ContextRef{ID: org.ID, Slug: org.Slug, Name: org.Name}}
+	return out, nil
+}
+
 func (s *PlatformService) Me(ctx context.Context, actor *models.Actor) (PlatformSummary, error) {
 	if actor.UserID == nil {
 		return PlatformSummary{}, errors.New("user actor required")
@@ -1479,6 +1524,20 @@ func (s *PlatformService) GetObject(ctx context.Context, actor *models.Actor, bu
 	return object, file, nil
 }
 
+// ErrPresignUnsupported — the configured storage driver can't mint signed
+// URLs (only the S3 driver can). Handlers map it to 400, not 500.
+var ErrPresignUnsupported = errors.New("presigned URLs require BACKEND_STORAGE_DRIVER=s3")
+
+// InputError marks a service-layer failure caused by caller input — the
+// HTTP layer maps it to 400 instead of 500.
+type InputError struct{ msg string }
+
+func (e *InputError) Error() string { return e.msg }
+
+func inputErrorf(format string, args ...any) error {
+	return &InputError{msg: fmt.Sprintf(format, args...)}
+}
+
 // PresignObject mints a short-lived direct-to-storage URL for a single
 // object. Requires the s3 storage driver — the local store has no external
 // URL surface to sign against.
@@ -1507,7 +1566,7 @@ func (s *PlatformService) PresignObject(ctx context.Context, actor *models.Actor
 	}
 	p, ok := s.store.(storage.Presigner)
 	if !ok {
-		return nil, fmt.Errorf("presigned URLs require BACKEND_STORAGE_DRIVER=s3")
+		return nil, ErrPresignUnsupported
 	}
 	ttl := time.Duration(ttlSeconds) * time.Second
 	return p.Presign(ctx, bucketID.String(), objectKey, method, ttl)

@@ -4,7 +4,7 @@ import { cmdLogin, cmdLogout, cmdWhoami } from "./commands/auth.js";
 import { cmdAuditList } from "./commands/audit.js";
 import { cmdDocumentsList } from "./commands/documents.js";
 import { cmdEventsSend } from "./commands/events.js";
-import { cmdBucketsCreate, cmdBucketsList } from "./commands/buckets.js";
+import { cmdBucketsCreate, cmdBucketsList, cmdBucketsRemove } from "./commands/buckets.js";
 import { cmdContext, cmdUse } from "./commands/context.js";
 import { cmdInject } from "./commands/inject.js";
 import { cmdJobsCreate, cmdJobsList, cmdJobsRemove, cmdJobsRun, cmdJobsRuns } from "./commands/jobs.js";
@@ -16,8 +16,8 @@ import {
   cmdObjectsPresign,
   cmdObjectsUpload,
 } from "./commands/objects.js";
-import { cmdOrgsCreate, cmdOrgsList } from "./commands/orgs.js";
-import { cmdProjectsCreate, cmdProjectsList } from "./commands/projects.js";
+import { cmdOrgsCreate, cmdOrgsList, cmdOrgsRemove } from "./commands/orgs.js";
+import { cmdProjectsCreate, cmdProjectsList, cmdProjectsRemove } from "./commands/projects.js";
 import {
   cmdSecretsGet,
   cmdSecretsImport,
@@ -52,6 +52,7 @@ cli
   .option("--email <email>", "Account email")
   .option("--password <password>", "Account password")
   .option("--api-key <key>", "Store a pk_live_/pk_test_ API key instead of a session")
+  .option("--json", "Machine-readable output")
   .action(cmdLogin);
 
 cli.command("logout", "Remove stored credentials").action(cmdLogout);
@@ -70,6 +71,10 @@ cli
   .command("orgs:create <name>", "Create an organization")
   .option("--slug <slug>", "URL-safe slug (derived from name if omitted)")
   .action(cmdOrgsCreate);
+cli
+  .command("orgs:rm <org>", "Delete an organization (id, slug, or name)")
+  .option("--yes", "Skip the confirmation prompt")
+  .action(cmdOrgsRemove);
 
 cli
   .command("projects:list", "List projects in the current org")
@@ -82,6 +87,10 @@ cli
   .option("--slug <slug>", "URL-safe slug (derived from name if omitted)")
   .option("--description <text>", "Description")
   .action(cmdProjectsCreate);
+cli
+  .command("projects:rm <project>", "Delete a project (id, slug, or name)")
+  .option("--yes", "Skip the confirmation prompt")
+  .action(cmdProjectsRemove);
 
 cli
   .command("buckets:list", "List buckets in the current project")
@@ -94,6 +103,11 @@ cli
   .option("--slug <slug>", "URL-safe slug (derived from name if omitted)")
   .option("--public", "Public visibility (default private)")
   .action(cmdBucketsCreate);
+cli
+  .command("buckets:rm <bucket>", "Delete a bucket and its objects (id or slug)")
+  .option("--project <id>", "Project override")
+  .option("--yes", "Skip the confirmation prompt")
+  .action(cmdBucketsRemove);
 
 cli
   .command("objects:list <bucket>", "List objects in a bucket (id or slug)")
@@ -331,9 +345,57 @@ if (GROUPS.has(argv[0]) && argv[1] && !argv[1].startsWith("-")) {
   argv[0] = "secrets:list";
 }
 
+// mri coerces numeric-looking option values ("007" → 7, "" → 0), which
+// corrupts secrets, keys, and passwords. Re-extract raw strings for every
+// non-boolean flag and patch parsed options before the action runs.
+function restoreRawOptionStrings(): void {
+  const cmd = (cli as unknown as { matchedCommand?: { options: { isBoolean: boolean; name: string; names: string[] }[] } })
+    .matchedCommand;
+  if (!cmd) return;
+  const state = cli as unknown as { options: Record<string, unknown>; globalCommand: { options: { isBoolean: boolean; name: string; names: string[] }[] } };
+  const specs = [...state.globalCommand.options, ...cmd.options].filter((o) => !o.isBoolean);
+  const raw = process.argv.slice(2);
+  const kebab = (s: string) => s.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase());
+  for (const spec of specs) {
+    if (typeof state.options[spec.name] !== "number") continue;
+    let value: string | undefined;
+    for (let i = 0; i < raw.length; i++) {
+      for (const n of spec.names) {
+        const flags = n.length === 1 ? [`-${n}`] : [`--${n}`, `--${kebab(n)}`];
+        for (const f of flags) {
+          if (raw[i] === f) value = raw[i + 1];
+          else if (raw[i].startsWith(f + "=")) value = raw[i].slice(f.length + 1);
+        }
+      }
+    }
+    if (value !== undefined) state.options[spec.name] = value;
+  }
+}
+
+// Unknown command or a bare group — cac only fires this on non-empty args.
+cli.addEventListener("command:*", () => {
+  const state = cli as unknown as { args: string[]; commands: { name: string }[] };
+  const arg = String(state.args[0] ?? "");
+  const group = arg.split(":")[0];
+  const verbs = GROUPS.has(group)
+    ? state.commands.map((c) => c.name).filter((n) => n.startsWith(group + ":")).map((n) => n.slice(group.length + 1))
+    : [];
+  process.stderr.write(`error: unknown command "${arg.replace(":", " ")}"\n`);
+  if (verbs.length) process.stderr.write(`  ${group} verbs: ${verbs.join(", ")}\n`);
+  process.stderr.write("  run `primora --help` for usage\n");
+  process.exit(1);
+});
+
 async function main() {
   try {
     cli.parse([process.argv[0], process.argv[1], ...argv], { run: false });
+    restoreRawOptionStrings();
+    const state = cli as unknown as { matchedCommand?: unknown; options: Record<string, unknown> };
+    if (!state.matchedCommand && !state.options.help && !state.options.version) {
+      cli.outputHelp();
+      if (argv.length) process.exit(1);
+      return;
+    }
     await cli.runMatchedCommand();
   } catch (error) {
     fail(error);

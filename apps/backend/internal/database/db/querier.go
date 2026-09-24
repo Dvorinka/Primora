@@ -76,6 +76,7 @@ type Querier interface {
 	GetIntegrationByID(ctx context.Context, id uuid.UUID) (CoreIntegration, error)
 	GetInvitationByIDForOrganization(ctx context.Context, arg GetInvitationByIDForOrganizationParams) (CoreProjectInvitation, error)
 	GetInvitationByTokenHash(ctx context.Context, tokenHash string) (CoreProjectInvitation, error)
+	GetOrganizationByID(ctx context.Context, id uuid.UUID) (CoreOrganization, error)
 	GetOrganizationMembership(ctx context.Context, arg GetOrganizationMembershipParams) (GetOrganizationMembershipRow, error)
 	GetProjectByID(ctx context.Context, id uuid.UUID) (CoreProject, error)
 	GetProjectMembership(ctx context.Context, arg GetProjectMembershipParams) (GetProjectMembershipRow, error)

@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ActorContext } from '../models/ActorContext';
 import type { BootstrapRequest } from '../models/BootstrapRequest';
 import type { BootstrapResponse } from '../models/BootstrapResponse';
 import type { MeResponse } from '../models/MeResponse';
@@ -17,6 +18,20 @@ export class PlatformService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/me',
+            errors: {
+                401: `Error response`,
+            },
+        });
+    }
+    /**
+     * Caller scope — self-discovery for API keys, which cannot call /me
+     * @returns ActorContext Actor type, scopes, and resolved org/project for API keys
+     * @throws ApiError
+     */
+    public static getActorContext(): CancelablePromise<ActorContext> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/context',
             errors: {
                 401: `Error response`,
             },

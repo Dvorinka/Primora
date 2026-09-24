@@ -23,6 +23,22 @@ export async function cmdUse(options: UseOptions): Promise<void> {
   requireAuth(cfg);
   configureClient(cfg);
 
+  // API keys are bound to one org+project — resolve the scope directly.
+  if (cfg.auth?.type === "apiKey") {
+    const ctx = await PlatformService.getActorContext();
+    if (options.org && ctx.organization && options.org !== ctx.organization.id && options.org !== ctx.organization.slug) {
+      throw new Error(`API key is scoped to ${ctx.organization.slug} — cannot switch to "${options.org}".`);
+    }
+    if (options.project && ctx.project && options.project !== ctx.project.id && options.project !== ctx.project.slug) {
+      throw new Error(`API key is scoped to ${ctx.project.slug} — cannot switch to "${options.project}".`);
+    }
+    if (ctx.organization) cfg.organizationId = ctx.organization.id;
+    if (ctx.project) cfg.projectId = ctx.project.id;
+    saveConfig(cfg);
+    success(`Context → ${ctx.organization?.slug ?? "—"} / ${ctx.project?.slug ?? "—"}`);
+    return;
+  }
+
   const me = await PlatformService.getMe();
   const orgs = me.organizations;
   if (orgs.length === 0) {
@@ -76,6 +92,19 @@ export async function cmdContext(options: { json?: boolean }): Promise<void> {
   const cfg = loadConfig();
   requireAuth(cfg);
   configureClient(cfg);
+
+  if (cfg.auth?.type === "apiKey") {
+    const ctx = await PlatformService.getActorContext();
+    if (isJson(options)) {
+      printJson({ baseUrl: cfg.baseUrl, auth: "apiKey", ...ctx });
+      return;
+    }
+    dim(`url      ${cfg.baseUrl}`);
+    dim(`auth     api_key (${ctx.key_prefix}…, scopes: ${ctx.scopes?.join(", ") || "none"})`);
+    process.stdout.write(`org      ${ctx.organization ? `${ctx.organization.name} (${ctx.organization.slug})` : "—"}\n`);
+    process.stdout.write(`project  ${ctx.project ? `${ctx.project.name} (${ctx.project.slug})` : "—"}\n`);
+    return;
+  }
 
   const me = await PlatformService.getMe();
   const org = me.organizations.find((o) => o.id === cfg.organizationId);

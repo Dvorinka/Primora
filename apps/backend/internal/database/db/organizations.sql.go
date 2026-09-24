@@ -241,6 +241,23 @@ func (q *Queries) GetInvitationByTokenHash(ctx context.Context, tokenHash string
 	return i, err
 }
 
+const getOrganizationByID = `-- name: GetOrganizationByID :one
+SELECT id, slug, name, created_at FROM core.organizations
+WHERE id = $1
+`
+
+func (q *Queries) GetOrganizationByID(ctx context.Context, id uuid.UUID) (CoreOrganization, error) {
+	row := q.db.QueryRow(ctx, getOrganizationByID, id)
+	var i CoreOrganization
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.Name,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getOrganizationMembership = `-- name: GetOrganizationMembership :one
 SELECT
   om.id, om.organization_id, om.user_id, om.role, om.created_at,

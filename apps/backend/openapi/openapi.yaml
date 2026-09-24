@@ -68,6 +68,22 @@ paths:
                 $ref: "#/components/schemas/MeResponse"
         "401":
           $ref: "#/components/responses/ErrorResponse"
+  /context:
+    get:
+      tags: [Platform]
+      operationId: getActorContext
+      summary: Caller scope — self-discovery for API keys, which cannot call /me
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Actor type, scopes, and resolved org/project for API keys
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActorContext"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
   /instance/public:
     get:
       tags: [Instance]
@@ -2776,6 +2792,34 @@ components:
           items:
             $ref: "#/components/schemas/OrganizationSummary"
       required: [user, organizations]
+    ActorContext:
+      type: object
+      properties:
+        actor:
+          type: string
+          enum: [user, api_key]
+        scopes:
+          type: array
+          items:
+            type: string
+        key_prefix:
+          type: string
+        organization:
+          $ref: "#/components/schemas/ContextRef"
+        project:
+          $ref: "#/components/schemas/ContextRef"
+      required: [actor]
+    ContextRef:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+      required: [id, slug, name]
     OrganizationMembership:
       type: object
       properties:

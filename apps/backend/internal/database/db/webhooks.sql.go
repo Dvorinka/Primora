@@ -291,7 +291,10 @@ const listWebhooksForEvent = `-- name: ListWebhooksForEvent :many
 SELECT id, project_id, url, secret, events, enabled, created_by_user_id, created_at, updated_at FROM core.webhooks
 WHERE project_id = $1
   AND enabled
-  AND (cardinality(events) = 0 OR $2::text = ANY(events))
+  AND (cardinality(events) = 0 OR EXISTS (
+    SELECT 1 FROM unnest(events) AS e
+    WHERE e = '*' OR $2::text LIKE REPLACE(e, '*', '%')
+  ))
 `
 
 type ListWebhooksForEventParams struct {
