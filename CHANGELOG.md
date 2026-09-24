@@ -51,6 +51,7 @@ All notable changes to Primora. Format follows [Keep a Changelog](https://keepac
 - **Structured error hygiene** — `pgconn.PgError` codes map to clean statuses (23505 → 409 "resource already exists", 23503 → 409, 22001/54000 → 400 "value too large", 22021 → 400) instead of leaking SQLSTATE/constraint names; validator failures report `field is required`/`field failed <tag> validation`; a new `services.InputError` type maps service-layer input failures to 400 (webhook URL/event-type errors were 500s). Presign on the local driver returns `presign_unsupported` 400.
 - **`fetch failed` polish** — connection failures report the cause code and suggest `primora context` instead of bare undici errors.
 - **`login --json`** — the flag now emits JSON on both the session and API-key paths.
+- **Dashboard fonts vendored** — Geist/Geist Mono now ship via `@fontsource` inside the bundle instead of a Google Fonts `<link>` the nginx CSP blocked (`style-src 'self'`). Removes the runtime Google dependency, works airgapped, and eliminates the console CSP violation.
 
 ## [0.7.1] - 2026-09-23
 
