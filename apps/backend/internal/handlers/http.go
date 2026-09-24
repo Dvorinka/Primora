@@ -142,6 +142,7 @@ func (h *HTTPHandler) Register(router *gin.Engine) {
 	api.GET("/buckets/:bucketID/objects", h.listObjects)
 	api.POST("/buckets/:bucketID/objects", h.uploadObject)
 	api.POST("/buckets/:bucketID/object-copies", h.copyObject)
+	api.POST("/buckets/:bucketID/object-presigns", h.presignObject)
 	api.GET("/buckets/:bucketID/objects/*objectKey", h.downloadObject)
 	api.PATCH("/buckets/:bucketID/objects/*objectKey", h.updateObject)
 	api.DELETE("/buckets/:bucketID/objects/*objectKey", h.deleteObject)
@@ -889,6 +890,39 @@ func (h *HTTPHandler) updateObject(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+type presignObjectRequest struct {
+	Key        string `json:"key" validate:"required"`
+	Op         string `json:"op" validate:"omitempty,oneof=download upload"`
+	TTLSeconds int    `json:"ttl_seconds" validate:"omitempty,min=60,max=3600"`
+}
+
+// presignObject returns a short-lived URL clients call against storage
+// directly — keeps large transfers off the backend. S3 driver only.
+func (h *HTTPHandler) presignObject(c *gin.Context) {
+	actor, ok := middleware.RequireActor(c)
+	if !ok {
+		return
+	}
+	bucketID, ok := parseUUIDParam(c, "bucketID")
+	if !ok {
+		return
+	}
+	var body presignObjectRequest
+	if !h.bindAndValidate(c, &body) {
+		return
+	}
+	out, err := h.Platform.PresignObject(c.Request.Context(), actor, bucketID, strings.TrimSpace(body.Key), body.Op, body.TTLSeconds)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			apperrors.Abort(c, http.StatusNotFound, "not_found", "bucket or object not found")
+			return
+		}
+		h.handleError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, out)
 }
 
 func (h *HTTPHandler) deleteObject(c *gin.Context) {

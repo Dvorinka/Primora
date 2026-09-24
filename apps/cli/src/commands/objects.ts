@@ -2,7 +2,7 @@ import { statSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { basename } from "node:path";
 
-import { StorageService } from "@primora/api-client";
+import { PresignObjectRequest, StorageService } from "@primora/api-client";
 
 import { loadConfig } from "../config.js";
 import {
@@ -132,4 +132,32 @@ export async function cmdObjectsRemove(
   const bucketId = await bucketIdFor(cfg, bucketRef, options.project);
   await StorageService.deleteBucketObject({ bucketId, objectKey });
   success(`Deleted ${objectKey}`);
+}
+
+export async function cmdObjectsPresign(
+  bucketRef: string,
+  objectKey: string,
+  options: { project?: string; upload?: boolean; ttl?: string; json?: boolean },
+): Promise<void> {
+  const cfg = loadConfig();
+  requireAuth(cfg);
+  configureClient(cfg);
+
+  const bucketId = await bucketIdFor(cfg, bucketRef, options.project);
+  const presigned = await StorageService.presignBucketObject({
+    bucketId,
+    requestBody: {
+      key: objectKey,
+      op: options.upload
+        ? PresignObjectRequest.op.UPLOAD
+        : PresignObjectRequest.op.DOWNLOAD,
+      ttl_seconds: options.ttl ? Number(options.ttl) : undefined,
+    },
+  });
+  if (isJson(options)) {
+    printJson(presigned);
+    return;
+  }
+  console.log(presigned.url);
+  console.error(`# ${presigned.method} — expires ${presigned.expires_at}`);
 }

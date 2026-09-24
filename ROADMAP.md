@@ -365,10 +365,12 @@ Ordered loosely by leverage. None committed; each gets scoped when picked.
   Runs record trigger source (`manual`/`schedule`/`hook`/`event`).
   Remaining candidate: isolated runtimes (sidecar/Firecracker) for
   untrusted code — functions still execute with backend host privileges.
-- **Phase 10 — Storage backends** — ✅ S3-compatible object storage shipped:
-  `BACKEND_STORAGE_DRIVER=s3` + `S3_*` env vars, stdlib SigV4, verified
-  against a real S3 server. Presigned-URL uploads for large files remain a
-  candidate.
+- **Phase 10 — Storage backends** — ✅ shipped: `BACKEND_STORAGE_DRIVER=s3`
+  + `S3_*` env vars, stdlib SigV4, verified against a real S3 server.
+  Presigned upload/download URLs shipped: `POST
+  /buckets/:id/object-presigns` mints SigV4 query-signed GET/PUT URLs
+  (`S3_PUBLIC_ENDPOINT` rewrites the client-facing host); local driver
+  returns a clear error — a presigned URL needs a real object API behind it.
 - **HA mode** — ✅ shipped: PostgreSQL advisory-lock leadership for the
   scheduler and alert evaluator; failover verified with two replicas.
 - **Email surface** — ✅ shipped: templated sends + `core.email_log` +

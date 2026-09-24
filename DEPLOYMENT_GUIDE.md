@@ -46,6 +46,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 | `S3_ENDPOINT` / `S3_REGION` / `S3_BUCKET` | S3 API endpoint (empty endpoint → AWS `s3.<region>.amazonaws.com`), region, bucket | with `s3` |
 | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | S3 credentials | with `s3` |
 | `S3_PREFIX` / `S3_PATH_STYLE` | optional key prefix; path-style URLs (default `true`, needed by MinIO/Garage — set `false` for AWS virtual-hosted) | no |
+| `S3_PUBLIC_ENDPOINT` | client-facing S3 endpoint used for presigned URLs when `S3_ENDPOINT` is internal-only (e.g. `http://minio:9000`); signatures bind the public host | no |
 | `FUNCTIONS_RUNTIME` / `FUNCTIONS_TIMEOUT_SECONDS` / `FUNCTIONS_MAX_OUTPUT_BYTES` | Functions: runtime binary (`auto` resolves `bun`/`deno` from the backend's PATH — the backend image must ship one, or set this to its path), per-run timeout (default 30 s), captured-output cap (default 64 KiB) | no |
 | `AUTH_ADMIN_EMAILS` | comma-separated emails promoted to auth admin on boot | no |
 | `USER_RATE_LIMIT_PER_MINUTE` / `API_KEY_RATE_LIMIT_PER_MINUTE` | per-identity API rate limits (defaults 240 / 600) | no |

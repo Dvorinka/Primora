@@ -89,6 +89,7 @@ func Bootstrap(ctx context.Context) (*App, error) {
 			Bucket:          cfg.S3Bucket,
 			AccessKeyID:     cfg.S3AccessKeyID,
 			SecretAccessKey: cfg.S3SecretAccessKey,
+			PublicEndpoint:  cfg.S3PublicEndpoint,
 			Prefix:          cfg.S3Prefix,
 			PathStyle:       cfg.S3PathStyle,
 		})

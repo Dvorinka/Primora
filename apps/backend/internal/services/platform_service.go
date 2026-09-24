@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -1416,6 +1417,48 @@ func (s *PlatformService) GetObject(ctx context.Context, actor *models.Actor, bu
 		return db.CoreBucketObject{}, nil, err
 	}
 	return object, file, nil
+}
+
+// PresignObject mints a short-lived direct-to-storage URL for a single
+// object. Requires the s3 storage driver — the local store has no external
+// URL surface to sign against.
+func (s *PlatformService) PresignObject(ctx context.Context, actor *models.Actor, bucketID uuid.UUID, objectKey, op string, ttlSeconds int) (*storage.PresignedURL, error) {
+	bucket, err := s.repo.Queries().GetBucketByID(ctx, bucketID)
+	if err != nil {
+		return nil, err
+	}
+	method := ""
+	switch op {
+	case "download", "":
+		method = http.MethodGet
+		if err := s.requireBucketRead(ctx, actor, bucket); err != nil {
+			return nil, err
+		}
+		if !objectExists(ctx, s, bucketID, objectKey) {
+			return nil, pgx.ErrNoRows
+		}
+	case "upload":
+		method = http.MethodPut
+		if err := s.requireBucketWrite(ctx, actor, bucket); err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("invalid op %q — download or upload", op)
+	}
+	p, ok := s.store.(storage.Presigner)
+	if !ok {
+		return nil, fmt.Errorf("presigned URLs require BACKEND_STORAGE_DRIVER=s3")
+	}
+	ttl := time.Duration(ttlSeconds) * time.Second
+	return p.Presign(ctx, bucketID.String(), objectKey, method, ttl)
+}
+
+func objectExists(ctx context.Context, s *PlatformService, bucketID uuid.UUID, key string) bool {
+	_, err := s.repo.Queries().GetBucketObjectByKey(ctx, db.GetBucketObjectByKeyParams{
+		BucketID:  bucketID,
+		ObjectKey: key,
+	})
+	return err == nil
 }
 
 func (s *PlatformService) UpdateObject(ctx context.Context, actor *models.Actor, bucketID uuid.UUID, objectKey string, input UpdateObjectInput, requestID string) (db.CoreBucketObject, error) {

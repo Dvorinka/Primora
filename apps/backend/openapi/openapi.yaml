@@ -677,6 +677,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BucketObject"
+  /buckets/{bucketID}/object-presigns:
+    post:
+      tags: [Storage]
+      operationId: presignBucketObject
+      description: >-
+        Mint a short-lived URL the client calls against object storage
+        directly — keeps large transfers off the backend. Requires
+        BACKEND_STORAGE_DRIVER=s3; the URL's host comes from
+        S3_PUBLIC_ENDPOINT (or S3_ENDPOINT when unset). Signatures bind the
+        host — a presigned URL is valid only at the endpoint it was minted
+        for.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/BucketID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PresignObjectRequest"
+      responses:
+        "200":
+          description: Presigned URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PresignedURL"
+        "404":
+          description: Bucket or object not found (download)
   /buckets/{bucketID}:
     patch:
       tags: [Storage]
@@ -3130,6 +3161,36 @@ components:
           format: uuid
           nullable: true
       required: [objectKey, newObjectKey]
+    PresignObjectRequest:
+      type: object
+      properties:
+        key:
+          type: string
+          description: Object key inside the bucket.
+        op:
+          type: string
+          enum: [download, upload]
+          default: download
+          description: download → GET URL (object must exist); upload → PUT URL (creates/overwrites).
+        ttl_seconds:
+          type: integer
+          minimum: 60
+          maximum: 3600
+          default: 900
+      required: [key]
+    PresignedURL:
+      type: object
+      properties:
+        url:
+          type: string
+          description: Fully-signed URL — call it with the returned method, no auth header needed.
+        method:
+          type: string
+          enum: [GET, PUT]
+        expires_at:
+          type: string
+          format: date-time
+      required: [url, method, expires_at]
     PaginationMetadata:
       type: object
       properties:

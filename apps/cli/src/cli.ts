@@ -12,6 +12,7 @@ import {
   cmdObjectsDownload,
   cmdObjectsList,
   cmdObjectsRemove,
+  cmdObjectsPresign,
   cmdObjectsUpload,
 } from "./commands/objects.js";
 import { cmdOrgsCreate, cmdOrgsList } from "./commands/orgs.js";
@@ -114,6 +115,12 @@ cli
   .command("objects:rm <bucket> <key>", "Delete an object")
   .option("--project <id>", "Project override")
   .action(cmdObjectsRemove);
+cli
+  .command("objects:presign <bucket> <key>", "Mint a presigned URL (s3 driver)")
+  .option("--project <id>", "Project override")
+  .option("--upload", "PUT URL for direct upload instead of GET download")
+  .option("--ttl <seconds>", "Lifetime 60-3600 (default 900)")
+  .action(cmdObjectsPresign);
 
 cli
   .command("keys:list", "List API keys for the current project")

@@ -28,7 +28,11 @@ type S3Config struct {
 	SecretAccessKey string
 	Prefix          string // optional key prefix, e.g. "primora/"
 	PathStyle       bool   // bucket/key path style (MinIO, Garage) vs virtual-hosted
-	HTTPClient      *http.Client
+	// PublicEndpoint rewrites presigned-URL hosts for clients that can't
+	// reach Endpoint (e.g. minio:9000 inside compose). Signature binds the
+	// public host — the URL is only valid there.
+	PublicEndpoint string
+	HTTPClient     *http.Client
 }
 
 // S3Store implements Store against an S3-compatible API using stdlib-only
@@ -269,6 +273,88 @@ func (s *S3Store) DeleteBucket(bucketID string) error {
 		}
 		continuation = next
 	}
+}
+
+// Presign mints a SigV4 query-signed URL for a single GET/PUT on the
+// object — clients talk to S3 directly instead of proxying bytes through
+// the backend. TTL is capped at one hour.
+func (s *S3Store) Presign(ctx context.Context, bucketID, objectKey, method string, ttl time.Duration) (*PresignedURL, error) {
+	if method != http.MethodGet && method != http.MethodPut {
+		return nil, fmt.Errorf("s3 presign: unsupported method %q", method)
+	}
+	key, err := s.objectKey(bucketID, objectKey)
+	if err != nil {
+		return nil, err
+	}
+	if ttl <= 0 {
+		ttl = 15 * time.Minute
+	}
+	if ttl > time.Hour {
+		ttl = time.Hour
+	}
+
+	now := s.now().UTC()
+	amzDate := now.Format("20060102T150405Z")
+	dateStamp := now.Format("20060102")
+	scope := fmt.Sprintf("%s/%s/s3/aws4_request", dateStamp, s.cfg.Region)
+
+	// Build the unsigned URL — same path/vhost logic as signedRequest, but
+	// on the client-facing endpoint when one is configured.
+	var base *url.URL
+	endpoint := strings.TrimSuffix(s.cfg.PublicEndpoint, "/")
+	if endpoint == "" {
+		endpoint = strings.TrimSuffix(s.cfg.Endpoint, "/")
+	}
+	if s.cfg.PathStyle {
+		u, err := url.Parse(endpoint + "/" + s.cfg.Bucket + "/" + escapeKey(key))
+		if err != nil {
+			return nil, fmt.Errorf("s3 presign url: %w", err)
+		}
+		base = u
+	} else {
+		u, err := url.Parse(endpoint)
+		if err != nil {
+			return nil, fmt.Errorf("s3 presign url: %w", err)
+		}
+		u.Host = s.cfg.Bucket + "." + u.Host
+		u.Path = "/" + escapeKey(key)
+		base = u
+	}
+
+	q := base.Query()
+	q.Set("X-Amz-Algorithm", "AWS4-HMAC-SHA256")
+	q.Set("X-Amz-Credential", s.cfg.AccessKeyID+"/"+scope)
+	q.Set("X-Amz-Date", amzDate)
+	q.Set("X-Amz-Expires", fmt.Sprintf("%d", int64(ttl.Seconds())))
+	q.Set("X-Amz-SignedHeaders", "host")
+
+	canonicalURI := base.EscapedPath()
+	if canonicalURI == "" {
+		canonicalURI = "/"
+	}
+	canonicalRequest := strings.Join([]string{
+		method,
+		canonicalURI,
+		canonicalQuery(q),
+		"host:" + base.Host + "\n",
+		"host",
+		"UNSIGNED-PAYLOAD",
+	}, "\n")
+	stringToSign := strings.Join([]string{
+		"AWS4-HMAC-SHA256",
+		amzDate,
+		scope,
+		hexSHA256(canonicalRequest),
+	}, "\n")
+
+	kDate := hmacSHA256([]byte("AWS4"+s.cfg.SecretAccessKey), dateStamp)
+	kRegion := hmacSHA256(kDate, s.cfg.Region)
+	kService := hmacSHA256(kRegion, "s3")
+	kSigning := hmacSHA256(kService, "aws4_request")
+	q.Set("X-Amz-Signature", hex.EncodeToString(hmacSHA256(kSigning, stringToSign)))
+	base.RawQuery = q.Encode()
+
+	return &PresignedURL{URL: base.String(), Method: method, ExpiresAt: now.Add(ttl)}, nil
 }
 
 type listResult struct {

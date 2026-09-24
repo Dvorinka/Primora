@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -212,5 +213,39 @@ func TestCanonicalQueryRFC3986(t *testing.T) {
 	want := "continuation-token=abc%2Fdef%2Bghi%20jkl&list-type=2"
 	if got != want {
 		t.Fatalf("canonicalQuery = %q, want %q", got, want)
+	}
+}
+
+func TestS3StorePresign(t *testing.T) {
+	store, _ := newTestS3(t)
+	ctx := context.Background()
+
+	dl, err := store.Presign(ctx, "bucket-a", "docs/x.txt", http.MethodGet, 10*time.Minute)
+	if err != nil {
+		t.Fatalf("Presign: %v", err)
+	}
+	if dl.Method != http.MethodGet || dl.ExpiresAt.IsZero() {
+		t.Fatalf("bad presign: %+v", dl)
+	}
+	u, err := url.Parse(dl.URL)
+	if err != nil {
+		t.Fatalf("url parse: %v", err)
+	}
+	q := u.Query()
+	for _, k := range []string{"X-Amz-Algorithm", "X-Amz-Credential", "X-Amz-Date", "X-Amz-Expires", "X-Amz-SignedHeaders", "X-Amz-Signature"} {
+		if q.Get(k) == "" {
+			t.Fatalf("missing %s in %s", k, dl.URL)
+		}
+	}
+	if q.Get("X-Amz-Expires") != "600" || q.Get("X-Amz-SignedHeaders") != "host" {
+		t.Fatalf("bad query: %s", dl.URL)
+	}
+	if _, err := store.Presign(ctx, "b", "k", http.MethodDelete, 0); err == nil {
+		t.Fatal("expected method rejection")
+	}
+	// TTL cap.
+	capped, _ := store.Presign(ctx, "b", "k.txt", http.MethodPut, 48*time.Hour)
+	if cu, _ := url.Parse(capped.URL); cu.Query().Get("X-Amz-Expires") != "3600" {
+		t.Fatalf("ttl not capped: %s", capped.URL)
 	}
 }

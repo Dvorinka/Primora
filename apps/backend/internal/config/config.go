@@ -44,6 +44,7 @@ type Config struct {
 	S3Bucket         string
 	S3AccessKeyID    string
 	S3SecretAccessKey string
+	S3PublicEndpoint string // presigned-URL host when it differs from Endpoint
 	S3Prefix         string
 	S3PathStyle      bool
 
@@ -86,6 +87,7 @@ func Load() (Config, error) {
 		S3Bucket:              os.Getenv("S3_BUCKET"),
 		S3AccessKeyID:         os.Getenv("S3_ACCESS_KEY_ID"),
 		S3SecretAccessKey:     os.Getenv("S3_SECRET_ACCESS_KEY"),
+		S3PublicEndpoint:      os.Getenv("S3_PUBLIC_ENDPOINT"),
 		S3Prefix:              os.Getenv("S3_PREFIX"),
 		FunctionsRuntime:      getenv("FUNCTIONS_RUNTIME", "auto"),
 		FunctionsMaxBytes:     65536,

@@ -48,7 +48,7 @@ Supabase, with no hosted tier - your data stays on your hardware.
 
 - **Organizations & projects** - workspaces with scoped org and project roles.
 - **Auth** - email/password plus optional GitHub, Google, Discord, and Microsoft OAuth. JWTs verified by the API against JWKS.
-- **Storage** - S3-style buckets on local disk or any S3-compatible backend (AWS, MinIO, Garage, R2), public or private.
+- **Storage** - S3-style buckets on local disk or any S3-compatible backend (AWS, MinIO, Garage, R2), public or private. With `s3` the API mints presigned upload/download URLs so large objects skip the backend.
 - **Collections** - schema-flexible JSON documents in Postgres JSONB, with filter/order queries.
 - **Functions** - project-scoped JS/TS executed by bun/deno on the host, with per-run logs. Trigger them four ways: manual invoke, cron schedules (`function_id` on a job), inbound hooks (`mode: "function"`), or domain events (`event_pattern` like `document.*`).
 - **Vault** - AES-256-GCM project secrets plus an Argon2id/XChaCha20 local vault in the CLI and desktop app.
