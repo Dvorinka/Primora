@@ -34,6 +34,9 @@ export const $InboundHook = {
         job_id: {
             type: 'string',
         },
+        function_id: {
+            type: 'string',
+        },
         has_secret: {
             type: 'boolean',
             isRequired: true,

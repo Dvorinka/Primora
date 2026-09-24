@@ -70,3 +70,17 @@ func TestLimitedWriterCaps(t *testing.T) {
 		t.Fatalf("got %q", buf.String())
 	}
 }
+
+func TestTriggerFromJobRun(t *testing.T) {
+	for in, want := range map[string]string{
+		"schedule": "schedule",
+		"hook":     "hook",
+		"manual":   "manual",
+		"cli":      "schedule",
+		"":         "schedule",
+	} {
+		if got := triggerFromJobRun(in); got != want {
+			t.Fatalf("triggerFromJobRun(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

@@ -42,7 +42,9 @@ export function FunctionsPage(props: FunctionsPageProps) {
   const [error, setError] = createSignal("");
   const [busy, setBusy] = createSignal<string>();
   const [showCreate, setShowCreate] = createSignal(false);
-  const [createForm, setCreateForm] = createSignal({ name: "", runtime: "bun" });
+  const [createForm, setCreateForm] = createSignal({ name: "", runtime: "bun", event_pattern: "" });
+  const [eventPattern, setEventPattern] = createSignal("");
+  const [patternDirty, setPatternDirty] = createSignal(false);
 
   const refresh = async () => {
     if (!props.projectID) return;
@@ -71,6 +73,8 @@ export function FunctionsPage(props: FunctionsPageProps) {
   const select = async (fn: Function) => {
     setSelected(fn);
     setCodeDirty(false);
+    setEventPattern(fn.event_pattern ?? "");
+    setPatternDirty(false);
     setLastRun(undefined);
     if (props.demoMode) {
       setCode(STARTER_CODE);
@@ -94,10 +98,15 @@ export function FunctionsPage(props: FunctionsPageProps) {
     try {
       const fn = await FunctionsService.createFunction({
         projectId: props.projectID,
-        requestBody: { name: createForm().name, runtime: createForm().runtime as CreateFunctionRequest.runtime, code: STARTER_CODE },
+        requestBody: {
+          name: createForm().name,
+          runtime: createForm().runtime as CreateFunctionRequest.runtime,
+          code: STARTER_CODE,
+          event_pattern: createForm().event_pattern.trim() || undefined,
+        },
       });
       setShowCreate(false);
-      setCreateForm({ name: "", runtime: "bun" });
+      setCreateForm({ name: "", runtime: "bun", event_pattern: "" });
       setMessage(`Function "${fn.name}" created.`);
       await refresh();
       await select(fn);
@@ -113,8 +122,15 @@ export function FunctionsPage(props: FunctionsPageProps) {
     if (!fn || !props.projectID || props.demoMode) return;
     setBusy("save");
     try {
-      await FunctionsService.updateFunction({ projectId: props.projectID, functionId: fn.id, requestBody: { code: code() } });
+      await FunctionsService.updateFunction({
+        projectId: props.projectID,
+        functionId: fn.id,
+        requestBody: { code: code(), event_pattern: eventPattern().trim() },
+      });
       setCodeDirty(false);
+      setPatternDirty(false);
+      setSelected({ ...fn, event_pattern: eventPattern().trim() });
+      setFunctions((list) => list.map((f) => (f.id === fn.id ? { ...f, event_pattern: eventPattern().trim() } : f)));
       setMessage(`Saved "${fn.name}".`);
     } catch (e) {
       setError(err(e));
@@ -286,10 +302,13 @@ export function FunctionsPage(props: FunctionsPageProps) {
               <div class="flex items-center justify-between" style="width:100%">
                 <span class="card-header-title">
                   {fn().name} <Badge variant="neutral">{fn().runtime}</Badge>
+                  <Show when={fn().event_pattern}>
+                    <Badge variant="warning">on {fn().event_pattern}</Badge>
+                  </Show>
                 </span>
                 <div class="flex gap-2 items-center">
                   <Show when={props.canManage && !props.demoMode}>
-                    <button class="btn btn-secondary btn-sm" disabled={!codeDirty() || busy() === "save"} onClick={() => void save()}>
+                    <button class="btn btn-secondary btn-sm" disabled={(!codeDirty() && !patternDirty()) || busy() === "save"} onClick={() => void save()}>
                       {busy() === "save" ? "Saving…" : "Save"}
                     </button>
                     <button class="btn btn-primary btn-sm" disabled={busy() === "invoke" || !fn().enabled} onClick={() => void invoke()}>
@@ -298,6 +317,21 @@ export function FunctionsPage(props: FunctionsPageProps) {
                   </Show>
                 </div>
               </div>
+            </div>
+            <div style="padding:1rem 1.25rem 0">
+              <Input
+                label="Event trigger (optional)"
+                placeholder='document.*  ·  *  ·  deploy.marker'
+                value={eventPattern()}
+                onInput={(e) => { setEventPattern(e.currentTarget.value); setPatternDirty(true); }}
+                disabled={!props.canManage || props.demoMode}
+              />
+              <p class="text-text-3" style="font-size:0.78rem;margin-top:0.3rem">
+                Runs whenever a project event matching this pattern is published — e.g.{" "}
+                <code>document.*</code>, <code>object.created</code>, or <code>*</code> for all. The
+                function receives {"{ event, data, occurred_at }"}. Schedules and inbound hooks can
+                also target functions.
+              </p>
             </div>
             <div style="padding:1rem 1.25rem;display:grid;gap:1rem;grid-template-columns:1fr 1fr">
               <div>
@@ -393,6 +427,12 @@ export function FunctionsPage(props: FunctionsPageProps) {
               <option value="bun">bun</option>
               <option value="deno">deno</option>
             </Select>
+            <Input
+              label="Event trigger (optional)"
+              placeholder="document.*"
+              value={createForm().event_pattern}
+              onInput={(e) => setCreateForm((f) => ({ ...f, event_pattern: e.currentTarget.value }))}
+            />
             <p class="text-text-3" style="font-size:0.8rem">
               Starts from a stdin-echo template — edit the code after creating.
             </p>

@@ -28,8 +28,9 @@ import (
 const (
 	WebhookEventInboundReceived = "inbound.received"
 
-	InboundModeEvent = "event"
-	InboundModeJob   = "job"
+	InboundModeEvent    = "event"
+	InboundModeJob      = "job"
+	InboundModeFunction = "function"
 )
 
 type InboundHookSummary struct {
@@ -40,6 +41,7 @@ type InboundHookSummary struct {
 	URL            string     `json:"url"`
 	Mode           string     `json:"mode"`
 	JobID          string     `json:"job_id,omitempty"`
+	FunctionID     string     `json:"function_id,omitempty"`
 	HasSecret      bool       `json:"has_secret"`
 	Enabled        bool       `json:"enabled"`
 	LastReceivedAt *time.Time `json:"last_received_at"`
@@ -47,11 +49,12 @@ type InboundHookSummary struct {
 }
 
 type CreateInboundHookInput struct {
-	Name    string    `json:"name" validate:"required"`
-	Mode    string    `json:"mode"`
-	JobID   string    `json:"job_id"`
-	Secret  string    `json:"secret"`
-	Enabled *bool     `json:"enabled"`
+	Name       string `json:"name" validate:"required"`
+	Mode       string `json:"mode"`
+	JobID      string `json:"job_id"`
+	FunctionID string `json:"function_id"`
+	Secret     string `json:"secret"`
+	Enabled    *bool  `json:"enabled"`
 }
 
 type InboundReceiveResult struct {
@@ -74,6 +77,9 @@ func inboundHookSummary(row db.CoreInboundHook, publicURL string) InboundHookSum
 	}
 	if row.JobID.Valid {
 		out.JobID = uuid.UUID(row.JobID.Bytes).String()
+	}
+	if row.FunctionID.Valid {
+		out.FunctionID = uuid.UUID(row.FunctionID.Bytes).String()
 	}
 	if row.LastReceivedAt.Valid {
 		t := row.LastReceivedAt.Time
@@ -108,8 +114,9 @@ func (s *PlatformService) CreateInboundHook(ctx context.Context, actor *models.A
 	if mode == "" {
 		mode = InboundModeEvent
 	}
-	var jobID pgtype.UUID
-	if mode == InboundModeJob {
+	var jobID, functionID pgtype.UUID
+	switch mode {
+	case InboundModeJob:
 		parsed, err := uuid.Parse(input.JobID)
 		if err != nil {
 			return InboundHookSummary{}, errors.New("job mode requires a valid job_id")
@@ -119,8 +126,19 @@ func (s *PlatformService) CreateInboundHook(ctx context.Context, actor *models.A
 			return InboundHookSummary{}, errors.New("job not found in this project")
 		}
 		jobID = pgtype.UUID{Bytes: parsed, Valid: true}
-	} else if mode != InboundModeEvent {
-		return InboundHookSummary{}, fmt.Errorf("invalid mode %q — event or job", input.Mode)
+	case InboundModeFunction:
+		parsed, err := uuid.Parse(input.FunctionID)
+		if err != nil {
+			return InboundHookSummary{}, errors.New("function mode requires a valid function_id")
+		}
+		fn, err := s.repo.Queries().GetFunction(ctx, parsed)
+		if err != nil || fn.ProjectID != projectID {
+			return InboundHookSummary{}, errors.New("function not found in this project")
+		}
+		functionID = pgtype.UUID{Bytes: parsed, Valid: true}
+	case InboundModeEvent:
+	default:
+		return InboundHookSummary{}, fmt.Errorf("invalid mode %q — event, job, or function", input.Mode)
 	}
 	secretBytes := []byte{}
 	if input.Secret != "" {
@@ -141,10 +159,11 @@ func (s *PlatformService) CreateInboundHook(ctx context.Context, actor *models.A
 		ProjectID: projectID,
 		Name:      input.Name,
 		Token:     token,
-		Mode:      mode,
-		JobID:     jobID,
-		Secret:    secretBytes,
-		Enabled:   enabled,
+		Mode:       mode,
+		JobID:      jobID,
+		FunctionID: functionID,
+		Secret:     secretBytes,
+		Enabled:    enabled,
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "inbound_hooks_project_id_name_key") {
@@ -230,6 +249,31 @@ func (s *PlatformService) ReceiveInboundHook(ctx context.Context, token string, 
 			return InboundReceiveResult{}, err
 		}
 		return InboundReceiveResult{Received: true, Event: WebhookEventJobRun, RunID: run.ID.String()}, nil
+	case InboundModeFunction:
+		if s.functions == nil {
+			return InboundReceiveResult{}, errors.New("functions runtime not configured")
+		}
+		if !hook.FunctionID.Valid {
+			return InboundReceiveResult{}, errors.New("hook has no function configured")
+		}
+		fn, err := s.repo.Queries().GetFunction(ctx, uuid.UUID(hook.FunctionID.Bytes))
+		if err != nil {
+			return InboundReceiveResult{}, err
+		}
+		raw := body
+		if len(raw) == 0 {
+			raw = []byte(`{}`)
+		}
+		// Detached: the public endpoint acks immediately; the run row records
+		// the outcome. Hook callers must not wait on user code.
+		go func() {
+			runCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			if _, err := s.executeFunction(runCtx, fn, raw, "hook"); err != nil && s.logger != nil {
+				s.logger.Warn("hook function invoke failed", "hook", hook.Name, "function", fn.Name, "error", err)
+			}
+		}()
+		return InboundReceiveResult{Received: true, Event: "function.invoked"}, nil
 	default:
 		s.publishEvent(ctx, hook.ProjectID, WebhookEventInboundReceived, map[string]any{
 			"hook_id":   hook.ID.String(),

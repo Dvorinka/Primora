@@ -22,9 +22,10 @@ INSERT INTO core.scheduled_jobs (
   payload,
   enabled,
   next_run_at,
-  created_by_user_id
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, project_id, name, schedule, url, secret, payload, enabled, last_run_at, last_status, next_run_at, created_by_user_id, created_at, updated_at
+  created_by_user_id,
+  function_id
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, project_id, name, schedule, url, secret, payload, enabled, last_run_at, last_status, next_run_at, created_by_user_id, created_at, updated_at, function_id
 `
 
 type CreateScheduledJobParams struct {
@@ -37,6 +38,7 @@ type CreateScheduledJobParams struct {
 	Enabled         bool               `json:"enabled"`
 	NextRunAt       pgtype.Timestamptz `json:"next_run_at"`
 	CreatedByUserID pgtype.UUID        `json:"created_by_user_id"`
+	FunctionID      pgtype.UUID        `json:"function_id"`
 }
 
 func (q *Queries) CreateScheduledJob(ctx context.Context, arg CreateScheduledJobParams) (CoreScheduledJob, error) {
@@ -50,6 +52,7 @@ func (q *Queries) CreateScheduledJob(ctx context.Context, arg CreateScheduledJob
 		arg.Enabled,
 		arg.NextRunAt,
 		arg.CreatedByUserID,
+		arg.FunctionID,
 	)
 	var i CoreScheduledJob
 	err := row.Scan(
@@ -67,6 +70,7 @@ func (q *Queries) CreateScheduledJob(ctx context.Context, arg CreateScheduledJob
 		&i.CreatedByUserID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FunctionID,
 	)
 	return i, err
 }
@@ -133,7 +137,7 @@ func (q *Queries) FinishScheduledJobRun(ctx context.Context, arg FinishScheduled
 }
 
 const getScheduledJobByID = `-- name: GetScheduledJobByID :one
-SELECT id, project_id, name, schedule, url, secret, payload, enabled, last_run_at, last_status, next_run_at, created_by_user_id, created_at, updated_at FROM core.scheduled_jobs
+SELECT id, project_id, name, schedule, url, secret, payload, enabled, last_run_at, last_status, next_run_at, created_by_user_id, created_at, updated_at, function_id FROM core.scheduled_jobs
 WHERE id = $1
 `
 
@@ -155,6 +159,7 @@ func (q *Queries) GetScheduledJobByID(ctx context.Context, id uuid.UUID) (CoreSc
 		&i.CreatedByUserID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FunctionID,
 	)
 	return i, err
 }
@@ -188,7 +193,7 @@ func (q *Queries) InsertScheduledJobRun(ctx context.Context, arg InsertScheduled
 }
 
 const listDueScheduledJobs = `-- name: ListDueScheduledJobs :many
-SELECT id, project_id, name, schedule, url, secret, payload, enabled, last_run_at, last_status, next_run_at, created_by_user_id, created_at, updated_at FROM core.scheduled_jobs
+SELECT id, project_id, name, schedule, url, secret, payload, enabled, last_run_at, last_status, next_run_at, created_by_user_id, created_at, updated_at, function_id FROM core.scheduled_jobs
 WHERE enabled
   AND next_run_at IS NOT NULL
   AND next_run_at <= $1
@@ -218,6 +223,7 @@ func (q *Queries) ListDueScheduledJobs(ctx context.Context, nextRunAt pgtype.Tim
 			&i.CreatedByUserID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.FunctionID,
 		); err != nil {
 			return nil, err
 		}
@@ -272,7 +278,7 @@ func (q *Queries) ListScheduledJobRuns(ctx context.Context, arg ListScheduledJob
 }
 
 const listScheduledJobs = `-- name: ListScheduledJobs :many
-SELECT id, project_id, name, schedule, url, secret, payload, enabled, last_run_at, last_status, next_run_at, created_by_user_id, created_at, updated_at FROM core.scheduled_jobs
+SELECT id, project_id, name, schedule, url, secret, payload, enabled, last_run_at, last_status, next_run_at, created_by_user_id, created_at, updated_at, function_id FROM core.scheduled_jobs
 WHERE project_id = $1
 ORDER BY created_at ASC
 `
@@ -301,6 +307,7 @@ func (q *Queries) ListScheduledJobs(ctx context.Context, projectID uuid.UUID) ([
 			&i.CreatedByUserID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.FunctionID,
 		); err != nil {
 			return nil, err
 		}
@@ -319,7 +326,7 @@ SET last_run_at = $2,
     next_run_at = $4,
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, project_id, name, schedule, url, secret, payload, enabled, last_run_at, last_status, next_run_at, created_by_user_id, created_at, updated_at
+RETURNING id, project_id, name, schedule, url, secret, payload, enabled, last_run_at, last_status, next_run_at, created_by_user_id, created_at, updated_at, function_id
 `
 
 type MarkScheduledJobRanParams struct {
@@ -352,6 +359,7 @@ func (q *Queries) MarkScheduledJobRan(ctx context.Context, arg MarkScheduledJobR
 		&i.CreatedByUserID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FunctionID,
 	)
 	return i, err
 }
@@ -386,24 +394,27 @@ SET name = $3,
     next_run_at = $7,
     secret = CASE WHEN $8::boolean THEN $9 ELSE secret END,
     payload = CASE WHEN $10::boolean THEN $11 ELSE payload END,
+    function_id = CASE WHEN $12::boolean THEN $13 ELSE function_id END,
     updated_at = NOW()
 WHERE id = $1
   AND project_id = $2
-RETURNING id, project_id, name, schedule, url, secret, payload, enabled, last_run_at, last_status, next_run_at, created_by_user_id, created_at, updated_at
+RETURNING id, project_id, name, schedule, url, secret, payload, enabled, last_run_at, last_status, next_run_at, created_by_user_id, created_at, updated_at, function_id
 `
 
 type UpdateScheduledJobParams struct {
-	ID        uuid.UUID          `json:"id"`
-	ProjectID uuid.UUID          `json:"project_id"`
-	Name      string             `json:"name"`
-	Schedule  string             `json:"schedule"`
-	Url       string             `json:"url"`
-	Enabled   bool               `json:"enabled"`
-	NextRunAt pgtype.Timestamptz `json:"next_run_at"`
-	Column8   bool               `json:"column_8"`
-	Secret    []byte             `json:"secret"`
-	Column10  bool               `json:"column_10"`
-	Payload   []byte             `json:"payload"`
+	ID         uuid.UUID          `json:"id"`
+	ProjectID  uuid.UUID          `json:"project_id"`
+	Name       string             `json:"name"`
+	Schedule   string             `json:"schedule"`
+	Url        string             `json:"url"`
+	Enabled    bool               `json:"enabled"`
+	NextRunAt  pgtype.Timestamptz `json:"next_run_at"`
+	Column8    bool               `json:"column_8"`
+	Secret     []byte             `json:"secret"`
+	Column10   bool               `json:"column_10"`
+	Payload    []byte             `json:"payload"`
+	Column12   bool               `json:"column_12"`
+	FunctionID pgtype.UUID        `json:"function_id"`
 }
 
 func (q *Queries) UpdateScheduledJob(ctx context.Context, arg UpdateScheduledJobParams) (CoreScheduledJob, error) {
@@ -419,6 +430,8 @@ func (q *Queries) UpdateScheduledJob(ctx context.Context, arg UpdateScheduledJob
 		arg.Secret,
 		arg.Column10,
 		arg.Payload,
+		arg.Column12,
+		arg.FunctionID,
 	)
 	var i CoreScheduledJob
 	err := row.Scan(
@@ -436,6 +449,7 @@ func (q *Queries) UpdateScheduledJob(ctx context.Context, arg UpdateScheduledJob
 		&i.CreatedByUserID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FunctionID,
 	)
 	return i, err
 }

@@ -357,11 +357,14 @@ Reusable templates + an operational send log.
 
 Ordered loosely by leverage. None committed; each gets scoped when picked.
 
-- **Phase 9 — Functions** — ✅ first slice shipped: `core.functions` +
+- **Phase 9 — Functions** — ✅ shipped: `core.functions` +
   `core.function_runs`, bun/deno exec runner (stdin payload, env injection,
-  capped output, timeout), invoke API + dashboard page. Remaining
-  candidates: schedule/event/HTTP triggers riding jobs + inbound hooks,
-  and isolated runtimes (sidecar/Firecracker) for untrusted code.
+  capped output, timeout), invoke API + dashboard page. Triggers shipped:
+  scheduled jobs (`function_id` on a job), inbound hooks (`mode:
+  "function"`), and domain events (`event_pattern`, e.g. `document.*`).
+  Runs record trigger source (`manual`/`schedule`/`hook`/`event`).
+  Remaining candidate: isolated runtimes (sidecar/Firecracker) for
+  untrusted code — functions still execute with backend host privileges.
 - **Phase 10 — Storage backends** — ✅ S3-compatible object storage shipped:
   `BACKEND_STORAGE_DRIVER=s3` + `S3_*` env vars, stdlib SigV4, verified
   against a real S3 server. Presigned-URL uploads for large files remain a

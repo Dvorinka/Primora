@@ -13,6 +13,7 @@ export type InboundHook = {
     url: string;
     mode: InboundHook.mode;
     job_id?: string;
+    function_id?: string;
     has_secret: boolean;
     enabled: boolean;
     last_received_at?: string | null;
@@ -22,6 +23,7 @@ export namespace InboundHook {
     export enum mode {
         EVENT = 'event',
         JOB = 'job',
+        FUNCTION = 'function',
     }
 }
 

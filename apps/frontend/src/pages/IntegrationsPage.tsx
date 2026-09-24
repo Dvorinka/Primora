@@ -4,11 +4,13 @@ import {
   AutomationService,
   CreateInboundHookRequest,
   CreateIntegrationRequest,
+  FunctionsService,
   InboundService,
   IntegrationsService,
   UpsertAlertRuleRequest,
   WebhooksService,
   type AlertRule,
+  type Function as PrimoraFunction,
   type InboundHook,
   type ScheduledJob,
   type Integration,
@@ -74,7 +76,8 @@ export function IntegrationsPage(props: IntegrationsPageProps) {
   const [showCreateWebhook, setShowCreateWebhook] = createSignal(false);
   const [showCreateAlert, setShowCreateAlert] = createSignal(false);
   const [showCreateInbound, setShowCreateInbound] = createSignal(false);
-  const [inboundForm, setInboundForm] = createSignal({ name: "", mode: CreateInboundHookRequest.mode.EVENT as CreateInboundHookRequest.mode, job_id: "", secret: "" });
+  const [inboundForm, setInboundForm] = createSignal({ name: "", mode: CreateInboundHookRequest.mode.EVENT as CreateInboundHookRequest.mode, job_id: "", function_id: "", secret: "" });
+  const [functions, setFunctions] = createSignal<PrimoraFunction[]>([]);
   const [copiedUrl, setCopiedUrl] = createSignal("");
   const [alertForm, setAlertForm] = createSignal({
     name: "",
@@ -97,18 +100,20 @@ export function IntegrationsPage(props: IntegrationsPageProps) {
     setLoading(true);
     setError("");
     try {
-      const [int, hooks, rules, inbound, jobs] = await Promise.all([
+      const [int, hooks, rules, inbound, jobs, fns] = await Promise.all([
         intSvc(props.demoMode).listIntegrations({ projectId: props.projectID }),
         hookSvc(props.demoMode).listWebhooks({ projectId: props.projectID }),
         props.demoMode ? Promise.resolve({ items: [] }) : AlertsService.listAlertRules({ projectId: props.projectID }),
         props.demoMode ? Promise.resolve({ items: [] }) : InboundService.listInboundHooks({ projectId: props.projectID }),
         props.demoMode ? Promise.resolve({ items: [] }) : AutomationService.listScheduledJobs({ projectId: props.projectID }),
+        props.demoMode ? Promise.resolve({ items: [] }) : FunctionsService.listFunctions({ projectId: props.projectID }),
       ]);
       setIntegrations(int.items ?? []);
       setWebhooks(hooks.items ?? []);
       setAlertRules(rules.items ?? []);
       setInboundHooks(inbound.items ?? []);
       setScheduledJobs(jobs.items ?? []);
+      setFunctions(fns.items ?? []);
     } catch (e) {
       setError(err(e));
     } finally {
@@ -268,11 +273,12 @@ export function IntegrationsPage(props: IntegrationsPageProps) {
           name: form.name.trim(),
           mode: form.mode,
           job_id: form.mode === CreateInboundHookRequest.mode.JOB ? form.job_id : undefined,
+          function_id: form.mode === CreateInboundHookRequest.mode.FUNCTION ? form.function_id : undefined,
           secret: form.secret.trim() || undefined,
         },
       });
       setShowCreateInbound(false);
-      setInboundForm({ name: "", mode: CreateInboundHookRequest.mode.EVENT, job_id: "", secret: "" });
+      setInboundForm({ name: "", mode: CreateInboundHookRequest.mode.EVENT, job_id: "", function_id: "", secret: "" });
     }, "Inbound hook created");
   };
 
@@ -706,7 +712,9 @@ export function IntegrationsPage(props: IntegrationsPageProps) {
                       <tr>
                         <td class="font-medium">{hook.name}</td>
                         <td>
-                          <Badge variant="neutral">{hook.mode === "job" ? "job trigger" : "event"}</Badge>
+                          <Badge variant="neutral">
+                            {hook.mode === "job" ? "job trigger" : hook.mode === "function" ? `ƒ ${functions().find((f) => f.id === hook.function_id)?.name ?? "function"}` : "event"}
+                          </Badge>
                           <Show when={!hook.enabled}>
                             {" "}<Badge variant="warning">disabled</Badge>
                           </Show>
@@ -943,8 +951,21 @@ export function IntegrationsPage(props: IntegrationsPageProps) {
             options={[
               { value: "event", label: "Publish inbound.received event" },
               { value: "job", label: "Trigger a scheduled job" },
+              { value: "function", label: "Invoke a function" },
             ]}
           />
+          <Show when={inboundForm().mode === CreateInboundHookRequest.mode.FUNCTION}>
+            <Select
+              label="Function"
+              value={inboundForm().function_id}
+              onChange={(e) => setInboundForm((c) => ({ ...c, function_id: e.currentTarget.value }))}
+              options={[
+                { value: "", label: "Select a function…" },
+                ...functions().map((f) => ({ value: f.id, label: f.name })),
+              ]}
+            />
+            <p class="text-text-2 text-xs">The received body becomes the function's stdin payload.</p>
+          </Show>
           <Show when={inboundForm().mode === CreateInboundHookRequest.mode.JOB}>
             <Select
               label="Job"

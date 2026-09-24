@@ -13,19 +13,20 @@ import (
 )
 
 const createInboundHook = `-- name: CreateInboundHook :one
-INSERT INTO core.inbound_hooks (project_id, name, token, mode, job_id, secret, enabled)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, project_id, name, token, mode, job_id, secret, enabled, last_received_at, created_at, updated_at
+INSERT INTO core.inbound_hooks (project_id, name, token, mode, job_id, function_id, secret, enabled)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, project_id, name, token, mode, job_id, secret, enabled, last_received_at, created_at, updated_at, function_id
 `
 
 type CreateInboundHookParams struct {
-	ProjectID uuid.UUID   `json:"project_id"`
-	Name      string      `json:"name"`
-	Token     string      `json:"token"`
-	Mode      string      `json:"mode"`
-	JobID     pgtype.UUID `json:"job_id"`
-	Secret    []byte      `json:"secret"`
-	Enabled   bool        `json:"enabled"`
+	ProjectID  uuid.UUID   `json:"project_id"`
+	Name       string      `json:"name"`
+	Token      string      `json:"token"`
+	Mode       string      `json:"mode"`
+	JobID      pgtype.UUID `json:"job_id"`
+	FunctionID pgtype.UUID `json:"function_id"`
+	Secret     []byte      `json:"secret"`
+	Enabled    bool        `json:"enabled"`
 }
 
 func (q *Queries) CreateInboundHook(ctx context.Context, arg CreateInboundHookParams) (CoreInboundHook, error) {
@@ -35,6 +36,7 @@ func (q *Queries) CreateInboundHook(ctx context.Context, arg CreateInboundHookPa
 		arg.Token,
 		arg.Mode,
 		arg.JobID,
+		arg.FunctionID,
 		arg.Secret,
 		arg.Enabled,
 	)
@@ -51,6 +53,7 @@ func (q *Queries) CreateInboundHook(ctx context.Context, arg CreateInboundHookPa
 		&i.LastReceivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FunctionID,
 	)
 	return i, err
 }
@@ -71,7 +74,7 @@ func (q *Queries) DeleteInboundHook(ctx context.Context, arg DeleteInboundHookPa
 }
 
 const getInboundHook = `-- name: GetInboundHook :one
-SELECT id, project_id, name, token, mode, job_id, secret, enabled, last_received_at, created_at, updated_at FROM core.inbound_hooks
+SELECT id, project_id, name, token, mode, job_id, secret, enabled, last_received_at, created_at, updated_at, function_id FROM core.inbound_hooks
 WHERE id = $1 AND project_id = $2
 `
 
@@ -95,12 +98,13 @@ func (q *Queries) GetInboundHook(ctx context.Context, arg GetInboundHookParams) 
 		&i.LastReceivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FunctionID,
 	)
 	return i, err
 }
 
 const getInboundHookByToken = `-- name: GetInboundHookByToken :one
-SELECT id, project_id, name, token, mode, job_id, secret, enabled, last_received_at, created_at, updated_at FROM core.inbound_hooks
+SELECT id, project_id, name, token, mode, job_id, secret, enabled, last_received_at, created_at, updated_at, function_id FROM core.inbound_hooks
 WHERE token = $1
 `
 
@@ -119,12 +123,13 @@ func (q *Queries) GetInboundHookByToken(ctx context.Context, token string) (Core
 		&i.LastReceivedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FunctionID,
 	)
 	return i, err
 }
 
 const listInboundHooks = `-- name: ListInboundHooks :many
-SELECT id, project_id, name, token, mode, job_id, secret, enabled, last_received_at, created_at, updated_at FROM core.inbound_hooks
+SELECT id, project_id, name, token, mode, job_id, secret, enabled, last_received_at, created_at, updated_at, function_id FROM core.inbound_hooks
 WHERE project_id = $1
 ORDER BY name
 `
@@ -150,6 +155,7 @@ func (q *Queries) ListInboundHooks(ctx context.Context, projectID uuid.UUID) ([]
 			&i.LastReceivedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.FunctionID,
 		); err != nil {
 			return nil, err
 		}

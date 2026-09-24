@@ -10,6 +10,10 @@ export type CreateInboundHookRequest = {
      */
     job_id?: string;
     /**
+     * Required when mode=function — invoked with the received body.
+     */
+    function_id?: string;
+    /**
      * Optional — stored encrypted; callers must then sign bodies with X-Primora-Signature.
      */
     secret?: string;
@@ -19,6 +23,7 @@ export namespace CreateInboundHookRequest {
     export enum mode {
         EVENT = 'event',
         JOB = 'job',
+        FUNCTION = 'function',
     }
 }
 

@@ -40,6 +40,7 @@ type PlatformService struct {
 	scheduler      *JobScheduler
 	alerts         *alertEvaluator
 	functions      FunctionRunner
+	logger         *slog.Logger
 }
 
 type BootstrapInput struct {
@@ -226,11 +227,12 @@ type InvitationSummary struct {
 }
 
 func NewPlatformService(repo *repositories.CoreRepository, store storage.Store, mailer *Mailer, publicURL string, dbxClient *dbx.Client, enc *secrets.Encryptor, logger *slog.Logger, functions FunctionRunner) *PlatformService {
-	s := &PlatformService{repo: repo, store: store, mailer: mailer, publicURL: publicURL, dbx: dbxClient, hub: NewEventHub(), realtime: NewEventHub(), enc: enc, functions: functions}
+	s := &PlatformService{repo: repo, store: store, mailer: mailer, publicURL: publicURL, dbx: dbxClient, hub: NewEventHub(), realtime: NewEventHub(), enc: enc, functions: functions, logger: logger}
 	if enc != nil {
 		s.dispatcher = NewWebhookDispatcher(repo.Queries(), enc, logger)
 		s.dispatcher.Start(context.Background())
 		s.scheduler = NewJobScheduler(repo.Queries(), enc, logger, s.publishEvent, repo.Pool())
+		s.scheduler.runFn = s.runJobFunction
 		s.scheduler.Start(context.Background())
 		s.alerts = newAlertEvaluator(repo.Queries(), s.publishEvent, logger, repo.Pool())
 		s.alerts.Start(context.Background())
@@ -327,6 +329,7 @@ func (s *PlatformService) publishEvent(ctx context.Context, projectID uuid.UUID,
 		})
 	}
 	s.dispatchEvent(ctx, projectID, eventType, data)
+	s.triggerFunctionsForEvent(ctx, projectID, eventType, data)
 }
 
 // SubscribeRealtime registers an SSE consumer for project domain events.

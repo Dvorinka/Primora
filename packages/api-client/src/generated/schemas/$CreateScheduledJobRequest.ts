@@ -16,8 +16,13 @@ export const $CreateScheduledJobRequest = {
         },
         url: {
             type: 'string',
-            isRequired: true,
+            description: `Delivery target. Required unless function_id is set.`,
             format: 'uri',
+        },
+        function_id: {
+            type: 'string',
+            description: `Invoke this function on schedule instead of POSTing url.`,
+            format: 'uuid',
         },
         secret: {
             type: 'string',

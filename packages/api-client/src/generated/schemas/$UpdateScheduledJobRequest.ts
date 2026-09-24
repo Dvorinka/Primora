@@ -15,6 +15,12 @@ export const $UpdateScheduledJobRequest = {
             type: 'string',
             format: 'uri',
         },
+        function_id: {
+            type: 'string',
+            description: `Set to retarget at a function; send "" to clear back to url delivery.`,
+            isNullable: true,
+            format: 'uuid',
+        },
         secret: {
             type: 'string',
             description: `Replace the signing secret. Omit to keep the current one.`,

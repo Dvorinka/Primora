@@ -15,5 +15,9 @@ export const $CreateFunctionRequest = {
         runtime: {
             type: 'Enum',
         },
+        event_pattern: {
+            type: 'string',
+            description: `Optional — "document.*", "*", or an exact event type.`,
+        },
     },
 } as const;

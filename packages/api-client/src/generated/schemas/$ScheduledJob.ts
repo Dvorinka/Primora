@@ -27,6 +27,12 @@ export const $ScheduledJob = {
             type: 'string',
             isRequired: true,
         },
+        function_id: {
+            type: 'string',
+            description: `When set, the schedule invokes this function instead of POSTing url.`,
+            isNullable: true,
+            format: 'uuid',
+        },
         payload: {
             type: 'dictionary',
             contains: {

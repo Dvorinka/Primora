@@ -46,6 +46,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 | `S3_ENDPOINT` / `S3_REGION` / `S3_BUCKET` | S3 API endpoint (empty endpoint → AWS `s3.<region>.amazonaws.com`), region, bucket | with `s3` |
 | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | S3 credentials | with `s3` |
 | `S3_PREFIX` / `S3_PATH_STYLE` | optional key prefix; path-style URLs (default `true`, needed by MinIO/Garage — set `false` for AWS virtual-hosted) | no |
+| `FUNCTIONS_RUNTIME` / `FUNCTIONS_TIMEOUT_SECONDS` / `FUNCTIONS_MAX_OUTPUT_BYTES` | Functions: runtime binary (`auto` resolves `bun`/`deno` from the backend's PATH — the backend image must ship one, or set this to its path), per-run timeout (default 30 s), captured-output cap (default 64 KiB) | no |
 | `AUTH_ADMIN_EMAILS` | comma-separated emails promoted to auth admin on boot | no |
 | `USER_RATE_LIMIT_PER_MINUTE` / `API_KEY_RATE_LIMIT_PER_MINUTE` | per-identity API rate limits (defaults 240 / 600) | no |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_SECURE` / `MAIL_FROM` | transactional mail; without it verification/reset emails go nowhere | production |
@@ -131,10 +132,18 @@ docker compose up -d                      # 3. rolling recreate; backend migrate
 
 ## Storage constraint
 
-Object storage is the **local filesystem** (`backend_storage` volume). There
-is no S3-compatible backend yet — the volume must be on durable, backed-up
-disk, and a single host serves all objects. Plan capacity accordingly;
-multi-node deployments need an external object store first.
+Object storage defaults to the **local filesystem** (`backend_storage`
+volume) — durable, backed-up disk on a single host. For multi-node or
+external object stores set `BACKEND_STORAGE_DRIVER=s3` + the `S3_*`
+variables above (AWS, MinIO, Garage, R2 all work).
+
+## Functions trust model
+
+Function code runs as a child process of the backend — same host, same
+privileges, no sandbox. Treat every project member who can edit a function
+as holding a shell on the backend host. If that is unacceptable for your
+deployment, do not enable untrusted editors; isolated runtimes are on the
+roadmap.
 
 ## Observability
 

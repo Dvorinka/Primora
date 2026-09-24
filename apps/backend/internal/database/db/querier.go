@@ -112,6 +112,7 @@ type Querier interface {
 	ListEvents(ctx context.Context, arg ListEventsParams) ([]ListEventsRow, error)
 	ListFunctionRuns(ctx context.Context, arg ListFunctionRunsParams) ([]CoreFunctionRun, error)
 	ListFunctions(ctx context.Context, projectID uuid.UUID) ([]CoreFunction, error)
+	ListFunctionsForEvent(ctx context.Context, arg ListFunctionsForEventParams) ([]CoreFunction, error)
 	ListInboundHooks(ctx context.Context, projectID uuid.UUID) ([]CoreInboundHook, error)
 	ListIntegrations(ctx context.Context, projectID uuid.UUID) ([]CoreIntegration, error)
 	ListInvitationsForOrganization(ctx context.Context, organizationID uuid.UUID) ([]ListInvitationsForOrganizationRow, error)

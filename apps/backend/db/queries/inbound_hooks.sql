@@ -1,6 +1,6 @@
 -- name: CreateInboundHook :one
-INSERT INTO core.inbound_hooks (project_id, name, token, mode, job_id, secret, enabled)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO core.inbound_hooks (project_id, name, token, mode, job_id, function_id, secret, enabled)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: ListInboundHooks :many

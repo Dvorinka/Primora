@@ -267,14 +267,15 @@ type CoreEvent struct {
 }
 
 type CoreFunction struct {
-	ID        uuid.UUID          `json:"id"`
-	ProjectID uuid.UUID          `json:"project_id"`
-	Name      string             `json:"name"`
-	Code      string             `json:"code"`
-	Runtime   string             `json:"runtime"`
-	Enabled   bool               `json:"enabled"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	ID           uuid.UUID          `json:"id"`
+	ProjectID    uuid.UUID          `json:"project_id"`
+	Name         string             `json:"name"`
+	Code         string             `json:"code"`
+	Runtime      string             `json:"runtime"`
+	Enabled      bool               `json:"enabled"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	EventPattern string             `json:"event_pattern"`
 }
 
 type CoreFunctionRun struct {
@@ -301,6 +302,7 @@ type CoreInboundHook struct {
 	LastReceivedAt pgtype.Timestamptz `json:"last_received_at"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	FunctionID     pgtype.UUID        `json:"function_id"`
 }
 
 type CoreIntegration struct {
@@ -393,6 +395,7 @@ type CoreScheduledJob struct {
 	CreatedByUserID pgtype.UUID        `json:"created_by_user_id"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	FunctionID      pgtype.UUID        `json:"function_id"`
 }
 
 type CoreScheduledJobRun struct {

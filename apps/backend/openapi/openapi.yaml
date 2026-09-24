@@ -4058,6 +4058,11 @@ components:
           description: Cron expression (5-field) or descriptor (@hourly, @every 30m).
         url:
           type: string
+        function_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: When set, the schedule invokes this function instead of POSTing url.
         payload:
           type: object
           description: Static JSON payload merged into every delivery's data field.
@@ -4093,6 +4098,11 @@ components:
         url:
           type: string
           format: uri
+          description: Delivery target. Required unless function_id is set.
+        function_id:
+          type: string
+          format: uuid
+          description: Invoke this function on schedule instead of POSTing url.
         secret:
           type: string
           description: HMAC key for X-Primora-Signature. Generated when omitted.
@@ -4102,7 +4112,7 @@ components:
         enabled:
           type: boolean
           default: true
-      required: [name, schedule, url]
+      required: [name, schedule]
     UpdateScheduledJobRequest:
       type: object
       properties:
@@ -4114,6 +4124,11 @@ components:
         url:
           type: string
           format: uri
+        function_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Set to retarget at a function; send "" to clear back to url delivery.
         secret:
           type: string
           description: Replace the signing secret. Omit to keep the current one.
@@ -4309,8 +4324,10 @@ components:
           description: Full ingest URL — POST here from the external system.
         mode:
           type: string
-          enum: [event, job]
+          enum: [event, job, function]
         job_id:
+          type: string
+        function_id:
           type: string
         has_secret:
           type: boolean
@@ -4339,11 +4356,14 @@ components:
           type: string
         mode:
           type: string
-          enum: [event, job]
+          enum: [event, job, function]
           default: event
         job_id:
           type: string
           description: Required when mode=job — scheduled job to trigger.
+        function_id:
+          type: string
+          description: Required when mode=function — invoked with the received body.
         secret:
           type: string
           description: Optional — stored encrypted; callers must then sign bodies with X-Primora-Signature.
@@ -4402,6 +4422,9 @@ components:
           enum: [bun, deno]
         enabled:
           type: boolean
+        event_pattern:
+          type: string
+          description: 'Domain-event pattern that triggers this function — "document.*", "*", exact type. Empty = never.'
         created_at:
           type: string
           format: date-time
@@ -4436,6 +4459,9 @@ components:
           type: string
           enum: [bun, deno]
           default: bun
+        event_pattern:
+          type: string
+          description: 'Optional — "document.*", "*", or an exact event type.'
       required: [name, code]
     UpdateFunctionRequest:
       type: object
@@ -4444,6 +4470,9 @@ components:
           type: string
         enabled:
           type: boolean
+        event_pattern:
+          type: string
+          description: Replace the trigger pattern; "" disables event triggers.
     InvokeFunctionRequest:
       type: object
       properties:
@@ -4456,7 +4485,7 @@ components:
           format: uuid
         trigger:
           type: string
-          enum: [manual, schedule, hook]
+          enum: [manual, schedule, hook, event]
         status:
           type: string
           enum: [success, error, timeout]

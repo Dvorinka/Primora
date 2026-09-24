@@ -17,6 +17,7 @@ export namespace FunctionRun {
         MANUAL = 'manual',
         SCHEDULE = 'schedule',
         HOOK = 'hook',
+        EVENT = 'event',
     }
     export enum status {
         SUCCESS = 'success',

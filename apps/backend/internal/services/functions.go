@@ -148,23 +148,26 @@ func (l *limitedWriter) Write(p []byte) (int, error) {
 // --- service layer -------------------------------------------------------
 
 type CreateFunctionInput struct {
-	Name    string `json:"name" validate:"required"`
-	Code    string `json:"code" validate:"required,max=262144"`
-	Runtime string `json:"runtime" validate:"omitempty,oneof=bun deno"`
+	Name         string `json:"name" validate:"required"`
+	Code         string `json:"code" validate:"required,max=262144"`
+	Runtime      string `json:"runtime" validate:"omitempty,oneof=bun deno"`
+	EventPattern string `json:"event_pattern" validate:"omitempty,max=128"`
 }
 
 type UpdateFunctionInput struct {
-	Code    *string `json:"code" validate:"omitempty,max=262144"`
-	Enabled *bool   `json:"enabled"`
+	Code         *string `json:"code" validate:"omitempty,max=262144"`
+	Enabled      *bool   `json:"enabled"`
+	EventPattern *string `json:"event_pattern" validate:"omitempty,max=128"`
 }
 
 type FunctionSummary struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Runtime   string    `json:"runtime"`
-	Enabled   bool      `json:"enabled"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	Runtime      string    `json:"runtime"`
+	Enabled      bool      `json:"enabled"`
+	EventPattern string    `json:"event_pattern,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 type FunctionRunSummary struct {
@@ -180,12 +183,13 @@ type FunctionRunSummary struct {
 
 func functionSummary(r db.CoreFunction) FunctionSummary {
 	return FunctionSummary{
-		ID:        r.ID.String(),
-		Name:      r.Name,
-		Runtime:   r.Runtime,
-		Enabled:   r.Enabled,
-		CreatedAt: r.CreatedAt.Time,
-		UpdatedAt: r.UpdatedAt.Time,
+		ID:           r.ID.String(),
+		Name:         r.Name,
+		Runtime:      r.Runtime,
+		Enabled:      r.Enabled,
+		EventPattern: r.EventPattern,
+		CreatedAt:    r.CreatedAt.Time,
+		UpdatedAt:    r.UpdatedAt.Time,
 	}
 }
 
@@ -215,10 +219,11 @@ func (s *PlatformService) CreateFunction(ctx context.Context, actor *models.Acto
 		runtime = "bun"
 	}
 	row, err := s.repo.Queries().CreateFunction(ctx, db.CreateFunctionParams{
-		ProjectID: projectID,
-		Name:      name,
-		Code:      input.Code,
-		Runtime:   runtime,
+		ProjectID:    projectID,
+		Name:         name,
+		Code:         input.Code,
+		Runtime:      runtime,
+		EventPattern: strings.TrimSpace(input.EventPattern),
 	})
 	if err != nil {
 		return FunctionSummary{}, err
@@ -262,11 +267,17 @@ func (s *PlatformService) UpdateFunction(ctx context.Context, actor *models.Acto
 	if err := s.requireProjectRole(ctx, actor, row.ProjectID, "admin", "developer"); err != nil {
 		return FunctionSummary{}, err
 	}
+	var pattern *string
+	if input.EventPattern != nil {
+		p := strings.TrimSpace(*input.EventPattern)
+		pattern = &p
+	}
 	updated, err := s.repo.Queries().UpdateFunction(ctx, db.UpdateFunctionParams{
-		ID:        functionID,
-		ProjectID: row.ProjectID,
-		Code:      input.Code,
-		Enabled:   input.Enabled,
+		ID:           functionID,
+		ProjectID:    row.ProjectID,
+		Code:         input.Code,
+		Enabled:      input.Enabled,
+		EventPattern: pattern,
 	})
 	if err != nil {
 		return FunctionSummary{}, err
@@ -298,6 +309,13 @@ func (s *PlatformService) InvokeFunction(ctx context.Context, actor *models.Acto
 	if err := s.requireProjectRole(ctx, actor, row.ProjectID, "admin", "developer"); err != nil {
 		return FunctionRunSummary{}, err
 	}
+	return s.executeFunction(ctx, row, payload, "manual")
+}
+
+// executeFunction runs a function row and records the outcome — shared by
+// manual invoke, schedule/hook delivery, and event triggers (no role check;
+// callers hold their own auth context or are system paths).
+func (s *PlatformService) executeFunction(ctx context.Context, row db.CoreFunction, payload json.RawMessage, trigger string) (FunctionRunSummary, error) {
 	if !row.Enabled {
 		return FunctionRunSummary{}, fmt.Errorf("function is disabled")
 	}
@@ -317,7 +335,7 @@ func (s *PlatformService) InvokeFunction(ctx context.Context, actor *models.Acto
 	}
 	run, err := s.repo.Queries().InsertFunctionRun(ctx, db.InsertFunctionRunParams{
 		FunctionID: row.ID,
-		Trigger:    "manual",
+		Trigger:    trigger,
 		Status:     result.Status,
 		ExitCode:   exit,
 		Stdout:     result.Stdout,
@@ -328,6 +346,79 @@ func (s *PlatformService) InvokeFunction(ctx context.Context, actor *models.Acto
 		return FunctionRunSummary{}, err
 	}
 	return runSummary(run), nil
+}
+
+// runJobFunction is the scheduler's delivery path for function-targeted
+// jobs: load the function, run it with the resolved payload, record the
+// run. The job run's status_code mirrors the process exit code.
+func (s *PlatformService) runJobFunction(ctx context.Context, job db.CoreScheduledJob, run db.CoreScheduledJobRun, payload json.RawMessage) (*int32, error) {
+	fn, err := s.repo.Queries().GetFunction(ctx, uuid.UUID(job.FunctionID.Bytes))
+	if err != nil {
+		return nil, fmt.Errorf("target function missing: %w", err)
+	}
+	summary, err := s.executeFunction(ctx, fn, payload, triggerFromJobRun(run.TriggeredBy))
+	if err != nil {
+		return nil, err
+	}
+	code := int32(0)
+	if summary.ExitCode != nil {
+		code = *summary.ExitCode
+	}
+	if summary.Status != "success" {
+		return &code, fmt.Errorf("function %q %s: %s", fn.Name, summary.Status, truncate(summary.Stderr, 200))
+	}
+	return &code, nil
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
+}
+
+func triggerFromJobRun(triggeredBy string) string {
+	switch triggeredBy {
+	case "schedule", "hook", "manual":
+		return triggeredBy
+	default:
+		return "schedule"
+	}
+}
+
+// triggerFunctionsForEvent fans a domain event out to every enabled
+// function whose event_pattern matches ("document.*", "*", …). Runs are
+// detached — event publishers never block on user code.
+// jarvis: ceiling pattern is a single * suffix/prefix wildcard via SQL
+// LIKE; upgrade to a real matcher if multi-segment globs are needed.
+func (s *PlatformService) triggerFunctionsForEvent(ctx context.Context, projectID uuid.UUID, eventType string, data map[string]any) {
+	if s.functions == nil {
+		return
+	}
+	rows, err := s.repo.Queries().ListFunctionsForEvent(ctx, db.ListFunctionsForEventParams{
+		ProjectID:    projectID,
+		EventPattern: eventType,
+	})
+	if err != nil || len(rows) == 0 {
+		return
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"event":       eventType,
+		"project_id":  projectID.String(),
+		"occurred_at": time.Now().UTC().Format(time.RFC3339),
+		"data":        data,
+	})
+	for _, fn := range rows {
+		fn := fn
+		go func() {
+			// Detached context: the publishing request may finish first.
+			runCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			if _, err := s.executeFunction(runCtx, fn, payload, "event"); err != nil {
+				s.logger.Warn("function event trigger failed", "function", fn.Name, "event", eventType, "error", err)
+			}
+		}()
+	}
 }
 
 func (s *PlatformService) ListFunctionRuns(ctx context.Context, actor *models.Actor, functionID uuid.UUID, limit int64) ([]FunctionRunSummary, error) {

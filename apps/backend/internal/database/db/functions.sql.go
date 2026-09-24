@@ -12,16 +12,17 @@ import (
 )
 
 const createFunction = `-- name: CreateFunction :one
-INSERT INTO core.functions (project_id, name, code, runtime)
-VALUES ($1, $2, $3, $4)
-RETURNING id, project_id, name, code, runtime, enabled, created_at, updated_at
+INSERT INTO core.functions (project_id, name, code, runtime, event_pattern)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, project_id, name, code, runtime, enabled, created_at, updated_at, event_pattern
 `
 
 type CreateFunctionParams struct {
-	ProjectID uuid.UUID `json:"project_id"`
-	Name      string    `json:"name"`
-	Code      string    `json:"code"`
-	Runtime   string    `json:"runtime"`
+	ProjectID    uuid.UUID `json:"project_id"`
+	Name         string    `json:"name"`
+	Code         string    `json:"code"`
+	Runtime      string    `json:"runtime"`
+	EventPattern string    `json:"event_pattern"`
 }
 
 func (q *Queries) CreateFunction(ctx context.Context, arg CreateFunctionParams) (CoreFunction, error) {
@@ -30,6 +31,7 @@ func (q *Queries) CreateFunction(ctx context.Context, arg CreateFunctionParams) 
 		arg.Name,
 		arg.Code,
 		arg.Runtime,
+		arg.EventPattern,
 	)
 	var i CoreFunction
 	err := row.Scan(
@@ -41,6 +43,7 @@ func (q *Queries) CreateFunction(ctx context.Context, arg CreateFunctionParams) 
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EventPattern,
 	)
 	return i, err
 }
@@ -60,7 +63,7 @@ func (q *Queries) DeleteFunction(ctx context.Context, arg DeleteFunctionParams) 
 }
 
 const getFunction = `-- name: GetFunction :one
-SELECT id, project_id, name, code, runtime, enabled, created_at, updated_at FROM core.functions WHERE id = $1
+SELECT id, project_id, name, code, runtime, enabled, created_at, updated_at, event_pattern FROM core.functions WHERE id = $1
 `
 
 func (q *Queries) GetFunction(ctx context.Context, id uuid.UUID) (CoreFunction, error) {
@@ -75,12 +78,13 @@ func (q *Queries) GetFunction(ctx context.Context, id uuid.UUID) (CoreFunction, 
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EventPattern,
 	)
 	return i, err
 }
 
 const getFunctionByName = `-- name: GetFunctionByName :one
-SELECT id, project_id, name, code, runtime, enabled, created_at, updated_at FROM core.functions WHERE project_id = $1 AND name = $2
+SELECT id, project_id, name, code, runtime, enabled, created_at, updated_at, event_pattern FROM core.functions WHERE project_id = $1 AND name = $2
 `
 
 type GetFunctionByNameParams struct {
@@ -100,6 +104,7 @@ func (q *Queries) GetFunctionByName(ctx context.Context, arg GetFunctionByNamePa
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EventPattern,
 	)
 	return i, err
 }
@@ -188,7 +193,7 @@ func (q *Queries) ListFunctionRuns(ctx context.Context, arg ListFunctionRunsPara
 }
 
 const listFunctions = `-- name: ListFunctions :many
-SELECT id, project_id, name, code, runtime, enabled, created_at, updated_at FROM core.functions
+SELECT id, project_id, name, code, runtime, enabled, created_at, updated_at, event_pattern FROM core.functions
 WHERE project_id = $1
 ORDER BY name
 `
@@ -211,6 +216,50 @@ func (q *Queries) ListFunctions(ctx context.Context, projectID uuid.UUID) ([]Cor
 			&i.Enabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.EventPattern,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFunctionsForEvent = `-- name: ListFunctionsForEvent :many
+SELECT id, project_id, name, code, runtime, enabled, created_at, updated_at, event_pattern FROM core.functions
+WHERE project_id = $1
+  AND enabled = TRUE
+  AND event_pattern <> ''
+  AND ($2 LIKE REPLACE(event_pattern, '*', '%') OR event_pattern = '*')
+`
+
+type ListFunctionsForEventParams struct {
+	ProjectID    uuid.UUID `json:"project_id"`
+	EventPattern string    `json:"event_pattern"`
+}
+
+func (q *Queries) ListFunctionsForEvent(ctx context.Context, arg ListFunctionsForEventParams) ([]CoreFunction, error) {
+	rows, err := q.db.Query(ctx, listFunctionsForEvent, arg.ProjectID, arg.EventPattern)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CoreFunction
+	for rows.Next() {
+		var i CoreFunction
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Code,
+			&i.Runtime,
+			&i.Enabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.EventPattern,
 		); err != nil {
 			return nil, err
 		}
@@ -226,16 +275,18 @@ const updateFunction = `-- name: UpdateFunction :one
 UPDATE core.functions
 SET code = COALESCE($3, code),
     enabled = COALESCE($4, enabled),
+    event_pattern = COALESCE($5, event_pattern),
     updated_at = NOW()
 WHERE id = $1 AND project_id = $2
-RETURNING id, project_id, name, code, runtime, enabled, created_at, updated_at
+RETURNING id, project_id, name, code, runtime, enabled, created_at, updated_at, event_pattern
 `
 
 type UpdateFunctionParams struct {
-	ID        uuid.UUID `json:"id"`
-	ProjectID uuid.UUID `json:"project_id"`
-	Code      *string   `json:"code"`
-	Enabled   *bool     `json:"enabled"`
+	ID           uuid.UUID `json:"id"`
+	ProjectID    uuid.UUID `json:"project_id"`
+	Code         *string   `json:"code"`
+	Enabled      *bool     `json:"enabled"`
+	EventPattern *string   `json:"event_pattern"`
 }
 
 func (q *Queries) UpdateFunction(ctx context.Context, arg UpdateFunctionParams) (CoreFunction, error) {
@@ -244,6 +295,7 @@ func (q *Queries) UpdateFunction(ctx context.Context, arg UpdateFunctionParams) 
 		arg.ProjectID,
 		arg.Code,
 		arg.Enabled,
+		arg.EventPattern,
 	)
 	var i CoreFunction
 	err := row.Scan(
@@ -255,6 +307,7 @@ func (q *Queries) UpdateFunction(ctx context.Context, arg UpdateFunctionParams) 
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EventPattern,
 	)
 	return i, err
 }

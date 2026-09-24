@@ -21,6 +21,10 @@ export const $Function = {
             type: 'boolean',
             isRequired: true,
         },
+        event_pattern: {
+            type: 'string',
+            description: `Domain-event pattern that triggers this function — "document.*", "*", exact type. Empty = never.`,
+        },
         created_at: {
             type: 'string',
             isRequired: true,

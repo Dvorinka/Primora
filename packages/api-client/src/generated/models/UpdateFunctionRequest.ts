@@ -5,5 +5,9 @@
 export type UpdateFunctionRequest = {
     code?: string;
     enabled?: boolean;
+    /**
+     * Replace the trigger pattern; "" disables event triggers.
+     */
+    event_pattern?: string;
 };
 

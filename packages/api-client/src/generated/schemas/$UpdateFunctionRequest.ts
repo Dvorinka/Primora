@@ -10,5 +10,9 @@ export const $UpdateFunctionRequest = {
         enabled: {
             type: 'boolean',
         },
+        event_pattern: {
+            type: 'string',
+            description: `Replace the trigger pattern; "" disables event triggers.`,
+        },
     },
 } as const;

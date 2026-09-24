@@ -34,6 +34,9 @@ RUN apt-get update \
  && chmod +x /usr/local/bin/dbx-mcp \
  && rm /tmp/dbx-mcp.tar.gz
 
+# Functions runtime — bun static binary from the official image (multi-arch).
+COPY --from=oven/bun:1.3.14 /usr/local/bin/bun /usr/local/bin/bun
+
 COPY --from=builder /primora-backend /usr/local/bin/primora-backend
 COPY --from=builder /app/db ./db
 COPY --from=builder /app/openapi ./openapi

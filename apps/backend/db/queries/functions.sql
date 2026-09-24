@@ -1,6 +1,6 @@
 -- name: CreateFunction :one
-INSERT INTO core.functions (project_id, name, code, runtime)
-VALUES ($1, $2, $3, $4)
+INSERT INTO core.functions (project_id, name, code, runtime, event_pattern)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING *;
 
 -- name: GetFunction :one
@@ -18,6 +18,7 @@ ORDER BY name;
 UPDATE core.functions
 SET code = COALESCE(sqlc.narg('code'), code),
     enabled = COALESCE(sqlc.narg('enabled'), enabled),
+    event_pattern = COALESCE(sqlc.narg('event_pattern'), event_pattern),
     updated_at = NOW()
 WHERE id = $1 AND project_id = $2
 RETURNING *;
@@ -35,3 +36,10 @@ SELECT * FROM core.function_runs
 WHERE function_id = $1
 ORDER BY created_at DESC
 LIMIT $2;
+
+-- name: ListFunctionsForEvent :many
+SELECT * FROM core.functions
+WHERE project_id = $1
+  AND enabled = TRUE
+  AND event_pattern <> ''
+  AND ($2 LIKE REPLACE(event_pattern, '*', '%') OR event_pattern = '*');

@@ -15,6 +15,10 @@ export const $CreateInboundHookRequest = {
             type: 'string',
             description: `Required when mode=job — scheduled job to trigger.`,
         },
+        function_id: {
+            type: 'string',
+            description: `Required when mode=function — invoked with the received body.`,
+        },
         secret: {
             type: 'string',
             description: `Optional — stored encrypted; callers must then sign bodies with X-Primora-Signature.`,

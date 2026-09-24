@@ -6,6 +6,10 @@ export type CreateFunctionRequest = {
     name: string;
     code: string;
     runtime?: CreateFunctionRequest.runtime;
+    /**
+     * Optional — "document.*", "*", or an exact event type.
+     */
+    event_pattern?: string;
 };
 export namespace CreateFunctionRequest {
     export enum runtime {
