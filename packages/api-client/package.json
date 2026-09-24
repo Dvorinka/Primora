@@ -6,7 +6,7 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
-    "generate": "openapi --input ../../apps/backend/openapi/openapi.yaml --output ./src/generated --client fetch --useOptions --exportSchemas true"
+    "generate": "openapi --input ../../apps/backend/openapi/openapi.yaml --output ./src/generated --client fetch --useOptions --exportSchemas true && node ./postgen.mjs"
   },
   "dependencies": {
     "cross-fetch": "^4.1.0"

@@ -22,6 +22,7 @@ import { demoService } from "../lib/demo-mode";
 import { Badge } from "../components/Badge";
 import { Modal } from "../components/Modal";
 import { Input, Select } from "../components/Input";
+import { errorMessage } from "../lib/api";
 import {
   IconPlus,
   IconRefresh,
@@ -40,7 +41,7 @@ interface IntegrationsPageProps {
 
 type Tab = "integrations" | "webhooks";
 
-const err = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const err = (e: unknown) => errorMessage(e, String(e));
 const intSvc = (demo: boolean) =>
   (demo ? (demoService as unknown as typeof IntegrationsService) : IntegrationsService);
 const hookSvc = (demo: boolean) =>
@@ -798,7 +799,7 @@ export function IntegrationsPage(props: IntegrationsPageProps) {
         </Show>
       </Show>
 
-      <Modal open={showCreateIntegration()} onClose={() => setShowCreateIntegration(false)} title="Add connector" size="md">
+      <Modal error={error()} open={showCreateIntegration()} onClose={() => setShowCreateIntegration(false)} title="Add connector" size="md">
         <form onSubmit={createIntegration} class="space-y-4">
           <Select label="Type" value="rybbit" disabled options={[{ value: "rybbit", label: "Rybbit — web analytics" }]} />
           <Input
@@ -839,7 +840,7 @@ export function IntegrationsPage(props: IntegrationsPageProps) {
         </form>
       </Modal>
 
-      <Modal open={showCreateWebhook()} onClose={() => setShowCreateWebhook(false)} title="Add webhook" size="md">
+      <Modal error={error()} open={showCreateWebhook()} onClose={() => setShowCreateWebhook(false)} title="Add webhook" size="md">
         <form onSubmit={createWebhook} class="space-y-4">
           <Input
             label="Endpoint URL"
@@ -883,7 +884,7 @@ export function IntegrationsPage(props: IntegrationsPageProps) {
         </form>
       </Modal>
 
-      <Modal open={showCreateAlert()} onClose={() => setShowCreateAlert(false)} title="Add alert rule" size="md">
+      <Modal error={error()} open={showCreateAlert()} onClose={() => setShowCreateAlert(false)} title="Add alert rule" size="md">
         <form onSubmit={createAlertRule} class="space-y-4">
           <Input
             label="Name"
@@ -935,7 +936,7 @@ export function IntegrationsPage(props: IntegrationsPageProps) {
         </form>
       </Modal>
 
-      <Modal open={showCreateInbound()} onClose={() => setShowCreateInbound(false)} title="Add inbound hook" size="md">
+      <Modal error={error()} open={showCreateInbound()} onClose={() => setShowCreateInbound(false)} title="Add inbound hook" size="md">
         <form onSubmit={createInboundHook} class="space-y-4">
           <Input
             label="Name"

@@ -228,6 +228,11 @@ func (s *PlatformService) CreateFunction(ctx context.Context, actor *models.Acto
 	if err != nil {
 		return FunctionSummary{}, err
 	}
+	if project, err := s.repo.Queries().GetProjectByID(ctx, projectID); err == nil {
+		_, _ = s.repo.Queries().CreateAuditLog(ctx, newAuditParams(project.OrganizationID, projectID, actor, requestID, "function.created", "function", row.ID.String(), map[string]any{
+			"name": row.Name, "runtime": row.Runtime,
+		}))
+	}
 	return functionSummary(row), nil
 }
 
@@ -282,6 +287,11 @@ func (s *PlatformService) UpdateFunction(ctx context.Context, actor *models.Acto
 	if err != nil {
 		return FunctionSummary{}, err
 	}
+	if project, err := s.repo.Queries().GetProjectByID(ctx, row.ProjectID); err == nil {
+		_, _ = s.repo.Queries().CreateAuditLog(ctx, newAuditParams(project.OrganizationID, row.ProjectID, actor, requestID, "function.updated", "function", functionID.String(), map[string]any{
+			"name": updated.Name,
+		}))
+	}
 	return functionSummary(updated), nil
 }
 
@@ -293,10 +303,18 @@ func (s *PlatformService) DeleteFunction(ctx context.Context, actor *models.Acto
 	if err := s.requireProjectRole(ctx, actor, row.ProjectID, "admin", "developer"); err != nil {
 		return err
 	}
-	return s.repo.Queries().DeleteFunction(ctx, db.DeleteFunctionParams{
+	if err := s.repo.Queries().DeleteFunction(ctx, db.DeleteFunctionParams{
 		ID:        functionID,
 		ProjectID: row.ProjectID,
-	})
+	}); err != nil {
+		return err
+	}
+	if project, err := s.repo.Queries().GetProjectByID(ctx, row.ProjectID); err == nil {
+		_, _ = s.repo.Queries().CreateAuditLog(ctx, newAuditParams(project.OrganizationID, row.ProjectID, actor, requestID, "function.deleted", "function", functionID.String(), map[string]any{
+			"name": row.Name,
+		}))
+	}
+	return nil
 }
 
 // InvokeFunction executes a function with a JSON payload, records the run,
@@ -309,7 +327,16 @@ func (s *PlatformService) InvokeFunction(ctx context.Context, actor *models.Acto
 	if err := s.requireProjectRole(ctx, actor, row.ProjectID, "admin", "developer"); err != nil {
 		return FunctionRunSummary{}, err
 	}
-	return s.executeFunction(ctx, row, payload, "manual")
+	summary, err := s.executeFunction(ctx, row, payload, "manual")
+	if err != nil {
+		return FunctionRunSummary{}, err
+	}
+	if project, err := s.repo.Queries().GetProjectByID(ctx, row.ProjectID); err == nil {
+		_, _ = s.repo.Queries().CreateAuditLog(ctx, newAuditParams(project.OrganizationID, row.ProjectID, actor, requestID, "function.invoked", "function", functionID.String(), map[string]any{
+			"name": row.Name, "status": summary.Status,
+		}))
+	}
+	return summary, nil
 }
 
 // executeFunction runs a function row and records the outcome — shared by

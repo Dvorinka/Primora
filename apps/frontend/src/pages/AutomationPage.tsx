@@ -12,6 +12,7 @@ import { demoService } from "../lib/demo-mode";
 import { Badge } from "../components/Badge";
 import { Modal } from "../components/Modal";
 import { Input, Textarea } from "../components/Input";
+import { errorMessage } from "../lib/api";
 import {
   IconPlus,
   IconRefresh,
@@ -37,7 +38,7 @@ interface RealtimeEvent {
   data: Record<string, unknown>;
 }
 
-const err = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const err = (e: unknown) => errorMessage(e, String(e));
 const svc = (demo: boolean) =>
   (demo ? (demoService as unknown as typeof AutomationService) : AutomationService);
 
@@ -532,7 +533,7 @@ export function AutomationPage(props: AutomationPageProps) {
         </div>
       </Show>
 
-      <Modal open={showCreate()} onClose={() => setShowCreate(false)} title="New schedule" size="md">
+      <Modal error={error()} open={showCreate()} onClose={() => setShowCreate(false)} title="New schedule" size="md">
         <form onSubmit={createJob} class="space-y-4">
           <Input
             label="Name"

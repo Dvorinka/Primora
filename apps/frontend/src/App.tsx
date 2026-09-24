@@ -26,7 +26,7 @@ import {
 import { Show, createEffect, createMemo, createResource, createSignal, onCleanup } from "solid-js";
 
 import { authClient, fetchApiToken } from "./lib/auth-client";
-import { configureApiToken } from "./lib/api";
+import { configureApiToken, errorMessage } from "./lib/api";
 import { isDemoMode, disableDemoMode, enableDemoMode, demoSession, demoService } from "./lib/demo-mode";
 import {
   AppShell,
@@ -84,11 +84,7 @@ type ObjectPreview =
   | { kind: "unsupported"; message: string };
 
 function getErrorMessage(error: unknown, fallback: string) {
-  if (error && typeof error === "object" && "message" in error) {
-    const message = (error as { message?: unknown }).message;
-    if (typeof message === "string" && message.length > 0) return message;
-  }
-  return fallback;
+  return errorMessage(error, fallback);
 }
 
 function formatDate(value?: string | null) {

@@ -10,6 +10,7 @@ import { Modal, ModalFooter } from "../components/Modal";
 import { Input, Select, Textarea } from "../components/Input";
 import { Badge } from "../components/Badge";
 import { IconPlus, IconTrash, IconPlay, IconTerminal } from "../components/Icons";
+import { errorMessage } from "../lib/api";
 
 interface FunctionsPageProps {
   projectID?: string;
@@ -17,7 +18,7 @@ interface FunctionsPageProps {
   demoMode: boolean;
 }
 
-const err = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const err = (e: unknown) => errorMessage(e, String(e));
 const fmtTime = (ts?: string) => (ts ? new Date(ts).toLocaleString() : "—");
 
 const STARTER_CODE = `// The payload arrives on stdin and as PRIMORA_PAYLOAD.
@@ -409,7 +410,7 @@ export function FunctionsPage(props: FunctionsPageProps) {
         </div>
       </Show>
 
-      <Modal open={showCreate()} onClose={() => setShowCreate(false)} title="New function">
+      <Modal error={error()} open={showCreate()} onClose={() => setShowCreate(false)} title="New function">
         <form onSubmit={create}>
           <div class="modal-body">
             <Input

@@ -12,3 +12,20 @@ OpenAPI.TOKEN = async () => (await fetchApiToken()) ?? "";
 export function configureApiToken(tokenResolver?: () => Promise<string | undefined>) {
   OpenAPI.TOKEN = tokenResolver ? async () => (await tokenResolver()) ?? "" : async () => (await fetchApiToken()) ?? "";
 }
+
+/**
+ * Extracts a human-readable message from an API failure.
+ * ApiError.message is only the HTTP status text ("Bad Request") — the backend
+ * sends the actionable reason in body.error.message. Prefer it.
+ */
+export function errorMessage(error: unknown, fallback = "Request failed"): string {
+  if (error && typeof error === "object") {
+    const body = (error as { body?: { error?: { message?: unknown } } }).body;
+    if (typeof body?.error?.message === "string" && body.error.message.length > 0) {
+      return body.error.message;
+    }
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.length > 0) return message;
+  }
+  return fallback;
+}

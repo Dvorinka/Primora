@@ -1,4 +1,4 @@
-import { type JSX, Show, createEffect, onCleanup, splitProps } from "solid-js";
+import { type JSX, Show, createEffect, createUniqueId, onCleanup, splitProps } from "solid-js";
 import { Portal } from "solid-js/web";
 
 interface ModalProps extends JSX.HTMLAttributes<HTMLDivElement> {
@@ -6,6 +6,7 @@ interface ModalProps extends JSX.HTMLAttributes<HTMLDivElement> {
   onClose: () => void;
   title?: string;
   description?: string;
+  error?: JSX.Element;
   size?: "sm" | "md" | "lg" | "xl" | "full";
   closeOnEscape?: boolean;
   closeOnBackdrop?: boolean;
@@ -26,6 +27,7 @@ export function Modal(props: ModalProps) {
     "onClose",
     "title",
     "description",
+    "error",
     "size",
     "closeOnEscape",
     "closeOnBackdrop",
@@ -38,6 +40,8 @@ export function Modal(props: ModalProps) {
   const closeOnEscape = () => local.closeOnEscape ?? true;
   const closeOnBackdrop = () => local.closeOnBackdrop ?? true;
   const showClose = () => local.showClose ?? true;
+  const titleId = createUniqueId();
+  const descriptionId = createUniqueId();
 
   createEffect(() => {
     if (local.open) {
@@ -71,8 +75,8 @@ export function Modal(props: ModalProps) {
           class="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
           role="dialog"
           aria-modal="true"
-          aria-labelledby={local.title ? "modal-title" : undefined}
-          aria-describedby={local.description ? "modal-description" : undefined}
+          aria-labelledby={local.title ? titleId : undefined}
+          aria-describedby={local.description ? descriptionId : undefined}
         >
           {/* Backdrop */}
           <div
@@ -91,12 +95,12 @@ export function Modal(props: ModalProps) {
               <div class="flex items-start justify-between p-6 border-b border-border">
                 <div class="flex-1">
                   <Show when={local.title}>
-                    <h2 id="modal-title" class="text-xl font-semibold text-text-1">
+                    <h2 id={titleId} class="text-xl font-semibold text-text-1">
                       {local.title}
                     </h2>
                   </Show>
                   <Show when={local.description}>
-                    <p id="modal-description" class="mt-1.5 text-sm text-text-2">
+                    <p id={descriptionId} class="mt-1.5 text-sm text-text-2">
                       {local.description}
                     </p>
                   </Show>
@@ -116,7 +120,14 @@ export function Modal(props: ModalProps) {
             </Show>
 
             {/* Body */}
-            <div class="p-6">{local.children}</div>
+            <div class="p-6">
+              <Show when={local.error}>
+                <div class="message message-error mb-4" role="alert">
+                  {local.error}
+                </div>
+              </Show>
+              {local.children}
+            </div>
           </div>
         </div>
       </Portal>

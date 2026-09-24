@@ -6,6 +6,7 @@ import {
 import { Modal } from "../components/Modal";
 import { Input, Select, Textarea } from "../components/Input";
 import { IconPlus, IconTrash, IconCopy, IconRefresh, IconKey } from "../components/Icons";
+import { errorMessage } from "../lib/api";
 
 interface VaultPageProps {
   projectID?: string;
@@ -13,7 +14,7 @@ interface VaultPageProps {
   demoMode: boolean;
 }
 
-const err = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const err = (e: unknown) => errorMessage(e, String(e));
 const fmtTime = (ts?: string) => (ts ? new Date(ts).toLocaleString() : "—");
 
 const DEMO_SECRETS: ProjectSecret[] = [
@@ -376,7 +377,7 @@ export function VaultPage(props: VaultPageProps) {
         </div>
       </Show>
 
-      <Modal open={showCreate()} onClose={() => setShowCreate(false)} title="New secret" size="md">
+      <Modal error={error()} open={showCreate()} onClose={() => setShowCreate(false)} title="New secret" size="md">
         <form onSubmit={createSecret} class="space-y-4">
           <Input label="Name" placeholder="STRIPE_SECRET" value={form().name} onInput={(e) => setForm({ ...form(), name: e.currentTarget.value })} required />
           <Input label="Value" type="password" placeholder="sk_live_…" value={form().value} onInput={(e) => setForm({ ...form(), value: e.currentTarget.value })} required />
@@ -389,7 +390,7 @@ export function VaultPage(props: VaultPageProps) {
         </form>
       </Modal>
 
-      <Modal open={showImport()} onClose={() => setShowImport(false)} title="Import .env" size="md">
+      <Modal error={error()} open={showImport()} onClose={() => setShowImport(false)} title="Import .env" size="md">
         <form onSubmit={importEnv} class="space-y-4">
           <Textarea label="Paste .env contents" rows={8} placeholder={"KEY=value\nOTHER=…"} value={importText()} onInput={(e) => setImportText(e.currentTarget.value)} class="font-mono text-sm" />
           <p class="text-xs text-text-2">Existing names are overwritten. Keys that aren't env-var-safe are skipped.</p>
