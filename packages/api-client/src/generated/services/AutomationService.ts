@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { CreateScheduledJobRequest } from '../models/CreateScheduledJobRequest';
+import type { PublishEventRequest } from '../models/PublishEventRequest';
 import type { ScheduledJobCreateResponse } from '../models/ScheduledJobCreateResponse';
 import type { ScheduledJobListResponse } from '../models/ScheduledJobListResponse';
 import type { ScheduledJobRun } from '../models/ScheduledJobRun';
@@ -12,6 +13,35 @@ import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class AutomationService {
+    /**
+     * Publishes a client-authored domain event. Type must be in the custom.* namespace; the event fans out to realtime subscribers, matching webhooks, and event_pattern functions.
+     * @returns any Event accepted for fan-out
+     * @throws ApiError
+     */
+    public static publishProjectEvent({
+        projectId,
+        requestBody,
+    }: {
+        projectId: string,
+        requestBody: PublishEventRequest,
+    }): CancelablePromise<{
+        published?: string;
+    }> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/projects/{projectID}/events',
+            path: {
+                'projectID': projectId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Error response`,
+                401: `Error response`,
+                403: `Error response`,
+            },
+        });
+    }
     /**
      * @returns ScheduledJobListResponse Scheduled jobs for the project
      * @throws ApiError
@@ -185,6 +215,29 @@ export class AutomationService {
             query: {
                 'api_key': apiKey,
                 'token': token,
+            },
+            errors: {
+                401: `Error response`,
+            },
+        });
+    }
+    /**
+     * Count of clients currently subscribed to the project's realtime stream. The stream also emits presence.update events on every join/leave.
+     * @returns any Online subscriber count
+     * @throws ApiError
+     */
+    public static getRealtimePresence({
+        projectId,
+    }: {
+        projectId: string,
+    }): CancelablePromise<{
+        online?: number;
+    }> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/projects/{projectID}/realtime/presence',
+            path: {
+                'projectID': projectId,
             },
             errors: {
                 401: `Error response`,

@@ -2,8 +2,10 @@
 // (GET /api/v1/projects/:id/realtime/stream). EventSource can't send auth
 // headers, so the stream is consumed via fetch + ReadableStream.
 //
-// jarvis: ceiling — subscriptions only. Presence and client-broadcast are a
-// protocol question; add when a concrete consumer needs them.
+// Presence: the server broadcasts `presence.update` {online: n} on every
+// subscriber join/leave — subscribe via channel("presence").on("update").
+// Client-broadcast: publish() emits a custom.* event through the server
+// fan-out (webhooks and event_pattern functions fire too).
 
 export interface RealtimeEvent {
   /** e.g. "document.created", "object.deleted", "issue.created", "deploy.marker" */
@@ -41,6 +43,13 @@ export interface RealtimeClient {
    * `channel("documents")` and `channel("document")` are equivalent.
    */
   channel(name: string): RealtimeChannel;
+  /**
+   * Publishes a `custom.*` event to the project — realtime subscribers,
+   * matching webhooks, and event_pattern functions all receive it.
+   */
+  publish(type: string, data?: Record<string, unknown>): Promise<void>;
+  /** Current count of clients subscribed to the project's realtime stream. */
+  presence(): Promise<number>;
   close(): void;
   readonly state: RealtimeState;
 }
@@ -141,6 +150,27 @@ export function createRealtimeClient(opts: RealtimeClientOptions): RealtimeClien
           return () => listeners.delete(l);
         },
       };
+    },
+    async publish(type, data = {}) {
+      const res = await fetch(
+        opts.endpoint.replace(/\/$/, "") +
+          `/api/v1/projects/${encodeURIComponent(opts.projectId)}/events`,
+        {
+          method: "POST",
+          headers: { "X-API-Key": opts.key, "Content-Type": "application/json" },
+          body: JSON.stringify({ type, data }),
+        },
+      );
+      if (!res.ok) throw new Error(`publish event: HTTP ${res.status}`);
+    },
+    async presence() {
+      const res = await fetch(
+        opts.endpoint.replace(/\/$/, "") +
+          `/api/v1/projects/${encodeURIComponent(opts.projectId)}/realtime/presence`,
+        { headers: { "X-API-Key": opts.key } },
+      );
+      if (!res.ok) throw new Error(`presence: HTTP ${res.status}`);
+      return ((await res.json()) as { online: number }).online;
     },
     close: () => abort.abort(),
     get state() {

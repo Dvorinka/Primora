@@ -3,6 +3,7 @@ import { cac } from "cac";
 import { cmdLogin, cmdLogout, cmdWhoami } from "./commands/auth.js";
 import { cmdAuditList } from "./commands/audit.js";
 import { cmdDocumentsList } from "./commands/documents.js";
+import { cmdEventsSend } from "./commands/events.js";
 import { cmdBucketsCreate, cmdBucketsList } from "./commands/buckets.js";
 import { cmdContext, cmdUse } from "./commands/context.js";
 import { cmdInject } from "./commands/inject.js";
@@ -173,6 +174,12 @@ cli
   .option("--limit <n>", "Page size (default 50)")
   .option("--offset <n>", "Page offset")
   .action(cmdDocumentsList);
+
+cli
+  .command("events:send <type>", "Publish a custom.* event to realtime subscribers, webhooks, and functions")
+  .option("--project <id>", "Project override")
+  .option("--data <json>", "JSON object payload")
+  .action(cmdEventsSend);
 
 cli
   .command("audit:list", "List audit events for the current project")

@@ -1331,6 +1331,37 @@ paths:
                 $ref: "#/components/schemas/TelemetryEventListResponse"
         "401":
           $ref: "#/components/responses/ErrorResponse"
+    post:
+      tags: [Automation]
+      operationId: publishProjectEvent
+      summary: Publishes a client-authored domain event. Type must be in the custom.* namespace; the event fans out to realtime subscribers, matching webhooks, and event_pattern functions.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PublishEventRequest"
+      responses:
+        "202":
+          description: Event accepted for fan-out
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  published:
+                    type: string
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/ErrorResponse"
   /projects/{projectID}/issues:
     get:
       tags: [Telemetry]
@@ -1885,6 +1916,28 @@ paths:
       responses:
         "200":
           description: text/event-stream of {type, occurred_at, data} messages
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/realtime/presence:
+    get:
+      tags: [Automation]
+      operationId: getRealtimePresence
+      summary: Count of clients currently subscribed to the project's realtime stream. The stream also emits presence.update events on every join/leave.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "200":
+          description: Online subscriber count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  online:
+                    type: integer
         "401":
           $ref: "#/components/responses/ErrorResponse"
   /projects/{projectID}/secrets:
@@ -3191,6 +3244,18 @@ components:
           type: string
           format: date-time
       required: [url, method, expires_at]
+    PublishEventRequest:
+      type: object
+      properties:
+        type:
+          type: string
+          pattern: '^custom\.[a-z0-9][a-z0-9_.-]{0,62}$'
+          description: Event type in the custom.* namespace — realtime subscribers, matching webhooks, and event_pattern functions all fire.
+        data:
+          type: object
+          additionalProperties: true
+          description: Arbitrary JSON payload carried to subscribers.
+      required: [type]
     PaginationMetadata:
       type: object
       properties:

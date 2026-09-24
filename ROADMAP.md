@@ -309,8 +309,14 @@ Channel subscriptions over the Phase 7 SSE stream, in `@primora/client`.
   with capped backoff, `onStateChange` lifecycle.
 - `channel("documents").on("created", cb)` — namespaces `document`, `object`,
   `issue`, `deploy`, `"*"` for everything; trailing `s` optional.
-- Presence and client-broadcast deliberately deferred — protocol question,
-  no consumer yet.
+- **Presence** ✅ — server tracks realtime subscribers per project;
+  `presence.update` {online: n} broadcasts on every join/leave (realtime-only,
+  never fans out to webhooks/functions), `GET …/realtime/presence` reads the
+  count, `client.presence()` wraps it.
+- **Client events** ✅ — `POST /projects/:id/events` publishes `custom.*`
+  types through the standard fan-out (realtime + webhooks + functions);
+  `client.publish("custom.x", data)` and `primora events:send` both reach it.
+  The `custom.*` prefix is enforced so clients can't spoof system events.
 
 ## Notifications — alert rules (unreleased)
 

@@ -13,7 +13,9 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -42,6 +44,10 @@ type PlatformService struct {
 	alerts         *alertEvaluator
 	functions      FunctionRunner
 	logger         *slog.Logger
+
+	// presenceMu guards presence: realtime subscriber counts per project.
+	presenceMu sync.Mutex
+	presence   map[uuid.UUID]int
 }
 
 type BootstrapInput struct {
@@ -228,7 +234,7 @@ type InvitationSummary struct {
 }
 
 func NewPlatformService(repo *repositories.CoreRepository, store storage.Store, mailer *Mailer, publicURL string, dbxClient *dbx.Client, enc *secrets.Encryptor, logger *slog.Logger, functions FunctionRunner) *PlatformService {
-	s := &PlatformService{repo: repo, store: store, mailer: mailer, publicURL: publicURL, dbx: dbxClient, hub: NewEventHub(), realtime: NewEventHub(), enc: enc, functions: functions, logger: logger}
+	s := &PlatformService{repo: repo, store: store, mailer: mailer, publicURL: publicURL, dbx: dbxClient, hub: NewEventHub(), realtime: NewEventHub(), enc: enc, functions: functions, logger: logger, presence: map[uuid.UUID]int{}}
 	if enc != nil {
 		s.dispatcher = NewWebhookDispatcher(repo.Queries(), enc, logger)
 		s.dispatcher.Start(context.Background())
@@ -333,16 +339,70 @@ func (s *PlatformService) publishEvent(ctx context.Context, projectID uuid.UUID,
 	s.triggerFunctionsForEvent(ctx, projectID, eventType, data)
 }
 
-// SubscribeRealtime registers an SSE consumer for project domain events.
+// SubscribeRealtime registers an SSE consumer for project domain events and
+// bumps the project's presence count.
 func (s *PlatformService) SubscribeRealtime(ctx context.Context, actor *models.Actor, projectID uuid.UUID) (chan []byte, error) {
 	if err := s.requireProjectRole(ctx, actor, projectID, "admin", "developer", "viewer"); err != nil {
 		return nil, err
 	}
-	return s.realtime.Subscribe(projectID.String()), nil
+	ch := s.realtime.Subscribe(projectID.String())
+	s.bumpPresence(projectID, 1)
+	return ch, nil
 }
 
 func (s *PlatformService) UnsubscribeRealtime(projectID uuid.UUID, ch chan []byte) {
 	s.realtime.Unsubscribe(projectID.String(), ch)
+	s.bumpPresence(projectID, -1)
+}
+
+// bumpPresence adjusts the online count and broadcasts presence.update to
+// realtime subscribers only — deliberately not through publishEvent, so
+// webhooks and `event_pattern: "*"` functions don't fire on connect noise.
+func (s *PlatformService) bumpPresence(projectID uuid.UUID, delta int) {
+	s.presenceMu.Lock()
+	n := s.presence[projectID] + delta
+	if n <= 0 {
+		delete(s.presence, projectID)
+		n = 0
+	} else {
+		s.presence[projectID] = n
+	}
+	s.presenceMu.Unlock()
+	s.realtime.Broadcast(projectID.String(), map[string]any{
+		"type":        "presence.update",
+		"occurred_at": time.Now().UTC().Format(time.RFC3339),
+		"data":        map[string]any{"online": n},
+	})
+}
+
+// Presence returns the current realtime subscriber count for a project.
+func (s *PlatformService) Presence(ctx context.Context, actor *models.Actor, projectID uuid.UUID) (int, error) {
+	if err := s.requireProjectRole(ctx, actor, projectID, "admin", "developer", "viewer"); err != nil {
+		return 0, err
+	}
+	s.presenceMu.Lock()
+	defer s.presenceMu.Unlock()
+	return s.presence[projectID], nil
+}
+
+var customEventTypeRe = regexp.MustCompile(`^custom\.[a-z0-9][a-z0-9_.-]{0,62}$`)
+
+// PublishProjectEvent lets a member emit a custom domain event — realtime
+// subscribers, matching webhooks, and event_pattern functions all fire via
+// the standard publishEvent fan-out. The custom.* prefix is enforced so
+// clients can't spoof system event types (document.created etc.).
+func (s *PlatformService) PublishProjectEvent(ctx context.Context, actor *models.Actor, projectID uuid.UUID, eventType string, data map[string]any) error {
+	if err := s.requireProjectRole(ctx, actor, projectID, "admin", "developer"); err != nil {
+		return err
+	}
+	if !customEventTypeRe.MatchString(eventType) {
+		return errors.New("invalid event type: must match custom.<name> (lowercase letters, digits, dots, dashes)")
+	}
+	if data == nil {
+		data = map[string]any{}
+	}
+	s.publishEvent(ctx, projectID, eventType, data)
+	return nil
 }
 
 func (s *PlatformService) Me(ctx context.Context, actor *models.Actor) (PlatformSummary, error) {
