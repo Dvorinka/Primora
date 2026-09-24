@@ -849,6 +849,24 @@ paths:
         - $ref: "#/components/parameters/CollectionID"
         - $ref: "#/components/parameters/PaginationLimit"
         - $ref: "#/components/parameters/PaginationOffset"
+        - name: filter
+          in: query
+          description: >
+            PostgREST-style filters as comma-separated `field.op.value` terms.
+            Ops: `eq`, `neq`, `gt`, `gte`, `lt`, `lte` (numeric values),
+            `like` (ILIKE), `in` (pipe-separated values, e.g. `role.in.admin|editor`),
+            `is` (`null`|`true`|`false`). Dotted paths index into the document
+            data, e.g. `meta.city.eq.Prague`. Column fields `id`, `created_at`,
+            `updated_at` are also allowed.
+          schema: { type: string }
+          example: "status.eq.active,age.gt.18"
+        - name: order
+          in: query
+          description: >
+            Comma-separated `field.asc|field.desc` list (default `created_at.desc`).
+            Dotted paths index into document data.
+          schema: { type: string }
+          example: "name.asc,created_at.desc"
       responses:
         "200":
           description: List of documents in the collection

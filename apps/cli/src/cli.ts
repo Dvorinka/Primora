@@ -2,6 +2,7 @@ import { cac } from "cac";
 
 import { cmdLogin, cmdLogout, cmdWhoami } from "./commands/auth.js";
 import { cmdAuditList } from "./commands/audit.js";
+import { cmdDocumentsList } from "./commands/documents.js";
 import { cmdBucketsCreate, cmdBucketsList } from "./commands/buckets.js";
 import { cmdContext, cmdUse } from "./commands/context.js";
 import { cmdInject } from "./commands/inject.js";
@@ -157,6 +158,16 @@ cli
   .action(cmdJobsRemove);
 
 cli
+  .command("documents:list", "List documents in a collection (PostgREST-style --filter/--order)")
+  .option("--collection <slug|id>", "Collection slug or id (required)")
+  .option("--project <id>", "Project override")
+  .option("--filter <expr>", "field.op.value terms, comma-separated (eq neq gt gte lt lte like in is)")
+  .option("--order <expr>", "field.asc|field.desc list")
+  .option("--limit <n>", "Page size (default 50)")
+  .option("--offset <n>", "Page offset")
+  .action(cmdDocumentsList);
+
+cli
   .command("audit:list", "List audit events for the current project")
   .option("--project <id>", "Project override")
   .option("--q <query>", "Search filter")
@@ -289,6 +300,7 @@ const GROUPS = new Set([
   "projects",
   "buckets",
   "objects",
+  "documents",
   "keys",
   "jobs",
   "audit",

@@ -124,10 +124,22 @@ export class CollectionsService {
         collectionId,
         limit = 50,
         offset,
+        filter,
+        order,
     }: {
         collectionId: string,
         limit?: number,
         offset?: number,
+        /**
+         * PostgREST-style filters as comma-separated `field.op.value` terms. Ops: `eq`, `neq`, `gt`, `gte`, `lt`, `lte` (numeric values), `like` (ILIKE), `in` (pipe-separated values, e.g. `role.in.admin|editor`), `is` (`null`|`true`|`false`). Dotted paths index into the document data, e.g. `meta.city.eq.Prague`. Column fields `id`, `created_at`, `updated_at` are also allowed.
+         *
+         */
+        filter?: string,
+        /**
+         * Comma-separated `field.asc|field.desc` list (default `created_at.desc`). Dotted paths index into document data.
+         *
+         */
+        order?: string,
     }): CancelablePromise<DocumentListResponse> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -138,6 +150,8 @@ export class CollectionsService {
             query: {
                 'limit': limit,
                 'offset': offset,
+                'filter': filter,
+                'order': order,
             },
         });
     }

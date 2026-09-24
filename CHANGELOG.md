@@ -17,6 +17,7 @@ All notable changes to Primora. Format follows [Keep a Changelog](https://keepac
 - **Vault page in the dashboard** — project secrets table with create/update, `.env` import, delete, and copy-to-clipboard reveal; plus a "This machine" card when running inside the desktop shell that drives the local vault through the same Tauri IPC commands as the vault window.
 - **CLI remote mode** — `primora secrets set|get|list|rm|import --remote` operates on the project vault via the existing API auth (`--project` overrides). `get --remote` is the explicit reveal path; `list --remote` never returns values.
 - **Project-vault MCP tools** — `primora_secrets_list` (metadata only) and `primora_secrets_set` (write-only). No reveal or delete tools — agents consume secrets through `secret://NAME` references in job payloads without holding plaintext.
+- **Document filtering and ordering** — `GET /collections/:id/documents` accepts `filter` (comma-separated `field.op.value`; ops `eq neq gt gte lt lte like in is`; dotted paths index into document data, `id`/`created_at`/`updated_at` filterable) and `order` (`field.asc|field.desc` list). Whitelisted parsing + parameterized values; plain lists unchanged. CLI: `primora documents list --collection <slug> --filter … --order …`.
 
 ## [0.7.1] - 2026-09-23
 

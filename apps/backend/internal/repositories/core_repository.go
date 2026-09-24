@@ -27,6 +27,12 @@ func (r *CoreRepository) Queries() *db.Queries {
 	return r.queries
 }
 
+// Pool exposes the pgx pool for dynamic queries sqlc can't express
+// (PostgREST-style document filtering builds its WHERE clause at runtime).
+func (r *CoreRepository) Pool() *pgxpool.Pool {
+	return r.pool
+}
+
 func (r *CoreRepository) WithTx(ctx context.Context, fn func(*db.Queries) error) error {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
