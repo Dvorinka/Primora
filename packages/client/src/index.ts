@@ -1,4 +1,14 @@
 export type PrimoraEventType = "error" | "metric" | "log" | "heartbeat" | "event";
+
+export {
+  createRealtimeClient,
+  type RealtimeChannel,
+  type RealtimeClient,
+  type RealtimeClientOptions,
+  type RealtimeEvent,
+  type RealtimeHandler,
+  type RealtimeState,
+} from "./realtime.js";
 export type PrimoraComponentKind =
   | "frontend" | "backend" | "database" | "android" | "desktop" | "web" | "other";
 

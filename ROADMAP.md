@@ -295,14 +295,22 @@ PostgREST-style filtering and ordering on collection documents.
 - `primora documents list --collection <slug> --filter … --order …` in the
   CLI; `filter`/`order` params in the generated client.
 
+## Phase 8 — Realtime client SDK (unreleased)
+
+Channel subscriptions over the Phase 7 SSE stream, in `@primora/client`.
+
+- `createRealtimeClient({ endpoint, key, projectId })` — fetch +
+  ReadableStream reader (EventSource can't send `X-API-Key`), auto-reconnect
+  with capped backoff, `onStateChange` lifecycle.
+- `channel("documents").on("created", cb)` — namespaces `document`, `object`,
+  `issue`, `deploy`, `"*"` for everything; trailing `s` optional.
+- Presence and client-broadcast deliberately deferred — protocol question,
+  no consumer yet.
+
 ## Future phases — candidates
 
 Ordered loosely by leverage. None committed; each gets scoped when picked.
 
-- **Phase 8 — Client realtime SDK** — `@primora/client` channel
-  subscriptions (`channel('documents').on('created', …)`), presence,
-  and broadcast over the Phase 7 stream. Supabase-realtime parity is a
-  protocol question, not a transport one.
 - **Phase 9 — Functions** — user code on schedule/event/HTTP triggers.
   Deno or Bun isolates in a sidecar; secrets via env, payload via stdin.
   The job runner already supplies the scheduling half.
