@@ -30,6 +30,7 @@ type Querier interface {
 	CreateCollection(ctx context.Context, arg CreateCollectionParams) (CoreCollection, error)
 	CreateDBConnection(ctx context.Context, arg CreateDBConnectionParams) (CoreDbConnection, error)
 	CreateDocument(ctx context.Context, arg CreateDocumentParams) (CoreDocument, error)
+	CreateFunction(ctx context.Context, arg CreateFunctionParams) (CoreFunction, error)
 	CreateInboundHook(ctx context.Context, arg CreateInboundHookParams) (CoreInboundHook, error)
 	CreateIntegration(ctx context.Context, arg CreateIntegrationParams) (CoreIntegration, error)
 	CreateInvitation(ctx context.Context, arg CreateInvitationParams) (CoreProjectInvitation, error)
@@ -44,6 +45,7 @@ type Querier interface {
 	DeleteComponent(ctx context.Context, arg DeleteComponentParams) error
 	DeleteDBConnection(ctx context.Context, arg DeleteDBConnectionParams) (CoreDbConnection, error)
 	DeleteDocument(ctx context.Context, arg DeleteDocumentParams) error
+	DeleteFunction(ctx context.Context, arg DeleteFunctionParams) error
 	DeleteInboundHook(ctx context.Context, arg DeleteInboundHookParams) error
 	DeleteIntegration(ctx context.Context, arg DeleteIntegrationParams) (CoreIntegration, error)
 	DeleteOrganizationByID(ctx context.Context, id uuid.UUID) (CoreOrganization, error)
@@ -67,6 +69,8 @@ type Querier interface {
 	GetDBConnectionByID(ctx context.Context, id uuid.UUID) (CoreDbConnection, error)
 	GetDBConnectionByName(ctx context.Context, arg GetDBConnectionByNameParams) (CoreDbConnection, error)
 	GetDocumentByID(ctx context.Context, arg GetDocumentByIDParams) (CoreDocument, error)
+	GetFunction(ctx context.Context, id uuid.UUID) (CoreFunction, error)
+	GetFunctionByName(ctx context.Context, arg GetFunctionByNameParams) (CoreFunction, error)
 	GetInboundHook(ctx context.Context, arg GetInboundHookParams) (CoreInboundHook, error)
 	GetInboundHookByToken(ctx context.Context, token string) (CoreInboundHook, error)
 	GetIntegrationByID(ctx context.Context, id uuid.UUID) (CoreIntegration, error)
@@ -86,6 +90,7 @@ type Querier interface {
 	HasFingerprintSeen(ctx context.Context, arg HasFingerprintSeenParams) (bool, error)
 	InsertEmailLog(ctx context.Context, arg InsertEmailLogParams) (CoreEmailLog, error)
 	InsertEvent(ctx context.Context, arg InsertEventParams) (CoreEvent, error)
+	InsertFunctionRun(ctx context.Context, arg InsertFunctionRunParams) (CoreFunctionRun, error)
 	InsertScheduledJobRun(ctx context.Context, arg InsertScheduledJobRunParams) (CoreScheduledJobRun, error)
 	InsertWebhookDelivery(ctx context.Context, arg InsertWebhookDeliveryParams) (CoreWebhookDelivery, error)
 	// Per-component most recent heartbeat — heartbeat_silence detection.
@@ -105,6 +110,8 @@ type Querier interface {
 	ListEnabledAlertRules(ctx context.Context) ([]CoreAlertRule, error)
 	ListErrorGroups(ctx context.Context, arg ListErrorGroupsParams) ([]ListErrorGroupsRow, error)
 	ListEvents(ctx context.Context, arg ListEventsParams) ([]ListEventsRow, error)
+	ListFunctionRuns(ctx context.Context, arg ListFunctionRunsParams) ([]CoreFunctionRun, error)
+	ListFunctions(ctx context.Context, projectID uuid.UUID) ([]CoreFunction, error)
 	ListInboundHooks(ctx context.Context, projectID uuid.UUID) ([]CoreInboundHook, error)
 	ListIntegrations(ctx context.Context, projectID uuid.UUID) ([]CoreIntegration, error)
 	ListInvitationsForOrganization(ctx context.Context, organizationID uuid.UUID) ([]ListInvitationsForOrganizationRow, error)
@@ -150,6 +157,7 @@ type Querier interface {
 	UpdateBucketByID(ctx context.Context, arg UpdateBucketByIDParams) (CoreBucket, error)
 	UpdateCollection(ctx context.Context, arg UpdateCollectionParams) (CoreCollection, error)
 	UpdateDocument(ctx context.Context, arg UpdateDocumentParams) (CoreDocument, error)
+	UpdateFunction(ctx context.Context, arg UpdateFunctionParams) (CoreFunction, error)
 	UpdateIntegrationHealth(ctx context.Context, arg UpdateIntegrationHealthParams) error
 	UpdateOrganizationByID(ctx context.Context, arg UpdateOrganizationByIDParams) (CoreOrganization, error)
 	UpdateOrganizationMemberRole(ctx context.Context, arg UpdateOrganizationMemberRoleParams) (CoreOrganizationMember, error)

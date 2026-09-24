@@ -112,7 +112,7 @@ func Bootstrap(ctx context.Context) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("encryption key: %w", err)
 	}
-	platform := services.NewPlatformService(repo, store, services.NewMailer(cfg), os.Getenv("VITE_APP_URL"), dbxClient, encryptor, logger)
+	platform := services.NewPlatformService(repo, store, services.NewMailer(cfg), os.Getenv("VITE_APP_URL"), dbxClient, encryptor, logger, services.NewExecRunner(cfg.FunctionsRuntime, cfg.FunctionsTimeout, cfg.FunctionsMaxBytes))
 	settings := services.NewSettingsService(repo, encryptor)
 
 	if cfg.Env == "production" {

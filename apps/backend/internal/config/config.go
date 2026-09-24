@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Config struct {
@@ -45,6 +46,12 @@ type Config struct {
 	S3SecretAccessKey string
 	S3Prefix         string
 	S3PathStyle      bool
+
+	// Functions runtime: binary name/path ("auto" resolves per-function
+	// runtime from PATH — "bun" or "deno"), timeout and output cap.
+	FunctionsRuntime  string
+	FunctionsTimeout  time.Duration
+	FunctionsMaxBytes int64
 }
 
 // devEncryptionKey is the built-in credential key for local development only.
@@ -80,6 +87,8 @@ func Load() (Config, error) {
 		S3AccessKeyID:         os.Getenv("S3_ACCESS_KEY_ID"),
 		S3SecretAccessKey:     os.Getenv("S3_SECRET_ACCESS_KEY"),
 		S3Prefix:              os.Getenv("S3_PREFIX"),
+		FunctionsRuntime:      getenv("FUNCTIONS_RUNTIME", "auto"),
+		FunctionsMaxBytes:     65536,
 	}
 
 	smtpPort, err := strconv.Atoi(getenv("SMTP_PORT", "1025"))
@@ -117,6 +126,12 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("parse S3_PATH_STYLE: %w", err)
 	}
 	cfg.S3PathStyle = s3PathStyle
+
+	fnTimeout, err := strconv.Atoi(getenv("FUNCTIONS_TIMEOUT_SECONDS", "30"))
+	if err != nil {
+		return Config{}, fmt.Errorf("parse FUNCTIONS_TIMEOUT_SECONDS: %w", err)
+	}
+	cfg.FunctionsTimeout = time.Duration(fnTimeout) * time.Second
 
 	var missing []string
 	if cfg.DatabaseURL == "" {

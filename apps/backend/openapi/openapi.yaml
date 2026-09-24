@@ -2167,6 +2167,182 @@ paths:
                 $ref: "#/components/schemas/EmailLogListResponse"
         "401":
           $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/functions:
+    get:
+      tags: [Functions]
+      operationId: listFunctions
+      summary: List functions in a project.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "200":
+          description: Functions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FunctionListResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+    post:
+      tags: [Functions]
+      operationId: createFunction
+      summary: Create a function (name, JS/TS code, runtime bun|deno).
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFunctionRequest"
+      responses:
+        "201":
+          description: Created function
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Function"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/functions/{functionID}:
+    get:
+      tags: [Functions]
+      operationId: getFunction
+      summary: Function metadata plus its source code.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - name: functionID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Function with code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FunctionDetailResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+    put:
+      tags: [Functions]
+      operationId: updateFunction
+      summary: Update function code and/or enabled state.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - name: functionID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFunctionRequest"
+      responses:
+        "200":
+          description: Updated function
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Function"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+    delete:
+      tags: [Functions]
+      operationId: deleteFunction
+      summary: Delete a function and its run history.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - name: functionID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/functions/{functionID}/invoke:
+    post:
+      tags: [Functions]
+      operationId: invokeFunction
+      summary: Execute the function with a JSON payload on stdin; returns the recorded run. 502 when the run fails or times out.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - name: functionID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvokeFunctionRequest"
+      responses:
+        "200":
+          description: Recorded run (status success)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FunctionRun"
+        "502":
+          description: Recorded run (status error|timeout)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FunctionRun"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/functions/{functionID}/runs:
+    get:
+      tags: [Functions]
+      operationId: listFunctionRuns
+      summary: Recent runs for a function.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - name: functionID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+      responses:
+        "200":
+          description: Function runs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FunctionRunListResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
 components:
   securitySchemes:
     bearerAuth:
@@ -4212,4 +4388,96 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/EmailLogEntry"
+      required: [items]
+    Function:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        runtime:
+          type: string
+          enum: [bun, deno]
+        enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required: [id, name, runtime, enabled, created_at, updated_at]
+    FunctionListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Function"
+      required: [items]
+    FunctionDetailResponse:
+      type: object
+      properties:
+        function:
+          $ref: "#/components/schemas/Function"
+        code:
+          type: string
+      required: [function, code]
+    CreateFunctionRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        code:
+          type: string
+        runtime:
+          type: string
+          enum: [bun, deno]
+          default: bun
+      required: [name, code]
+    UpdateFunctionRequest:
+      type: object
+      properties:
+        code:
+          type: string
+        enabled:
+          type: boolean
+    InvokeFunctionRequest:
+      type: object
+      properties:
+        payload: {}
+    FunctionRun:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        trigger:
+          type: string
+          enum: [manual, schedule, hook]
+        status:
+          type: string
+          enum: [success, error, timeout]
+        exit_code:
+          type: integer
+          nullable: true
+        stdout:
+          type: string
+        stderr:
+          type: string
+        duration_ms:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+      required: [id, trigger, status, stdout, stderr, duration_ms, created_at]
+    FunctionRunListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/FunctionRun"
       required: [items]

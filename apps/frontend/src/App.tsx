@@ -48,6 +48,7 @@ import {
   TelemetryPage,
   IntegrationsPage,
   VaultPage,
+  FunctionsPage,
   LoginPage,
   MembersPage,
   ProjectsPage,
@@ -63,6 +64,7 @@ import {
   IconDatabases,
   IconTelemetry,
   IconZap,
+  IconTerminal,
   IconCollections,
   IconAudit,
   IconAuth,
@@ -1533,6 +1535,7 @@ export default function App() {
     { id: "nav-telemetry", label: "Go to Telemetry", category: "Navigate", icon: <IconTelemetry class="w-4 h-4" />, keywords: ["errors", "metrics", "logs", "observability", "issues"], action: () => setActiveView("telemetry") },
     { id: "nav-automation", label: "Go to Automation", category: "Navigate", icon: <IconZap class="w-4 h-4" />, keywords: ["cron", "jobs", "schedule", "events", "realtime"], action: () => setActiveView("automation") },
     { id: "nav-vault", label: "Go to Vault", category: "Navigate", icon: <IconKey class="w-4 h-4" />, keywords: ["secrets", "env", "credentials", "api key", "token"], action: () => setActiveView("vault") },
+    { id: "nav-functions", label: "Go to Functions", category: "Navigate", icon: <IconTerminal class="w-4 h-4" />, keywords: ["serverless", "code", "lambda", "invoke", "edge"], action: () => setActiveView("functions") },
     { id: "nav-storage", label: "Go to Storage", category: "Navigate", icon: <IconStorage class="w-4 h-4" />, keywords: ["files", "buckets", "upload"], action: () => setActiveView("storage") },
     { id: "nav-collections", label: "Go to Collections", category: "Navigate", icon: <IconCollections class="w-4 h-4" />, keywords: ["documents", "database"], action: () => setActiveView("collections") },
     { id: "nav-auth", label: "Go to Authentication", category: "Navigate", icon: <IconAuth class="w-4 h-4" />, keywords: ["users", "sign in", "ban"], action: () => setActiveView("auth") },
@@ -1778,6 +1781,14 @@ export default function App() {
 
           <Show when={activeView() === "vault"}>
             <VaultPage
+              projectID={activeProject()?.id}
+              canManage={canUpdateProject()}
+              demoMode={isDemo}
+            />
+          </Show>
+
+          <Show when={activeView() === "functions"}>
+            <FunctionsPage
               projectID={activeProject()?.id}
               canManage={canUpdateProject()}
               demoMode={isDemo}

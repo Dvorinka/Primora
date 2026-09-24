@@ -357,9 +357,11 @@ Reusable templates + an operational send log.
 
 Ordered loosely by leverage. None committed; each gets scoped when picked.
 
-- **Phase 9 — Functions** — user code on schedule/event/HTTP triggers.
-  Deno or Bun isolates in a sidecar; secrets via env, payload via stdin.
-  The job runner already supplies the scheduling half.
+- **Phase 9 — Functions** — ✅ first slice shipped: `core.functions` +
+  `core.function_runs`, bun/deno exec runner (stdin payload, env injection,
+  capped output, timeout), invoke API + dashboard page. Remaining
+  candidates: schedule/event/HTTP triggers riding jobs + inbound hooks,
+  and isolated runtimes (sidecar/Firecracker) for untrusted code.
 - **Phase 10 — Storage backends** — ✅ S3-compatible object storage shipped:
   `BACKEND_STORAGE_DRIVER=s3` + `S3_*` env vars, stdlib SigV4, verified
   against a real S3 server. Presigned-URL uploads for large files remain a

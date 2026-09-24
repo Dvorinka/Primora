@@ -266,6 +266,29 @@ type CoreEvent struct {
 	Ts          pgtype.Timestamptz `json:"ts"`
 }
 
+type CoreFunction struct {
+	ID        uuid.UUID          `json:"id"`
+	ProjectID uuid.UUID          `json:"project_id"`
+	Name      string             `json:"name"`
+	Code      string             `json:"code"`
+	Runtime   string             `json:"runtime"`
+	Enabled   bool               `json:"enabled"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type CoreFunctionRun struct {
+	ID         uuid.UUID          `json:"id"`
+	FunctionID uuid.UUID          `json:"function_id"`
+	Trigger    string             `json:"trigger"`
+	Status     string             `json:"status"`
+	ExitCode   *int32             `json:"exit_code"`
+	Stdout     string             `json:"stdout"`
+	Stderr     string             `json:"stderr"`
+	DurationMs int32              `json:"duration_ms"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
 type CoreInboundHook struct {
 	ID             uuid.UUID          `json:"id"`
 	ProjectID      uuid.UUID          `json:"project_id"`

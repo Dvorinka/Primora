@@ -39,6 +39,7 @@ type PlatformService struct {
 	dispatcher     *WebhookDispatcher
 	scheduler      *JobScheduler
 	alerts         *alertEvaluator
+	functions      FunctionRunner
 }
 
 type BootstrapInput struct {
@@ -224,8 +225,8 @@ type InvitationSummary struct {
 	Status          string     `json:"status"`
 }
 
-func NewPlatformService(repo *repositories.CoreRepository, store storage.Store, mailer *Mailer, publicURL string, dbxClient *dbx.Client, enc *secrets.Encryptor, logger *slog.Logger) *PlatformService {
-	s := &PlatformService{repo: repo, store: store, mailer: mailer, publicURL: publicURL, dbx: dbxClient, hub: NewEventHub(), realtime: NewEventHub(), enc: enc}
+func NewPlatformService(repo *repositories.CoreRepository, store storage.Store, mailer *Mailer, publicURL string, dbxClient *dbx.Client, enc *secrets.Encryptor, logger *slog.Logger, functions FunctionRunner) *PlatformService {
+	s := &PlatformService{repo: repo, store: store, mailer: mailer, publicURL: publicURL, dbx: dbxClient, hub: NewEventHub(), realtime: NewEventHub(), enc: enc, functions: functions}
 	if enc != nil {
 		s.dispatcher = NewWebhookDispatcher(repo.Queries(), enc, logger)
 		s.dispatcher.Start(context.Background())
