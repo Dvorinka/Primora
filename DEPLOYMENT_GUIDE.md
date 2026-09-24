@@ -41,7 +41,11 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 | `AUTH_BASE_URL` / `BETTER_AUTH_URL` | public auth URL (`https://host/auth`) | yes |
 | `AUTH_INTERNAL_BASE_URL` | backend → auth internal URL (`http://auth:3001`) | yes |
 | `VITE_APP_URL` / `VITE_AUTH_BASE_URL` / `VITE_API_BASE_URL` | frontend public URLs — **baked into the frontend image at build time** | yes |
-| `BACKEND_STORAGE_ROOT` | object storage directory inside the backend container | yes |
+| `BACKEND_STORAGE_ROOT` | object storage directory inside the backend container (local driver) | yes |
+| `BACKEND_STORAGE_DRIVER` | `local` (default) or `s3` — S3-compatible object storage | no |
+| `S3_ENDPOINT` / `S3_REGION` / `S3_BUCKET` | S3 API endpoint (empty endpoint → AWS `s3.<region>.amazonaws.com`), region, bucket | with `s3` |
+| `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | S3 credentials | with `s3` |
+| `S3_PREFIX` / `S3_PATH_STYLE` | optional key prefix; path-style URLs (default `true`, needed by MinIO/Garage — set `false` for AWS virtual-hosted) | no |
 | `AUTH_ADMIN_EMAILS` | comma-separated emails promoted to auth admin on boot | no |
 | `USER_RATE_LIMIT_PER_MINUTE` / `API_KEY_RATE_LIMIT_PER_MINUTE` | per-identity API rate limits (defaults 240 / 600) | no |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_SECURE` / `MAIL_FROM` | transactional mail; without it verification/reset emails go nowhere | production |

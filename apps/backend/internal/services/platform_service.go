@@ -29,7 +29,7 @@ import (
 
 type PlatformService struct {
 	repo           *repositories.CoreRepository
-	store          *storage.LocalStore
+	store          storage.Store
 	mailer         *Mailer
 	publicURL      string
 	dbx            *dbx.Client
@@ -224,7 +224,7 @@ type InvitationSummary struct {
 	Status          string     `json:"status"`
 }
 
-func NewPlatformService(repo *repositories.CoreRepository, store *storage.LocalStore, mailer *Mailer, publicURL string, dbxClient *dbx.Client, enc *secrets.Encryptor, logger *slog.Logger) *PlatformService {
+func NewPlatformService(repo *repositories.CoreRepository, store storage.Store, mailer *Mailer, publicURL string, dbxClient *dbx.Client, enc *secrets.Encryptor, logger *slog.Logger) *PlatformService {
 	s := &PlatformService{repo: repo, store: store, mailer: mailer, publicURL: publicURL, dbx: dbxClient, hub: NewEventHub(), realtime: NewEventHub(), enc: enc}
 	if enc != nil {
 		s.dispatcher = NewWebhookDispatcher(repo.Queries(), enc, logger)

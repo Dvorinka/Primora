@@ -65,7 +65,7 @@ func (s *LocalStore) Put(ctx context.Context, bucketID, objectKey string, reader
 	}, nil
 }
 
-func (s *LocalStore) Open(bucketID, objectKey string) (*os.File, string, error) {
+func (s *LocalStore) Open(bucketID, objectKey string) (io.ReadCloser, string, error) {
 	cleanKey, err := sanitizeObjectKey(objectKey)
 	if err != nil {
 		return nil, "", err

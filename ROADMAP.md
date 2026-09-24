@@ -360,14 +360,14 @@ Ordered loosely by leverage. None committed; each gets scoped when picked.
 - **Phase 9 — Functions** — user code on schedule/event/HTTP triggers.
   Deno or Bun isolates in a sidecar; secrets via env, payload via stdin.
   The job runner already supplies the scheduling half.
-- **Phase 10 — Storage backends** — S3-compatible object storage behind
-  the existing bucket abstraction (deferred from Phase 6), plus
-  presigned-URL uploads for large files.
-- **HA mode** — leader-elected scheduler + distributed locks so two
-  backend replicas don't double-fire jobs; Postgres advisory locks are
-  enough at this scale.
-- **Email surface** — transactional templates + send log in the
-  dashboard, backed by the auth service's existing SMTP/Resend wiring.
+- **Phase 10 — Storage backends** — ✅ S3-compatible object storage shipped:
+  `BACKEND_STORAGE_DRIVER=s3` + `S3_*` env vars, stdlib SigV4, verified
+  against a real S3 server. Presigned-URL uploads for large files remain a
+  candidate.
+- **HA mode** — ✅ shipped: PostgreSQL advisory-lock leadership for the
+  scheduler and alert evaluator; failover verified with two replicas.
+- **Email surface** — ✅ shipped: templated sends + `core.email_log` +
+  dashboard card; more templates land as new flows need them.
 
 ---
 

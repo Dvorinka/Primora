@@ -35,6 +35,16 @@ type Config struct {
 	SMTPSecure   bool
 
 	EncryptionKey string
+
+	// Object storage: "local" (BACKEND_STORAGE_ROOT) or "s3".
+	StorageDriver    string
+	S3Endpoint       string
+	S3Region         string
+	S3Bucket         string
+	S3AccessKeyID    string
+	S3SecretAccessKey string
+	S3Prefix         string
+	S3PathStyle      bool
 }
 
 // devEncryptionKey is the built-in credential key for local development only.
@@ -63,6 +73,13 @@ func Load() (Config, error) {
 		SMTPUser:              os.Getenv("SMTP_USER"),
 		SMTPPassword:          os.Getenv("SMTP_PASSWORD"),
 		EncryptionKey:         os.Getenv("PRIMORA_ENCRYPTION_KEY"),
+		StorageDriver:         getenv("BACKEND_STORAGE_DRIVER", "local"),
+		S3Endpoint:            os.Getenv("S3_ENDPOINT"),
+		S3Region:              getenv("S3_REGION", "us-east-1"),
+		S3Bucket:              os.Getenv("S3_BUCKET"),
+		S3AccessKeyID:         os.Getenv("S3_ACCESS_KEY_ID"),
+		S3SecretAccessKey:     os.Getenv("S3_SECRET_ACCESS_KEY"),
+		S3Prefix:              os.Getenv("S3_PREFIX"),
 	}
 
 	smtpPort, err := strconv.Atoi(getenv("SMTP_PORT", "1025"))
@@ -95,6 +112,12 @@ func Load() (Config, error) {
 	}
 	cfg.SMTPSecure = smtpSecure
 
+	s3PathStyle, err := strconv.ParseBool(getenv("S3_PATH_STYLE", "true"))
+	if err != nil {
+		return Config{}, fmt.Errorf("parse S3_PATH_STYLE: %w", err)
+	}
+	cfg.S3PathStyle = s3PathStyle
+
 	var missing []string
 	if cfg.DatabaseURL == "" {
 		missing = append(missing, "DATABASE_URL")
@@ -102,8 +125,23 @@ func Load() (Config, error) {
 	if cfg.JWTSecret == "" {
 		missing = append(missing, "JWT_SECRET")
 	}
-	if cfg.StorageRoot == "" {
-		missing = append(missing, "BACKEND_STORAGE_ROOT")
+	switch cfg.StorageDriver {
+	case "local":
+		if cfg.StorageRoot == "" {
+			missing = append(missing, "BACKEND_STORAGE_ROOT")
+		}
+	case "s3":
+		if cfg.S3Bucket == "" {
+			missing = append(missing, "S3_BUCKET")
+		}
+		if cfg.S3AccessKeyID == "" {
+			missing = append(missing, "S3_ACCESS_KEY_ID")
+		}
+		if cfg.S3SecretAccessKey == "" {
+			missing = append(missing, "S3_SECRET_ACCESS_KEY")
+		}
+	default:
+		return Config{}, fmt.Errorf("unknown BACKEND_STORAGE_DRIVER %q (want local or s3)", cfg.StorageDriver)
 	}
 	if cfg.AuthInternalBaseURL == "" {
 		missing = append(missing, "AUTH_INTERNAL_BASE_URL")
