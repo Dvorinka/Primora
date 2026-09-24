@@ -4,6 +4,7 @@ import { cmdLogin, cmdLogout, cmdWhoami } from "./commands/auth.js";
 import { cmdAuditList } from "./commands/audit.js";
 import { cmdBucketsCreate, cmdBucketsList } from "./commands/buckets.js";
 import { cmdContext, cmdUse } from "./commands/context.js";
+import { cmdInject } from "./commands/inject.js";
 import { cmdJobsCreate, cmdJobsList, cmdJobsRemove, cmdJobsRun, cmdJobsRuns } from "./commands/jobs.js";
 import { cmdKeysCreate, cmdKeysList, cmdKeysRevoke } from "./commands/keys.js";
 import {
@@ -14,6 +15,28 @@ import {
 } from "./commands/objects.js";
 import { cmdOrgsCreate, cmdOrgsList } from "./commands/orgs.js";
 import { cmdProjectsCreate, cmdProjectsList } from "./commands/projects.js";
+import {
+  cmdSecretsGet,
+  cmdSecretsImport,
+  cmdSecretsList,
+  cmdSecretsRemove,
+  cmdSecretsSet,
+} from "./commands/secrets.js";
+import { cmdAgent, PRESET_NAMES } from "./commands/agent.js";
+import {
+  cmdStackBackup,
+  cmdStackDown,
+  cmdStackLogs,
+  cmdStackPull,
+  cmdStackStatus,
+  cmdStackUp,
+} from "./commands/stack.js";
+import {
+  cmdVaultInit,
+  cmdVaultLock,
+  cmdVaultStatus,
+  cmdVaultUnlock,
+} from "./commands/vault.js";
 import { fail } from "./out.js";
 
 const cli = cac("primora");
@@ -144,16 +167,142 @@ cli
   .option("--interval <s>", "Poll interval in seconds with --follow (default 2)")
   .action(cmdAuditList);
 
+// Local vault — secrets on this machine, not on the server. Password source:
+// live session → PRIMORA_VAULT_PASSWORD → --password-file → hidden prompt.
+cli
+  .command("vault:init", "Create the local secrets vault")
+  .option("--password-file <path>", "Read the vault password from a file")
+  .action(cmdVaultInit);
+cli
+  .command("vault:status", "Show vault path, KDF parameters and lock state")
+  .action(cmdVaultStatus);
+cli
+  .command("vault:unlock", "Open a TTL'd session — agents use the vault without the password")
+  .option("--ttl <s>", "Session lifetime in seconds (default 900, cap 86400)")
+  .option("--password-file <path>", "Read the vault password from a file")
+  .action(cmdVaultUnlock);
+cli
+  .command("vault:lock", "Revoke the session immediately")
+  .action(cmdVaultLock);
+
+cli
+  .command("secrets:set <name>", "Store a secret in the vault")
+  .option("--value <value>", "Secret value (otherwise prompted or read from stdin)")
+  .option("--url <url>", "Associated URL (dashboard, docs, endpoint)")
+  .option("--notes <text>", "Free-text notes")
+  .option("--remote", "Target the project vault on the server instead of the local vault")
+  .option("--project <id>", "Project override (with --remote)")
+  .option("--password-file <path>", "Read the vault password from a file")
+  .action(cmdSecretsSet);
+cli
+  .command("secrets:get [name]", "Print a secret's value (interactive picker if omitted)")
+  .option("--remote", "Reveal from the project vault on the server (audit-logged)")
+  .option("--project <id>", "Project override (with --remote)")
+  .option("--password-file <path>", "Read the vault password from a file")
+  .action(cmdSecretsGet);
+cli
+  .command("secrets:list", "List secret names (never values)")
+  .option("--remote", "List project vault secrets on the server (metadata only)")
+  .option("--project <id>", "Project override (with --remote)")
+  .option("--password-file <path>", "Read the vault password from a file")
+  .action(cmdSecretsList);
+cli
+  .command("secrets:rm [name]", "Delete a secret (interactive picker if omitted)")
+  .option("--remote", "Delete from the project vault on the server")
+  .option("--project <id>", "Project override (with --remote)")
+  .option("--password-file <path>", "Read the vault password from a file")
+  .option("--yes", "Skip the confirmation prompt")
+  .action(cmdSecretsRemove);
+cli
+  .command("secrets:import <file>", "Import a .env file into the vault")
+  .option("--remote", "Import into the project vault on the server")
+  .option("--project <id>", "Project override (with --remote)")
+  .option("--password-file <path>", "Read the vault password from a file")
+  .option("--overwrite", "Replace existing secrets")
+  .action(cmdSecretsImport);
+
+cli
+  .command("inject", "Run a command with vault secrets in its environment")
+  .option("--all", "Inject every vault secret (default when no --env-file)")
+  .option("--env-file <path>", "env template; primora://NAME values resolve from the vault")
+  .option("--password-file <path>", "Read the vault password from a file")
+  .action(cmdInject);
+
+// Agent broker — the child gets dummy tokens; the loopback proxy attaches the
+// real secret per grant. One flag per preset takes a vault secret name.
+const agentCmd = cli
+  .command("agent", "Wrap a command with the credential broker (dummy env, real secret on the wire)")
+  .option("--ttl <s>", "Grant lifetime in seconds (default 900, cap 3600)")
+  .option("--upstream <name=url>", "Custom Bearer upstream, repeatable (vault key: <NAME>_KEY)")
+  .option("--password-file <path>", "Read the vault password from a file");
+for (const preset of PRESET_NAMES) {
+  agentCmd.option(`--${preset} <name>`, `Grant ${preset} API access from vault secret <name>`);
+}
+agentCmd.action(cmdAgent);
+
+// Stack — operator surface for the compose deployment in --dir (default cwd).
+cli
+  .command("stack:up", "docker compose up -d")
+  .option("--dir <path>", "Deployment directory (default: cwd)")
+  .option("--vault", "Materialize .env from the vault for this run only")
+  .option("--force", "Allow --vault to temporarily swap an existing .env")
+  .option("--password-file <path>", "Read the vault password from a file")
+  .action(cmdStackUp);
+cli
+  .command("stack:down", "docker compose down")
+  .option("--dir <path>", "Deployment directory (default: cwd)")
+  .action(cmdStackDown);
+cli
+  .command("stack:status", "docker compose ps")
+  .option("--dir <path>", "Deployment directory (default: cwd)")
+  .action(cmdStackStatus);
+cli
+  .command("stack:logs [service]", "docker compose logs")
+  .option("--dir <path>", "Deployment directory (default: cwd)")
+  .option("--follow", "Follow log output")
+  .option("--tail <n>", "Lines per service (default 200)")
+  .action(cmdStackLogs);
+cli
+  .command("stack:pull", "Pull newer images")
+  .option("--dir <path>", "Deployment directory (default: cwd)")
+  .action(cmdStackPull);
+cli
+  .command("stack:backup", "pg_dump the platform database into ./backups")
+  .option("--dir <path>", "Deployment directory (default: cwd)")
+  .option("--out <path>", "Backup directory (default: <dir>/backups)")
+  .action(cmdStackBackup);
+
 cli.help();
-cli.version("0.4.0");
+cli.version("0.6.0");
+cli.example("primora login --url https://primora.example.com");
+cli.example("primora vault init");
+cli.example("primora secrets import .env");
+cli.example("primora secrets list --remote");
+cli.example("primora inject --env-file .env -- npm run dev");
+cli.example("primora agent --anthropic CLAUDE_KEY -- claude");
 
 // cac only matches the first positional token, so "orgs list" cannot be a
 // command name. Fold "group verb" pairs into "group:verb" before parsing —
 // `primora orgs list` and `primora orgs:list` both work.
-const GROUPS = new Set(["orgs", "projects", "buckets", "objects", "keys", "jobs", "audit"]);
+const GROUPS = new Set([
+  "orgs",
+  "projects",
+  "buckets",
+  "objects",
+  "keys",
+  "jobs",
+  "audit",
+  "vault",
+  "secrets",
+  "stack",
+]);
 const argv = process.argv.slice(2);
 if (GROUPS.has(argv[0]) && argv[1] && !argv[1].startsWith("-")) {
   argv.splice(0, 2, `${argv[0]}:${argv[1]}`);
+} else if (argv[0] === "vault" && !argv[1]) {
+  argv[0] = "vault:status";
+} else if (argv[0] === "secrets" && !argv[1]) {
+  argv[0] = "secrets:list";
 }
 
 async function main() {

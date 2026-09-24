@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Primora — Secrets Vault</title>
+    <link rel="icon" type="image/svg+xml" href="icon.svg" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body class="vault">
+    <header class="bar">
+      <div class="brand">
+        <img src="icon.svg" alt="" />
+        <div>
+          <h1>Secrets Vault</h1>
+          <p id="path" class="bar-sub"></p>
+        </div>
+      </div>
+      <div class="bar-right">
+        <span id="pill" class="pill"></span>
+        <button id="lock-btn" class="ghost" hidden>Lock</button>
+      </div>
+    </header>
+    <main id="view" class="view">
+      <p class="dim">Loading…</p>
+    </main>
+    <script type="module" src="vault.js"></script>
+  </body>
+</html>

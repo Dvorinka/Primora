@@ -11,6 +11,7 @@ import {
   IconTelemetry,
   IconIntegrations,
   IconZap,
+  IconKey,
   IconAudit,
   IconAuth,
   IconSettings,
@@ -32,6 +33,7 @@ export type ViewType =
   | "telemetry"
   | "integrations"
   | "automation"
+  | "vault"
   | "auth"
   | "audit"
   | "settings";
@@ -49,6 +51,7 @@ const projectNav: NavEntry[] = [
   { id: "telemetry", label: "Telemetry", shortLabel: "Signals", icon: IconTelemetry },
   { id: "integrations", label: "Integrations", shortLabel: "Integr.", icon: IconIntegrations },
   { id: "automation", label: "Automation", shortLabel: "Auto", icon: IconZap },
+  { id: "vault", label: "Vault", icon: IconKey },
   { id: "storage", label: "Storage", icon: IconStorage },
   { id: "collections", label: "Collections", icon: IconCollections },
   { id: "auth", label: "Authentication", shortLabel: "Auth", icon: IconAuth },
@@ -96,6 +99,7 @@ const viewTitle: Record<ViewType, string> = {
   telemetry: "Telemetry",
   integrations: "Integrations",
   automation: "Automation",
+  vault: "Vault",
   auth: "Authentication",
   audit: "Audit log",
   settings: "Settings",

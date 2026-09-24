@@ -307,6 +307,17 @@ type CoreProjectMember struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type CoreProjectSecret struct {
+	ID         uuid.UUID          `json:"id"`
+	ProjectID  uuid.UUID          `json:"project_id"`
+	Name       string             `json:"name"`
+	Ciphertext []byte             `json:"ciphertext"`
+	Url        string             `json:"url"`
+	Notes      string             `json:"notes"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+}
+
 type CoreScheduledJob struct {
 	ID              uuid.UUID          `json:"id"`
 	ProjectID       uuid.UUID          `json:"project_id"`

@@ -28,4 +28,19 @@ npm run bundle --workspace @primora/desktop   # release bundles → src-tauri/ta
   to be a Primora deployment, use the tray's Change Server.
 - macOS blocks plain-HTTP loads to non-localhost hosts (ATS). Use HTTPS, or
   `http://localhost` for a local deployment.
+
+## Secrets Vault
+
+The tray menu's **Secrets Vault…** opens a local window (`ui/vault.html`) for
+the CLI's encrypted vault — init, timed unlock/lock, list with copy-to-clipboard,
+add/delete, `.env` import. Values are never displayed; copy goes straight to the
+clipboard.
+
+The desktop app does not reimplement the vault: IPC commands shell out to the
+`primora` binary on PATH (`PRIMORA_CLI` overrides the binary path). One vault
+file, one crypto implementation — terminal and desktop always agree. Requires
+`npm i -g @primora/cli`; without it the window shows install instructions.
+
+Injection and the credential broker stay CLI-only (`primora inject`,
+`primora agent`).
 - Deep links / push notifications: deliberately omitted — nothing needs them yet.

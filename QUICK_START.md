@@ -61,6 +61,7 @@ The important ones:
 | `POSTGRES_*` / `DATABASE_URL` | Postgres connection |
 | `DRAGONFLY_URL` | Cache/rate-limit store |
 | `SMTP_*` / `MAIL_FROM` | Transactional email (Mailpit in dev, or Resend via `RESEND_API_KEY`) |
+| `PRIMORA_ENCRYPTION_KEY` | AES-256 key (64 hex chars, `openssl rand -hex 32`) — encrypts the project vault, integration credentials and webhook secrets at rest. Without it the Vault page and `secret://` job refs are unavailable |
 | `SIGNUP_ENABLED` | Open public sign-up after bootstrap — default `false`; admins override in-app |
 | `PRIMORA_MANAGED` | Managed tier flag — enables OAuth providers when `true`; self-hosted is email/password only |
 | `USER_RATE_LIMIT_PER_MINUTE` / `API_KEY_RATE_LIMIT_PER_MINUTE` | Throttling defaults — overridable in-app |

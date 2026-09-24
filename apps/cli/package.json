@@ -1,6 +1,6 @@
 {
   "name": "@primora/cli",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Primora command-line client",
   "type": "module",
   "bin": {
@@ -19,6 +19,8 @@
   },
   "dependencies": {
     "@clack/prompts": "^1.8.1",
+    "@noble/ciphers": "^2.4.0",
+    "@noble/hashes": "^2.4.0",
     "cac": "^7.0.0",
     "picocolors": "^1.1.1"
   },

@@ -1,3 +1,5 @@
+import { spawnSync } from "node:child_process";
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -10,6 +12,7 @@ import {
   OrganizationsService,
   PlatformService,
   ProjectsService,
+  SecretsService,
   StorageService,
   TelemetryService,
   WebhooksService,
@@ -874,6 +877,150 @@ server.registerTool(
   async ({ jobId, projectId: p }) => {
     try {
       return ok(await AutomationService.runScheduledJob({ projectId: projectId(p), jobId }));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+/* ---------------------------------------------------------- */
+/* local vault — metadata only, values never leave the CLI     */
+/* ---------------------------------------------------------- */
+
+const PRIMORA_CLI = process.env.PRIMORA_CLI ?? "primora";
+
+/** Run the primora CLI; returns {code, stdout, stderr}. Values fetched via
+ *  `secrets get` stay inside this process — they are never returned. */
+function runCli(args: string[], env?: Record<string, string>) {
+  const res = spawnSync(PRIMORA_CLI, args, {
+    env: { ...process.env, ...env },
+    encoding: "utf8",
+    timeout: 60_000,
+  });
+  return {
+    code: res.status ?? 1,
+    stdout: (res.stdout ?? "").toString(),
+    stderr: ((res.stderr ?? "") + (res.error ? String(res.error.message) : "")).toString(),
+  };
+}
+
+server.registerTool(
+  "primora_vault_status",
+  {
+    description:
+      "Local vault state — exists, locked/unlocked, KDF parameters, secret count. Unlock with `primora vault unlock` on the host first.",
+  },
+  async () => {
+    try {
+      const r = runCli(["vault", "status", "--json"]);
+      if (r.code !== 0) throw new Error(r.stderr.trim() || "vault status failed");
+      return ok(JSON.parse(r.stdout));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
+  "primora_vault_list",
+  {
+    description:
+      "List vault secrets — names, urls, notes, timestamps only. Secret values are never returned by any tool; they are injected at exec time.",
+  },
+  async () => {
+    try {
+      const r = runCli(["secrets", "list", "--json"]);
+      if (r.code !== 0) throw new Error(r.stderr.trim() || "vault locked — run `primora vault unlock`");
+      return ok(JSON.parse(r.stdout));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+// Commands that would move a secret into the response are denied outright —
+// the CLI is the broker; the model sees results, not credentials.
+const EXEC_DENY_FIRST = new Set(["vault", "secrets", "inject", "agent", "login", "logout", "use"]);
+const EXEC_DENY_PAIR = new Set(["keys:create"]);
+
+server.registerTool(
+  "primora_vault_exec",
+  {
+    description:
+      "Run a primora CLI command with a vault secret injected into its environment (default secret: PRIMORA_API_KEY). The secret never appears in arguments or the response — only the command output is returned.",
+    inputSchema: {
+      command: z
+        .array(z.string())
+        .describe('primora arguments, e.g. ["objects","list","mybucket"] — vault/secrets/inject/agent/login/logout/use and keys:create are denied'),
+      secret: z
+        .string()
+        .optional()
+        .describe("Vault secret name to inject as itself (default PRIMORA_API_KEY)"),
+    },
+  },
+  async ({ command, secret }) => {
+    try {
+      if (!command.length) throw new Error("empty command");
+      const first = command[0];
+      const pair = `${first}:${command[1] ?? ""}`;
+      if (EXEC_DENY_FIRST.has(first) || EXEC_DENY_PAIR.has(pair) || EXEC_DENY_PAIR.has(first)) {
+        throw new Error(`denied: "${first}" would expose credentials or config`);
+      }
+      const secretName = secret ?? "PRIMORA_API_KEY";
+      const got = runCli(["secrets", "get", secretName]);
+      if (got.code !== 0) {
+        throw new Error(got.stderr.trim() || `vault locked or "${secretName}" missing`);
+      }
+      const r = runCli(command, { [secretName]: got.stdout.trimEnd() });
+      return ok({ exitCode: r.code, stdout: r.stdout, stderr: r.stderr });
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+// Project vault — server-side store. Agents get metadata + write; there is no
+// reveal or delete tool. To use a secret, reference it as secret://NAME in a
+// scheduled-job payload and the server resolves it at delivery.
+server.registerTool(
+  "primora_secrets_list",
+  {
+    description:
+      "List project vault secrets — names, urls, notes, timestamps only. Values are never returned; reference them as secret://NAME in job payloads.",
+    inputSchema: { projectId: z.string().optional() },
+  },
+  async ({ projectId: p }) => {
+    try {
+      return ok(await SecretsService.listProjectSecrets({ projectId: projectId(p) }));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
+  "primora_secrets_set",
+  {
+    description:
+      "Store a secret in the project vault (encrypted at rest, write-only). The value is sent once and can never be read back through MCP. Omitted url/notes keep existing values.",
+    inputSchema: {
+      name: z.string().describe("Env-var-safe name, e.g. STRIPE_SECRET — referenced as secret://NAME"),
+      value: z.string().describe("Secret value — sent once, never returned"),
+      url: z.string().optional().describe("Associated dashboard/console URL"),
+      notes: z.string().optional().describe("Free-text notes"),
+      projectId: z.string().optional(),
+    },
+  },
+  async ({ name, value, url, notes, projectId: p }) => {
+    try {
+      const res = await SecretsService.setProjectSecret({
+        projectId: projectId(p),
+        name,
+        requestBody: { value, url, notes },
+      });
+      // Return metadata only — echoing the value back would put it in context.
+      const { id: _, ...meta } = res;
+      return ok(meta);
     } catch (e) {
       return fail(e);
     }

@@ -1838,6 +1838,91 @@ paths:
           description: text/event-stream of {type, occurred_at, data} messages
         "401":
           $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/secrets:
+    get:
+      tags: [Secrets]
+      operationId: listProjectSecrets
+      summary: Lists project secrets — metadata only, values are never included.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "200":
+          description: Project secrets (metadata only)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectSecretListResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/secrets/{name}:
+    put:
+      tags: [Secrets]
+      operationId: setProjectSecret
+      summary: Creates or replaces a project secret (AES-256-GCM at rest). Omitted url/notes keep existing values. Job payloads can reference it as secret://NAME, resolved at delivery.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/SecretName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetProjectSecretRequest"
+      responses:
+        "200":
+          description: Secret stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectSecret"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+    delete:
+      tags: [Secrets]
+      operationId: deleteProjectSecret
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/SecretName"
+      responses:
+        "204":
+          description: Secret deleted
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/secrets/{name}/reveal:
+    post:
+      tags: [Secrets]
+      operationId: revealProjectSecret
+      summary: Returns the decrypted value. Every call is audit-logged.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/SecretName"
+      responses:
+        "200":
+          description: Decrypted value
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevealProjectSecretResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
 components:
   securitySchemes:
     bearerAuth:
@@ -1863,6 +1948,13 @@ components:
       schema:
         type: string
         format: uuid
+    SecretName:
+      name: name
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[A-Za-z_][A-Za-z0-9_]*$"
     BucketID:
       name: bucketID
       in: path
@@ -3664,3 +3756,50 @@ components:
           items:
             $ref: "#/components/schemas/ScheduledJobRun"
       required: [items]
+    ProjectSecret:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Env-var-safe name; referenced as secret://NAME in job payloads.
+        url:
+          type: string
+        notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required: [id, name, url, notes, created_at, updated_at]
+    ProjectSecretListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectSecret"
+      required: [items]
+    SetProjectSecretRequest:
+      type: object
+      properties:
+        value:
+          type: string
+          description: Plaintext — stored AES-256-GCM encrypted, never returned by list.
+        url:
+          type: string
+        notes:
+          type: string
+      required: [value]
+    RevealProjectSecretResponse:
+      type: object
+      properties:
+        name:
+          type: string
+        value:
+          type: string
+      required: [name, value]

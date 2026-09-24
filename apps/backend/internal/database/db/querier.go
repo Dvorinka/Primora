@@ -45,6 +45,7 @@ type Querier interface {
 	DeleteOrganizationByID(ctx context.Context, id uuid.UUID) (CoreOrganization, error)
 	DeletePendingInvitationByIDForOrganization(ctx context.Context, arg DeletePendingInvitationByIDForOrganizationParams) (CoreProjectInvitation, error)
 	DeleteProjectByID(ctx context.Context, id uuid.UUID) (CoreProject, error)
+	DeleteProjectSecret(ctx context.Context, arg DeleteProjectSecretParams) (uuid.UUID, error)
 	DeleteScheduledJob(ctx context.Context, arg DeleteScheduledJobParams) (uuid.UUID, error)
 	DeleteSetting(ctx context.Context, key string) error
 	DeleteWebhook(ctx context.Context, arg DeleteWebhookParams) (CoreWebhook, error)
@@ -68,6 +69,7 @@ type Querier interface {
 	GetProjectByID(ctx context.Context, id uuid.UUID) (CoreProject, error)
 	GetProjectMembership(ctx context.Context, arg GetProjectMembershipParams) (GetProjectMembershipRow, error)
 	GetProjectOverview(ctx context.Context, id uuid.UUID) (GetProjectOverviewRow, error)
+	GetProjectSecret(ctx context.Context, arg GetProjectSecretParams) (CoreProjectSecret, error)
 	GetScheduledJobByID(ctx context.Context, id uuid.UUID) (CoreScheduledJob, error)
 	GetSetting(ctx context.Context, key string) (GetSettingRow, error)
 	GetUserByAuthSubject(ctx context.Context, authSubject string) (CoreUser, error)
@@ -96,6 +98,8 @@ type Querier interface {
 	ListOrganizationsForUser(ctx context.Context, userID uuid.UUID) ([]ListOrganizationsForUserRow, error)
 	ListPendingWebhookDeliveries(ctx context.Context, limit int32) ([]CoreWebhookDelivery, error)
 	ListProjectMembers(ctx context.Context, projectID uuid.UUID) ([]ListProjectMembersRow, error)
+	ListProjectSecretValues(ctx context.Context, projectID uuid.UUID) ([]ListProjectSecretValuesRow, error)
+	ListProjectSecrets(ctx context.Context, projectID uuid.UUID) ([]ListProjectSecretsRow, error)
 	ListProjectsForOrganization(ctx context.Context, arg ListProjectsForOrganizationParams) ([]ListProjectsForOrganizationRow, error)
 	ListScheduledJobRuns(ctx context.Context, arg ListScheduledJobRunsParams) ([]CoreScheduledJobRun, error)
 	ListScheduledJobs(ctx context.Context, projectID uuid.UUID) ([]CoreScheduledJob, error)
@@ -135,6 +139,7 @@ type Querier interface {
 	UpdateScheduledJob(ctx context.Context, arg UpdateScheduledJobParams) (CoreScheduledJob, error)
 	UpdateWebhook(ctx context.Context, arg UpdateWebhookParams) (CoreWebhook, error)
 	UpsertComponent(ctx context.Context, arg UpsertComponentParams) (CoreComponent, error)
+	UpsertProjectSecret(ctx context.Context, arg UpsertProjectSecretParams) (CoreProjectSecret, error)
 	UpsertSetting(ctx context.Context, arg UpsertSettingParams) (CoreSetting, error)
 	UpsertUser(ctx context.Context, arg UpsertUserParams) (CoreUser, error)
 }

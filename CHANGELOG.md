@@ -2,6 +2,22 @@
 
 All notable changes to Primora. Format follows [Keep a Changelog](https://keepachangelog.com/); versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Local secrets vault in the CLI** (`@primora/cli` 0.6.0) — `primora vault init/status` and `primora secrets set|get|list|rm|import` manage an encrypted `~/.config/primora/vault.bin` (Argon2id 64 MiB/3/4 → XChaCha20-Poly1305, header bound as AEAD AAD, atomic writes). Entries carry value + optional `url`/`notes` metadata. Password via `PRIMORA_VAULT_PASSWORD`, `--password-file`, or hidden prompt; file path overridable with `PRIMORA_VAULT`. Clean-room format — no external vault compatibility.
+- **Vault sessions** — `primora vault unlock --ttl 900` proves the password once and writes a TTL'd `vault.session` (0600); agents and scripts use the vault without the password. `primora vault lock` revokes immediately.
+- **`primora agent` credential broker** — wraps a child process with dummy tokens and a loopback base URL; the proxy attaches the real secret on the wire per grant (TTL, cap 3600 s). Presets: `anthropic`, `openai`, `openrouter`, `groq`, `deepseek`, `xai`, `github`, `npm`; `--upstream name=https://…` covers arbitrary Bearer APIs. Base-URL broker, not TLS MITM — tools must honor a base-URL override.
+- **`primora inject`** — runs a child process with vault secrets in its environment (`--all`, or `--env-file` templates containing `primora://NAME` refs). Nothing on disk, nothing in argv.
+- **`primora stack:*` operator group** — `up`, `down`, `status`, `logs [service]`, `pull`, `backup` wrap `docker compose` in `--dir` (default cwd). `stack up --vault` materializes `.env` from the vault for the duration of the run (refuses to clobber an existing `.env` without `--force`, which swaps and restores it). `stack backup` writes a `pg_dump -Fc` of the platform database to `./backups`.
+- **Vault MCP tools** (`@primora/mcp`) — `primora_vault_status`, `primora_vault_list` (metadata only — values are never returned), and `primora_vault_exec` which runs `primora` commands with a secret injected into the child environment; `vault`/`secrets`/`inject`/`agent`/`login`/`logout`/`use` and `keys:create` are denied so no response can carry a credential.
+- **Secrets Vault window in the desktop app** (`@primora/desktop`) — tray "Secrets Vault…" opens a dedicated window (`ui/vault.html`) covering init, timed unlock/lock with live countdown, secret list with copy-to-clipboard (values never displayed), add/delete, and `.env` import. IPC shells out to the `primora` binary (`PRIMORA_CLI` overrides), so desktop and terminal share one vault file and one crypto implementation; a missing CLI shows install guidance. Also reachable from the connect screen.
+- **Project vault — server-side secrets** (`core.project_secrets`, migration 00011) — per-project secrets encrypted AES-256-GCM at rest via the existing encryptor. API: `GET/PUT/DELETE /projects/:projectID/secrets[/:name]` plus `POST …/reveal`. Lists return metadata only (name, url, notes, timestamps); reveal decrypts explicitly and is audit-logged (`secret.set`/`secret.revealed`/`secret.deleted`). Scheduled-job payloads reference secrets as `secret://NAME`, resolved to plaintext at delivery — refs are stored, values are not; unresolved or unconfigured refs fail the run loudly.
+- **Vault page in the dashboard** — project secrets table with create/update, `.env` import, delete, and copy-to-clipboard reveal; plus a "This machine" card when running inside the desktop shell that drives the local vault through the same Tauri IPC commands as the vault window.
+- **CLI remote mode** — `primora secrets set|get|list|rm|import --remote` operates on the project vault via the existing API auth (`--project` overrides). `get --remote` is the explicit reveal path; `list --remote` never returns values.
+- **Project-vault MCP tools** — `primora_secrets_list` (metadata only) and `primora_secrets_set` (write-only). No reveal or delete tools — agents consume secrets through `secret://NAME` references in job payloads without holding plaintext.
+
 ## [0.7.1] - 2026-09-23
 
 ### Fixed
