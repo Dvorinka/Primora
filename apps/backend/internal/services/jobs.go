@@ -393,6 +393,7 @@ type jobQueries interface {
 	FinishScheduledJobRun(ctx context.Context, params db.FinishScheduledJobRunParams) (db.CoreScheduledJobRun, error)
 	MarkScheduledJobRan(ctx context.Context, params db.MarkScheduledJobRanParams) (db.CoreScheduledJob, error)
 	PruneScheduledJobRuns(ctx context.Context, params db.PruneScheduledJobRunsParams) error
+	ListProjectSecretValues(ctx context.Context, projectID uuid.UUID) ([]db.ListProjectSecretValuesRow, error)
 }
 
 type JobScheduler struct {
@@ -552,6 +553,10 @@ func (j *JobScheduler) markRan(ctx context.Context, job db.CoreScheduledJob, sta
 
 // deliver POSTs the job payload to its URL, signed like a webhook delivery.
 func (j *JobScheduler) deliver(ctx context.Context, job db.CoreScheduledJob, run db.CoreScheduledJobRun) (*int32, error) {
+	data, err := resolveSecretRefs(ctx, j.repo.ListProjectSecretValues, j.enc, job.ProjectID, job.Payload)
+	if err != nil {
+		return nil, err
+	}
 	payload, _ := json.Marshal(map[string]any{
 		"event":        WebhookEventJobRun,
 		"project_id":   job.ProjectID.String(),
@@ -560,7 +565,7 @@ func (j *JobScheduler) deliver(ctx context.Context, job db.CoreScheduledJob, run
 		"run_id":       run.ID.String(),
 		"triggered_by": run.TriggeredBy,
 		"occurred_at":  time.Now().UTC().Format(time.RFC3339),
-		"data":         json.RawMessage(job.Payload),
+		"data":         data,
 	})
 	secret := ""
 	if len(job.Secret) > 0 && j.enc != nil {

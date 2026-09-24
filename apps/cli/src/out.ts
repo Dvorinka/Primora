@@ -1,3 +1,4 @@
+import * as p from "@clack/prompts";
 import pc from "picocolors";
 
 export function isJson(options: { json?: boolean }): boolean {
@@ -26,6 +27,21 @@ export function fail(error: unknown): never {
   process.stderr.write(pc.red("error ") + message + "\n");
   if (err?.hint) process.stderr.write(pc.dim(`hint  ${err.hint}`) + "\n");
   process.exit(1);
+}
+
+/** Spinner for multi-hundred-ms work (Argon2 derives). Silent when piped. */
+export async function withSpinner<T>(message: string, work: () => Promise<T>): Promise<T> {
+  if (!process.stdout.isTTY) return work();
+  const s = p.spinner();
+  s.start(message);
+  try {
+    const result = await work();
+    s.stop(message);
+    return result;
+  } catch (error) {
+    s.stop(pc.red("failed"));
+    throw error;
+  }
 }
 
 /** Minimal column printer — left-aligned, two-space gutter. */

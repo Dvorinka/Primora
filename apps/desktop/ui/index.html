@@ -27,6 +27,7 @@
       </form>
       <p id="err" class="err" hidden></p>
       <p class="hint">The desktop app renders the console served by your own server. Nothing is hosted by us.</p>
+      <p class="hint"><a href="#" id="vault-link" class="vlink">Open the local Secrets Vault</a></p>
     </main>
 
     <script type="module">
@@ -50,6 +51,11 @@
         const saved = await tauri.core.invoke("get_server_url").catch(() => null);
         if (saved) location.replace(saved);
       }
+
+      document.getElementById("vault-link").addEventListener("click", (e) => {
+        e.preventDefault();
+        tauri?.event.emit("open-vault");
+      });
 
       form.addEventListener("submit", async (event) => {
         event.preventDefault();

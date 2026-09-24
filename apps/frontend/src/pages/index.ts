@@ -7,6 +7,7 @@ export { CollectionsPage } from "./CollectionsPage";
 export { DatabasesPage } from "./DatabasesPage";
 export { TelemetryPage } from "./TelemetryPage";
 export { IntegrationsPage } from "./IntegrationsPage";
+export { VaultPage } from "./VaultPage";
 export { AutomationPage } from "./AutomationPage";
 export { SettingsPage } from "./SettingsPage";
 export { AuditPage } from "./AuditPage";

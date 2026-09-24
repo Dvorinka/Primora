@@ -21,3 +21,14 @@ config file - `primora login` once and both tools work. Env vars override:
 collections, API keys, integrations, webhooks, scheduled jobs, telemetry,
 and audit: `primora_whoami`, `primora_list_projects`,
 `primora_upload_object`, `primora_query_audit`, `primora_run_job`, …
+
+Secrets are agent-safe by design — values are never returned by any tool:
+
+- `primora_vault_status` / `primora_vault_list` — local-vault state and
+  metadata (names/urls/notes only); requires `primora vault unlock` on the host.
+- `primora_vault_exec` — runs `primora` commands with a vault secret injected
+  into the child's env; `vault`/`secrets`/`inject`/`agent`/`login`/`use` and
+  `keys:create` are denied so no response can carry a credential.
+- `primora_secrets_list` / `primora_secrets_set` — project-vault metadata and
+  write-only storage. No reveal or delete: agents consume secrets through
+  `secret://NAME` references in job payloads, resolved server-side at delivery.

@@ -37,7 +37,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 | `DRAGONFLY_URL` | backend → cache DSN | yes |
 | `JWT_SECRET` | signs API JWTs (`JWT_ISSUER`, `JWT_AUDIENCE`, `JWT_TTL_SECONDS` tune tokens) | yes |
 | `BETTER_AUTH_SECRET` | auth session/signing secret | yes |
-| `PRIMORA_ENCRYPTION_KEY` | AES-256 key (64 hex chars) for integration credentials + webhook secrets at rest | production |
+| `PRIMORA_ENCRYPTION_KEY` | AES-256 key (64 hex chars) for project secrets (Vault page, `secret://` job refs), integration credentials + webhook secrets at rest | production |
 | `AUTH_BASE_URL` / `BETTER_AUTH_URL` | public auth URL (`https://host/auth`) | yes |
 | `AUTH_INTERNAL_BASE_URL` | backend → auth internal URL (`http://auth:3001`) | yes |
 | `VITE_APP_URL` / `VITE_AUTH_BASE_URL` / `VITE_API_BASE_URL` | frontend public URLs — **baked into the frontend image at build time** | yes |

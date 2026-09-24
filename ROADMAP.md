@@ -263,6 +263,24 @@ dashboard's live feed off the same stream.
   `auth-client` now resolves `/auth` against `window.location.origin`,
   preserving same-origin defaults without breaking split-origin dev.
 
+## Secrets vault (unreleased)
+
+Arca-inspired secrets management, clean-room — every surface covered.
+
+- **Local vault** (`apps/cli`) — `PRMVLT01` format: Argon2id (64 MiB/3/4) →
+  XChaCha20-Poly1305, header bound as AEAD AAD, atomic writes. `vault:*`,
+  `secrets:*`, `inject` (env injection + `primora://` refs), TTL sessions,
+  and the `agent` credential broker (dummy tokens in the child, real secret
+  attached on the wire per grant).
+- **Project vault** (`core.project_secrets`, migration 00011) — AES-256-GCM
+  via the platform encryptor; metadata-only list, audit-logged reveal;
+  `secret://NAME` refs in job payloads resolve at delivery and fail loudly
+  when unresolved.
+- **Surfaces** — dashboard Vault page (+ local-vault card under the desktop
+  shell), desktop vault window via Tauri IPC → `primora` binary,
+  `secrets:* --remote` CLI mode, and MCP tools that are metadata/write-only
+  so agents never hold plaintext.
+
 ## Future phases — candidates
 
 Ordered loosely by leverage. None committed; each gets scoped when picked.

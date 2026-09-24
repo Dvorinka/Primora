@@ -91,9 +91,9 @@ and [QUICK_START.md](QUICK_START.md#configuration) for the important ones.
 
 ## Ecosystem
 
-- **[CLI](apps/cli)** - `primora` for orgs, projects, buckets, objects, keys, and audit from the terminal.
+- **[CLI](apps/cli)** - `primora` for orgs, projects, buckets, objects, keys, jobs, and audit — plus an encrypted local secrets vault (`vault:*`, `secrets:*`, `inject`), the shared project vault (`secrets:* --remote`, `secret://NAME` refs in job payloads), an agent credential broker (`agent`), and compose-stack operator commands (`stack:*`).
 - **[MCP server](apps/mcp)** - exposes `primora_*` tools to MCP clients.
-- **[Desktop](apps/desktop)** - Tauri 2 shell connecting to your deployment, with tray presence.
+- **[Desktop](apps/desktop)** - Tauri 2 shell connecting to your deployment, with tray presence and a local Secrets Vault window (drives the CLI's vault).
 - **PWA** - the dashboard is installable on mobile and desktop browsers.
 
 ## Documentation
