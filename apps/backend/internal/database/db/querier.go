@@ -30,6 +30,7 @@ type Querier interface {
 	CreateCollection(ctx context.Context, arg CreateCollectionParams) (CoreCollection, error)
 	CreateDBConnection(ctx context.Context, arg CreateDBConnectionParams) (CoreDbConnection, error)
 	CreateDocument(ctx context.Context, arg CreateDocumentParams) (CoreDocument, error)
+	CreateInboundHook(ctx context.Context, arg CreateInboundHookParams) (CoreInboundHook, error)
 	CreateIntegration(ctx context.Context, arg CreateIntegrationParams) (CoreIntegration, error)
 	CreateInvitation(ctx context.Context, arg CreateInvitationParams) (CoreProjectInvitation, error)
 	CreateOrganization(ctx context.Context, arg CreateOrganizationParams) (CoreOrganization, error)
@@ -43,6 +44,7 @@ type Querier interface {
 	DeleteComponent(ctx context.Context, arg DeleteComponentParams) error
 	DeleteDBConnection(ctx context.Context, arg DeleteDBConnectionParams) (CoreDbConnection, error)
 	DeleteDocument(ctx context.Context, arg DeleteDocumentParams) error
+	DeleteInboundHook(ctx context.Context, arg DeleteInboundHookParams) error
 	DeleteIntegration(ctx context.Context, arg DeleteIntegrationParams) (CoreIntegration, error)
 	DeleteOrganizationByID(ctx context.Context, id uuid.UUID) (CoreOrganization, error)
 	DeletePendingInvitationByIDForOrganization(ctx context.Context, arg DeletePendingInvitationByIDForOrganizationParams) (CoreProjectInvitation, error)
@@ -65,6 +67,8 @@ type Querier interface {
 	GetDBConnectionByID(ctx context.Context, id uuid.UUID) (CoreDbConnection, error)
 	GetDBConnectionByName(ctx context.Context, arg GetDBConnectionByNameParams) (CoreDbConnection, error)
 	GetDocumentByID(ctx context.Context, arg GetDocumentByIDParams) (CoreDocument, error)
+	GetInboundHook(ctx context.Context, arg GetInboundHookParams) (CoreInboundHook, error)
+	GetInboundHookByToken(ctx context.Context, token string) (CoreInboundHook, error)
 	GetIntegrationByID(ctx context.Context, id uuid.UUID) (CoreIntegration, error)
 	GetInvitationByIDForOrganization(ctx context.Context, arg GetInvitationByIDForOrganizationParams) (CoreProjectInvitation, error)
 	GetInvitationByTokenHash(ctx context.Context, tokenHash string) (CoreProjectInvitation, error)
@@ -99,6 +103,7 @@ type Querier interface {
 	ListEnabledAlertRules(ctx context.Context) ([]CoreAlertRule, error)
 	ListErrorGroups(ctx context.Context, arg ListErrorGroupsParams) ([]ListErrorGroupsRow, error)
 	ListEvents(ctx context.Context, arg ListEventsParams) ([]ListEventsRow, error)
+	ListInboundHooks(ctx context.Context, projectID uuid.UUID) ([]CoreInboundHook, error)
 	ListIntegrations(ctx context.Context, projectID uuid.UUID) ([]CoreIntegration, error)
 	ListInvitationsForOrganization(ctx context.Context, organizationID uuid.UUID) ([]ListInvitationsForOrganizationRow, error)
 	ListOrganizationMembers(ctx context.Context, organizationID uuid.UUID) ([]ListOrganizationMembersRow, error)
@@ -138,6 +143,7 @@ type Querier interface {
 	SweepExpiredOrgAuditLogs(ctx context.Context) (int64, error)
 	SweepExpiredWebhookDeliveries(ctx context.Context) (int64, error)
 	TouchAPIKey(ctx context.Context, id uuid.UUID) error
+	TouchInboundHook(ctx context.Context, id uuid.UUID) error
 	UpdateAlertRule(ctx context.Context, arg UpdateAlertRuleParams) (CoreAlertRule, error)
 	UpdateBucketByID(ctx context.Context, arg UpdateBucketByIDParams) (CoreBucket, error)
 	UpdateCollection(ctx context.Context, arg UpdateCollectionParams) (CoreCollection, error)

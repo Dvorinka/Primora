@@ -255,6 +255,20 @@ type CoreEvent struct {
 	Ts          pgtype.Timestamptz `json:"ts"`
 }
 
+type CoreInboundHook struct {
+	ID             uuid.UUID          `json:"id"`
+	ProjectID      uuid.UUID          `json:"project_id"`
+	Name           string             `json:"name"`
+	Token          string             `json:"token"`
+	Mode           string             `json:"mode"`
+	JobID          pgtype.UUID        `json:"job_id"`
+	Secret         []byte             `json:"secret"`
+	Enabled        bool               `json:"enabled"`
+	LastReceivedAt pgtype.Timestamptz `json:"last_received_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
 type CoreIntegration struct {
 	ID              uuid.UUID          `json:"id"`
 	ProjectID       uuid.UUID          `json:"project_id"`

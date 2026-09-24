@@ -47,6 +47,7 @@ var webhookEventTypes = map[string]bool{
 	WebhookEventTest:            true,
 	WebhookEventAlertFired:      true,
 	WebhookEventAlertResolved:   true,
+	WebhookEventInboundReceived: true,
 	WebhookEventJobRun:          true,
 	WebhookEventDocumentCreated: true,
 	WebhookEventDocumentUpdated: true,

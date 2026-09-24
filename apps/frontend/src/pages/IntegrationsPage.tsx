@@ -1,11 +1,16 @@
 import { For, Show, createEffect, createSignal } from "solid-js";
 import {
   AlertsService,
+  AutomationService,
+  CreateInboundHookRequest,
   CreateIntegrationRequest,
+  InboundService,
   IntegrationsService,
   UpsertAlertRuleRequest,
   WebhooksService,
   type AlertRule,
+  type InboundHook,
+  type ScheduledJob,
   type Integration,
   type IntegrationAnalytics,
   type Webhook,
@@ -63,9 +68,14 @@ export function IntegrationsPage(props: IntegrationsPageProps) {
   const [expandedIntegration, setExpandedIntegration] = createSignal<string>();
   const [expandedWebhook, setExpandedWebhook] = createSignal<string>();
   const [alertRules, setAlertRules] = createSignal<AlertRule[]>([]);
+  const [inboundHooks, setInboundHooks] = createSignal<InboundHook[]>([]);
+  const [scheduledJobs, setScheduledJobs] = createSignal<ScheduledJob[]>([]);
   const [showCreateIntegration, setShowCreateIntegration] = createSignal(false);
   const [showCreateWebhook, setShowCreateWebhook] = createSignal(false);
   const [showCreateAlert, setShowCreateAlert] = createSignal(false);
+  const [showCreateInbound, setShowCreateInbound] = createSignal(false);
+  const [inboundForm, setInboundForm] = createSignal({ name: "", mode: CreateInboundHookRequest.mode.EVENT as CreateInboundHookRequest.mode, job_id: "", secret: "" });
+  const [copiedUrl, setCopiedUrl] = createSignal("");
   const [alertForm, setAlertForm] = createSignal({
     name: "",
     kind: UpsertAlertRuleRequest.kind.HEARTBEAT_SILENCE as UpsertAlertRuleRequest.kind,
@@ -87,14 +97,18 @@ export function IntegrationsPage(props: IntegrationsPageProps) {
     setLoading(true);
     setError("");
     try {
-      const [int, hooks, rules] = await Promise.all([
+      const [int, hooks, rules, inbound, jobs] = await Promise.all([
         intSvc(props.demoMode).listIntegrations({ projectId: props.projectID }),
         hookSvc(props.demoMode).listWebhooks({ projectId: props.projectID }),
         props.demoMode ? Promise.resolve({ items: [] }) : AlertsService.listAlertRules({ projectId: props.projectID }),
+        props.demoMode ? Promise.resolve({ items: [] }) : InboundService.listInboundHooks({ projectId: props.projectID }),
+        props.demoMode ? Promise.resolve({ items: [] }) : AutomationService.listScheduledJobs({ projectId: props.projectID }),
       ]);
       setIntegrations(int.items ?? []);
       setWebhooks(hooks.items ?? []);
       setAlertRules(rules.items ?? []);
+      setInboundHooks(inbound.items ?? []);
+      setScheduledJobs(jobs.items ?? []);
     } catch (e) {
       setError(err(e));
     } finally {
@@ -243,6 +257,38 @@ export function IntegrationsPage(props: IntegrationsPageProps) {
       () => AlertsService.deleteAlertRule({ projectId: props.projectID!, ruleId: id }),
       "Alert rule deleted",
     );
+
+  const createInboundHook = (e: Event) => {
+    e.preventDefault();
+    const form = inboundForm();
+    void run("create-inbound", async () => {
+      await InboundService.createInboundHook({
+        projectId: props.projectID!,
+        requestBody: {
+          name: form.name.trim(),
+          mode: form.mode,
+          job_id: form.mode === CreateInboundHookRequest.mode.JOB ? form.job_id : undefined,
+          secret: form.secret.trim() || undefined,
+        },
+      });
+      setShowCreateInbound(false);
+      setInboundForm({ name: "", mode: CreateInboundHookRequest.mode.EVENT, job_id: "", secret: "" });
+    }, "Inbound hook created");
+  };
+
+  const deleteInboundHook = (id: string) =>
+    run(
+      `del-inbound-${id}`,
+      () => InboundService.deleteInboundHook({ projectId: props.projectID!, hookId: id }),
+      "Inbound hook deleted",
+    );
+
+  const copyHookUrl = (hook: InboundHook) => {
+    void navigator.clipboard?.writeText(hook.url).then(() => {
+      setCopiedUrl(hook.id);
+      setTimeout(() => setCopiedUrl(""), 1500);
+    });
+  };
 
   const testWebhook = (id: string) =>
     run(
@@ -623,6 +669,78 @@ export function IntegrationsPage(props: IntegrationsPageProps) {
           </Show>
         </div>
 
+        <div class="card card-flush mt-4">
+          <div class="card-header">
+            <div class="flex-1">
+              <div class="card-header-title">Inbound hooks</div>
+              <div class="card-header-description">
+                Public ingest endpoints — POST from external systems to republish as <code>inbound.received</code>
+                events or trigger a scheduled job.
+              </div>
+            </div>
+            <Show when={props.canManage}>
+              <button class="btn btn-primary btn-sm" onClick={() => setShowCreateInbound(true)}>
+                <IconPlus class="w-4 h-4" />
+                Add hook
+              </button>
+            </Show>
+          </div>
+          <Show
+            when={inboundHooks().length > 0}
+            fallback={<p class="text-text-2 text-sm p-4">No inbound hooks yet.</p>}
+          >
+            <div class="table-container">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Mode</th>
+                    <th>Security</th>
+                    <th>Last received</th>
+                    <th style="text-align:right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <For each={inboundHooks()}>
+                    {(hook) => (
+                      <tr>
+                        <td class="font-medium">{hook.name}</td>
+                        <td>
+                          <Badge variant="neutral">{hook.mode === "job" ? "job trigger" : "event"}</Badge>
+                          <Show when={!hook.enabled}>
+                            {" "}<Badge variant="warning">disabled</Badge>
+                          </Show>
+                        </td>
+                        <td>
+                          <Show when={hook.has_secret} fallback={<span class="text-text-2">token only</span>}>
+                            <Badge variant="success">signed</Badge>
+                          </Show>
+                        </td>
+                        <td class="text-text-2">{fmtTime(hook.last_received_at)}</td>
+                        <td style="text-align:right;white-space:nowrap">
+                          <button class="btn btn-ghost btn-sm" onClick={() => copyHookUrl(hook)} title={hook.url}>
+                            <IconCopy class="w-4 h-4" />
+                            {copiedUrl() === hook.id ? "Copied" : "URL"}
+                          </button>
+                          <Show when={props.canManage}>
+                            <button
+                              class="btn btn-ghost btn-sm"
+                              onClick={() => void deleteInboundHook(hook.id)}
+                              disabled={busy() === `del-inbound-${hook.id}`}
+                            >
+                              <IconTrash class="w-4 h-4" />
+                            </button>
+                          </Show>
+                        </td>
+                      </tr>
+                    )}
+                  </For>
+                </tbody>
+              </table>
+            </div>
+          </Show>
+        </div>
+
         <Show when={props.canManage}>
           <div class="card mt-4">
             <div class="card-header">
@@ -803,6 +921,54 @@ export function IntegrationsPage(props: IntegrationsPageProps) {
               Cancel
             </button>
             <button type="submit" class="btn btn-primary" disabled={busy() === "create-alert"}>
+              Create
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={showCreateInbound()} onClose={() => setShowCreateInbound(false)} title="Add inbound hook" size="md">
+        <form onSubmit={createInboundHook} class="space-y-4">
+          <Input
+            label="Name"
+            placeholder="github_ci"
+            required
+            value={inboundForm().name}
+            onInput={(e) => setInboundForm((c) => ({ ...c, name: e.currentTarget.value }))}
+          />
+          <Select
+            label="On receive"
+            value={inboundForm().mode}
+            onChange={(e) => setInboundForm((c) => ({ ...c, mode: e.currentTarget.value as CreateInboundHookRequest.mode }))}
+            options={[
+              { value: "event", label: "Publish inbound.received event" },
+              { value: "job", label: "Trigger a scheduled job" },
+            ]}
+          />
+          <Show when={inboundForm().mode === CreateInboundHookRequest.mode.JOB}>
+            <Select
+              label="Job"
+              value={inboundForm().job_id}
+              onChange={(e) => setInboundForm((c) => ({ ...c, job_id: e.currentTarget.value }))}
+              options={[
+                { value: "", label: "Select a job…" },
+                ...scheduledJobs().map((j) => ({ value: j.id, label: j.name })),
+              ]}
+            />
+            <p class="text-text-2 text-xs">The received body becomes the job's payload for that run.</p>
+          </Show>
+          <Input
+            label="Secret"
+            type="password"
+            placeholder="Optional — callers must sign X-Primora-Signature"
+            value={inboundForm().secret}
+            onInput={(e) => setInboundForm((c) => ({ ...c, secret: e.currentTarget.value }))}
+          />
+          <div class="flex justify-end gap-2">
+            <button type="button" class="btn btn-ghost" onClick={() => setShowCreateInbound(false)}>
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary" disabled={busy() === "create-inbound"}>
               Create
             </button>
           </div>

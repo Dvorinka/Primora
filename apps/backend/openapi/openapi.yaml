@@ -2041,6 +2041,107 @@ paths:
           $ref: "#/components/responses/ErrorResponse"
         "404":
           $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/inbound-hooks:
+    get:
+      tags: [Inbound]
+      operationId: listInboundHooks
+      summary: Lists inbound webhook endpoints for the project.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "200":
+          description: Inbound hooks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboundHookListResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+    post:
+      tags: [Inbound]
+      operationId: createInboundHook
+      summary: Creates an inbound hook. `event` mode republishes bodies as `inbound.received` domain events; `job` mode triggers a scheduled-job run with the body as its payload. Set `secret` to require `X-Primora-Signature` (HMAC-SHA256 over the raw body).
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInboundHookRequest"
+      responses:
+        "201":
+          description: Inbound hook created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboundHook"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/inbound-hooks/{hookID}:
+    delete:
+      tags: [Inbound]
+      operationId: deleteInboundHook
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - name: hookID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Inbound hook deleted
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+  /hooks/{token}:
+    post:
+      tags: [Inbound]
+      operationId: receiveInboundHook
+      summary: Public ingest endpoint — the URL token is the credential. Body must be JSON (max 256 KiB); sign with X-Primora-Signature when the hook has a secret.
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: X-Primora-Signature
+          in: header
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "202":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboundReceiveResponse"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
 components:
   securitySchemes:
     bearerAuth:
@@ -3612,7 +3713,7 @@ components:
           type: array
           items:
             type: string
-          description: Event filter (issue.created, deploy.marker, webhook.test, job.run, alert.fired, alert.resolved, document.*, object.*). Empty means all events.
+          description: Event filter (issue.created, deploy.marker, webhook.test, job.run, alert.fired, alert.resolved, inbound.received, document.*, object.*). Empty means all events.
         enabled:
           type: boolean
         has_secret:
@@ -3634,7 +3735,7 @@ components:
           type: array
           items:
             type: string
-            enum: [issue.created, deploy.marker, webhook.test, job.run, alert.fired, alert.resolved, document.created, document.updated, document.deleted, object.created, object.updated, object.deleted]
+            enum: [issue.created, deploy.marker, webhook.test, job.run, alert.fired, alert.resolved, inbound.received, document.created, document.updated, document.deleted, object.created, object.updated, object.deleted]
         enabled:
           type: boolean
       required: [url]
@@ -3651,7 +3752,7 @@ components:
           type: array
           items:
             type: string
-            enum: [issue.created, deploy.marker, webhook.test, job.run, alert.fired, alert.resolved, document.created, document.updated, document.deleted, object.created, object.updated, object.deleted]
+            enum: [issue.created, deploy.marker, webhook.test, job.run, alert.fired, alert.resolved, inbound.received, document.created, document.updated, document.deleted, object.created, object.updated, object.deleted]
         enabled:
           type: boolean
     WebhookCreateResponse:
@@ -3989,3 +4090,72 @@ components:
         enabled:
           type: boolean
       required: [name, kind]
+    InboundHook:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        token:
+          type: string
+        url:
+          type: string
+          description: Full ingest URL — POST here from the external system.
+        mode:
+          type: string
+          enum: [event, job]
+        job_id:
+          type: string
+        has_secret:
+          type: boolean
+        enabled:
+          type: boolean
+        last_received_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+      required: [id, project_id, name, token, url, mode, has_secret, enabled, created_at]
+    InboundHookListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/InboundHook"
+      required: [items]
+    CreateInboundHookRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        mode:
+          type: string
+          enum: [event, job]
+          default: event
+        job_id:
+          type: string
+          description: Required when mode=job — scheduled job to trigger.
+        secret:
+          type: string
+          description: Optional — stored encrypted; callers must then sign bodies with X-Primora-Signature.
+        enabled:
+          type: boolean
+      required: [name]
+    InboundReceiveResponse:
+      type: object
+      properties:
+        received:
+          type: boolean
+        event:
+          type: string
+        run_id:
+          type: string
+      required: [received]

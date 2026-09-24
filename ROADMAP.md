@@ -320,6 +320,17 @@ Telemetry-driven alerts delivered through the existing webhook dispatcher.
 - CRUD via `/projects/:id/alerts`; Integrations page manages rules next to
   webhooks and shows live `firing` state.
 
+## Inbound webhooks (unreleased)
+
+Project-scoped public ingest for external systems.
+
+- `POST /api/v1/hooks/<token>` — token is the credential; optional
+  `X-Primora-Signature` HMAC-SHA256 verification when a secret is set.
+- `event` mode republishes the body as `inbound.received` (webhooks +
+  realtime fan out for free); `job` mode enqueues a scheduled-job run with
+  the received body as payload (`triggered_by: "hook"`).
+- 256 KiB body cap; `last_received_at` tracked; managed from Integrations.
+
 ## Future phases — candidates
 
 Ordered loosely by leverage. None committed; each gets scoped when picked.
@@ -330,8 +341,6 @@ Ordered loosely by leverage. None committed; each gets scoped when picked.
 - **Phase 10 — Storage backends** — S3-compatible object storage behind
   the existing bucket abstraction (deferred from Phase 6), plus
   presigned-URL uploads for large files.
-- **Inbound webhooks** — project-scoped ingest endpoints that turn
-  external events into domain events/jobs.
 - **HA mode** — leader-elected scheduler + distributed locks so two
   backend replicas don't double-fire jobs; Postgres advisory locks are
   enough at this scale.
