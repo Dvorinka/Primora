@@ -31,6 +31,8 @@ const (
 	WebhookEventIssueCreated    = "issue.created"
 	WebhookEventDeployMarker    = "deploy.marker"
 	WebhookEventTest            = "webhook.test"
+	WebhookEventAlertFired      = "alert.fired"
+	WebhookEventAlertResolved   = "alert.resolved"
 	WebhookEventDocumentCreated = "document.created"
 	WebhookEventDocumentUpdated = "document.updated"
 	WebhookEventDocumentDeleted = "document.deleted"
@@ -43,6 +45,8 @@ var webhookEventTypes = map[string]bool{
 	WebhookEventIssueCreated:    true,
 	WebhookEventDeployMarker:    true,
 	WebhookEventTest:            true,
+	WebhookEventAlertFired:      true,
+	WebhookEventAlertResolved:   true,
 	WebhookEventJobRun:          true,
 	WebhookEventDocumentCreated: true,
 	WebhookEventDocumentUpdated: true,

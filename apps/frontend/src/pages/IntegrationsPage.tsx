@@ -1,8 +1,11 @@
 import { For, Show, createEffect, createSignal } from "solid-js";
 import {
+  AlertsService,
   CreateIntegrationRequest,
   IntegrationsService,
+  UpsertAlertRuleRequest,
   WebhooksService,
+  type AlertRule,
   type Integration,
   type IntegrationAnalytics,
   type Webhook,
@@ -48,7 +51,7 @@ const statusVariant = (s?: string) =>
         ? "warning"
         : "neutral";
 
-const EVENT_TYPES = ["issue.created", "deploy.marker", "webhook.test"] as const;
+const EVENT_TYPES = ["issue.created", "deploy.marker", "webhook.test", "alert.fired", "alert.resolved"] as const;
 
 export function IntegrationsPage(props: IntegrationsPageProps) {
   const [tab, setTab] = createSignal<Tab>("integrations");
@@ -59,8 +62,17 @@ export function IntegrationsPage(props: IntegrationsPageProps) {
   const [analyticsSite, setAnalyticsSite] = createSignal<Record<string, string>>({});
   const [expandedIntegration, setExpandedIntegration] = createSignal<string>();
   const [expandedWebhook, setExpandedWebhook] = createSignal<string>();
+  const [alertRules, setAlertRules] = createSignal<AlertRule[]>([]);
   const [showCreateIntegration, setShowCreateIntegration] = createSignal(false);
   const [showCreateWebhook, setShowCreateWebhook] = createSignal(false);
+  const [showCreateAlert, setShowCreateAlert] = createSignal(false);
+  const [alertForm, setAlertForm] = createSignal({
+    name: "",
+    kind: UpsertAlertRuleRequest.kind.HEARTBEAT_SILENCE as UpsertAlertRuleRequest.kind,
+    component: "",
+    threshold: "5",
+    window: "15",
+  });
   const [integrationForm, setIntegrationForm] = createSignal({ name: "", base_url: "", api_key: "", site_id: "" });
   const [webhookForm, setWebhookForm] = createSignal({ url: "", secret: "", events: [] as string[], enabled: true });
   const [markerForm, setMarkerForm] = createSignal({ version: "", ref: "", environment: "", note: "" });
@@ -75,12 +87,14 @@ export function IntegrationsPage(props: IntegrationsPageProps) {
     setLoading(true);
     setError("");
     try {
-      const [int, hooks] = await Promise.all([
+      const [int, hooks, rules] = await Promise.all([
         intSvc(props.demoMode).listIntegrations({ projectId: props.projectID }),
         hookSvc(props.demoMode).listWebhooks({ projectId: props.projectID }),
+        props.demoMode ? Promise.resolve({ items: [] }) : AlertsService.listAlertRules({ projectId: props.projectID }),
       ]);
       setIntegrations(int.items ?? []);
       setWebhooks(hooks.items ?? []);
+      setAlertRules(rules.items ?? []);
     } catch (e) {
       setError(err(e));
     } finally {
@@ -203,6 +217,31 @@ export function IntegrationsPage(props: IntegrationsPageProps) {
       `del-hook-${id}`,
       () => hookSvc(props.demoMode).deleteWebhook({ projectId: props.projectID!, webhookId: id }),
       "Webhook deleted",
+    );
+
+  const createAlertRule = (e: Event) => {
+    e.preventDefault();
+    const form = alertForm();
+    const threshold = parseInt(form.threshold, 10) || 0;
+    const config =
+      form.kind === UpsertAlertRuleRequest.kind.HEARTBEAT_SILENCE
+        ? { component: form.component.trim() || undefined, threshold_minutes: threshold }
+        : { component: form.component.trim() || undefined, threshold_count: threshold, window_minutes: parseInt(form.window, 10) || 15 };
+    void run("create-alert", async () => {
+      await AlertsService.createAlertRule({
+        projectId: props.projectID!,
+        requestBody: { name: form.name.trim(), kind: form.kind, config },
+      });
+      setShowCreateAlert(false);
+      setAlertForm({ name: "", kind: UpsertAlertRuleRequest.kind.HEARTBEAT_SILENCE, component: "", threshold: "5", window: "15" });
+    }, "Alert rule created");
+  };
+
+  const deleteAlertRule = (id: string) =>
+    run(
+      `del-alert-${id}`,
+      () => AlertsService.deleteAlertRule({ projectId: props.projectID!, ruleId: id }),
+      "Alert rule deleted",
     );
 
   const testWebhook = (id: string) =>
@@ -506,6 +545,84 @@ export function IntegrationsPage(props: IntegrationsPageProps) {
           </Show>
         </div>
 
+        <div class="card card-flush mt-4">
+          <div class="card-header">
+            <div class="flex-1">
+              <div class="card-header-title">Alert rules</div>
+              <div class="card-header-description">
+                Telemetry conditions that fire <code>alert.fired</code> / <code>alert.resolved</code> events —
+                subscribe a webhook above to receive them.
+              </div>
+            </div>
+            <Show when={props.canManage}>
+              <button class="btn btn-primary btn-sm" onClick={() => setShowCreateAlert(true)}>
+                <IconPlus class="w-4 h-4" />
+                Add rule
+              </button>
+            </Show>
+          </div>
+          <Show
+            when={alertRules().length > 0}
+            fallback={
+              <p class="text-text-2 text-sm p-4">
+                No alert rules yet. Watch for heartbeat silence or error spikes across your components.
+              </p>
+            }
+          >
+            <div class="table-container">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Condition</th>
+                    <th>Scope</th>
+                    <th>State</th>
+                    <th style="text-align:right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <For each={alertRules()}>
+                    {(rule) => (
+                      <tr>
+                        <td class="font-medium">{rule.name}</td>
+                        <td class="text-text-2">
+                          {rule.kind === "heartbeat_silence"
+                            ? `no heartbeat for ${rule.config.threshold_minutes ?? "?"}m`
+                            : `≥${rule.config.threshold_count ?? "?"} errors in ${rule.config.window_minutes ?? 15}m`}
+                        </td>
+                        <td>
+                          <Show when={rule.config.component} fallback={<span class="text-text-2">all components</span>}>
+                            <Badge variant="neutral">{rule.config.component}</Badge>
+                          </Show>
+                        </td>
+                        <td>
+                          <Show
+                            when={rule.firing.length > 0}
+                            fallback={<Badge variant={rule.enabled ? "success" : "neutral"}>{rule.enabled ? "watching" : "disabled"}</Badge>}
+                          >
+                            <Badge variant="error">firing: {rule.firing.join(", ")}</Badge>
+                          </Show>
+                        </td>
+                        <td style="text-align:right;white-space:nowrap">
+                          <Show when={props.canManage}>
+                            <button
+                              class="btn btn-ghost btn-sm"
+                              onClick={() => void deleteAlertRule(rule.id)}
+                              disabled={busy() === `del-alert-${rule.id}`}
+                            >
+                              <IconTrash class="w-4 h-4" />
+                            </button>
+                          </Show>
+                        </td>
+                      </tr>
+                    )}
+                  </For>
+                </tbody>
+              </table>
+            </div>
+          </Show>
+        </div>
+
         <Show when={props.canManage}>
           <div class="card mt-4">
             <div class="card-header">
@@ -634,6 +751,58 @@ export function IntegrationsPage(props: IntegrationsPageProps) {
               Cancel
             </button>
             <button type="submit" class="btn btn-primary" disabled={busy() === "create-webhook"}>
+              Create
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={showCreateAlert()} onClose={() => setShowCreateAlert(false)} title="Add alert rule" size="md">
+        <form onSubmit={createAlertRule} class="space-y-4">
+          <Input
+            label="Name"
+            placeholder="api_down"
+            required
+            value={alertForm().name}
+            onInput={(e) => setAlertForm((c) => ({ ...c, name: e.currentTarget.value }))}
+          />
+          <Select
+            label="Condition"
+            value={alertForm().kind}
+            onChange={(e) => setAlertForm((c) => ({ ...c, kind: e.currentTarget.value as UpsertAlertRuleRequest.kind }))}
+            options={[
+              { value: "heartbeat_silence", label: "Heartbeat silence — component stops reporting" },
+              { value: "error_spike", label: "Error spike — too many errors in a window" },
+            ]}
+          />
+          <Input
+            label="Component"
+            placeholder="empty = all components"
+            value={alertForm().component}
+            onInput={(e) => setAlertForm((c) => ({ ...c, component: e.currentTarget.value }))}
+          />
+          <div class="grid gap-3 sm:grid-cols-2">
+            <Input
+              label={alertForm().kind === UpsertAlertRuleRequest.kind.HEARTBEAT_SILENCE ? "Silent for (minutes)" : "Errors at least"}
+              type="number"
+              required
+              value={alertForm().threshold}
+              onInput={(e) => setAlertForm((c) => ({ ...c, threshold: e.currentTarget.value }))}
+            />
+            <Show when={alertForm().kind === UpsertAlertRuleRequest.kind.ERROR_SPIKE}>
+              <Input
+                label="Window (minutes)"
+                type="number"
+                value={alertForm().window}
+                onInput={(e) => setAlertForm((c) => ({ ...c, window: e.currentTarget.value }))}
+              />
+            </Show>
+          </div>
+          <div class="flex justify-end gap-2">
+            <button type="button" class="btn btn-ghost" onClick={() => setShowCreateAlert(false)}>
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary" disabled={busy() === "create-alert"}>
               Create
             </button>
           </div>

@@ -140,6 +140,18 @@ func (ns NullCoreProjectRole) Value() (driver.Value, error) {
 	return string(ns.CoreProjectRole), nil
 }
 
+type CoreAlertRule struct {
+	ID        uuid.UUID          `json:"id"`
+	ProjectID uuid.UUID          `json:"project_id"`
+	Name      string             `json:"name"`
+	Kind      string             `json:"kind"`
+	Config    []byte             `json:"config"`
+	Enabled   bool               `json:"enabled"`
+	State     []byte             `json:"state"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
 type CoreApiKey struct {
 	ID              uuid.UUID          `json:"id"`
 	ProjectID       uuid.UUID          `json:"project_id"`

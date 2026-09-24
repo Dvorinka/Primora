@@ -1941,6 +1941,106 @@ paths:
           $ref: "#/components/responses/ErrorResponse"
         "404":
           $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/alerts:
+    get:
+      tags: [Alerts]
+      operationId: listAlertRules
+      summary: Lists telemetry alert rules for the project.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "200":
+          description: Alert rules
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertRuleListResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+    post:
+      tags: [Alerts]
+      operationId: createAlertRule
+      summary: Creates an alert rule. Rules fire `alert.fired`/`alert.resolved` domain events on state transitions — subscribe a webhook to those event types to receive them.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertAlertRuleRequest"
+      responses:
+        "201":
+          description: Alert rule created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertRule"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/alerts/{ruleID}:
+    put:
+      tags: [Alerts]
+      operationId: updateAlertRule
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - name: ruleID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertAlertRuleRequest"
+      responses:
+        "200":
+          description: Alert rule updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertRule"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+    delete:
+      tags: [Alerts]
+      operationId: deleteAlertRule
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - name: ruleID
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Alert rule deleted
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
 components:
   securitySchemes:
     bearerAuth:
@@ -3512,7 +3612,7 @@ components:
           type: array
           items:
             type: string
-          description: Event filter (issue.created, deploy.marker, webhook.test, job.run, document.*, object.*). Empty means all events.
+          description: Event filter (issue.created, deploy.marker, webhook.test, job.run, alert.fired, alert.resolved, document.*, object.*). Empty means all events.
         enabled:
           type: boolean
         has_secret:
@@ -3534,7 +3634,7 @@ components:
           type: array
           items:
             type: string
-            enum: [issue.created, deploy.marker, webhook.test, job.run, document.created, document.updated, document.deleted, object.created, object.updated, object.deleted]
+            enum: [issue.created, deploy.marker, webhook.test, job.run, alert.fired, alert.resolved, document.created, document.updated, document.deleted, object.created, object.updated, object.deleted]
         enabled:
           type: boolean
       required: [url]
@@ -3551,7 +3651,7 @@ components:
           type: array
           items:
             type: string
-            enum: [issue.created, deploy.marker, webhook.test, job.run, document.created, document.updated, document.deleted, object.created, object.updated, object.deleted]
+            enum: [issue.created, deploy.marker, webhook.test, job.run, alert.fired, alert.resolved, document.created, document.updated, document.deleted, object.created, object.updated, object.deleted]
         enabled:
           type: boolean
     WebhookCreateResponse:
@@ -3821,3 +3921,71 @@ components:
         value:
           type: string
       required: [name, value]
+    AlertRuleConfig:
+      type: object
+      properties:
+        component:
+          type: string
+          description: Restrict the rule to one component name; empty = all components.
+        threshold_minutes:
+          type: integer
+          description: heartbeat_silence — fire when a component has not heartbeated for this many minutes (1–10080).
+        threshold_count:
+          type: integer
+          format: int64
+          description: error_spike — fire when a component logs at least this many errors inside the window.
+        window_minutes:
+          type: integer
+          description: error_spike — sliding window size (default 15, 1–1440).
+    AlertRule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        kind:
+          type: string
+          enum: [heartbeat_silence, error_spike]
+        config:
+          $ref: "#/components/schemas/AlertRuleConfig"
+        enabled:
+          type: boolean
+        firing:
+          type: array
+          items:
+            type: string
+          description: Component names currently in breached state.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required: [id, project_id, name, kind, config, enabled, firing, created_at, updated_at]
+    AlertRuleListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlertRule"
+      required: [items]
+    UpsertAlertRuleRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Env-var-safe name ([A-Za-z_][A-Za-z0-9_]*).
+        kind:
+          type: string
+          enum: [heartbeat_silence, error_spike]
+        config:
+          $ref: "#/components/schemas/AlertRuleConfig"
+        enabled:
+          type: boolean
+      required: [name, kind]

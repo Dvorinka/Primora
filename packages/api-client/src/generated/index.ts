@@ -8,6 +8,9 @@ export { OpenAPI } from './core/OpenAPI';
 export type { OpenAPIConfig } from './core/OpenAPI';
 
 export type { AcceptInvitationRequest } from './models/AcceptInvitationRequest';
+export { AlertRule } from './models/AlertRule';
+export type { AlertRuleConfig } from './models/AlertRuleConfig';
+export type { AlertRuleListResponse } from './models/AlertRuleListResponse';
 export type { ApiKey } from './models/ApiKey';
 export type { ApiKeyID } from './models/ApiKeyID';
 export type { AuditAction } from './models/AuditAction';
@@ -130,6 +133,7 @@ export { UpdateProjectMemberRoleRequest } from './models/UpdateProjectMemberRole
 export type { UpdateProjectRequest } from './models/UpdateProjectRequest';
 export type { UpdateScheduledJobRequest } from './models/UpdateScheduledJobRequest';
 export type { UpdateWebhookRequest } from './models/UpdateWebhookRequest';
+export { UpsertAlertRuleRequest } from './models/UpsertAlertRuleRequest';
 export type { UserID } from './models/UserID';
 export type { UserSummary } from './models/UserSummary';
 export type { Webhook } from './models/Webhook';
@@ -140,6 +144,9 @@ export type { WebhookID } from './models/WebhookID';
 export type { WebhookListResponse } from './models/WebhookListResponse';
 
 export { $AcceptInvitationRequest } from './schemas/$AcceptInvitationRequest';
+export { $AlertRule } from './schemas/$AlertRule';
+export { $AlertRuleConfig } from './schemas/$AlertRuleConfig';
+export { $AlertRuleListResponse } from './schemas/$AlertRuleListResponse';
 export { $ApiKey } from './schemas/$ApiKey';
 export { $ApiKeyID } from './schemas/$ApiKeyID';
 export { $AuditAction } from './schemas/$AuditAction';
@@ -262,6 +269,7 @@ export { $UpdateProjectMemberRoleRequest } from './schemas/$UpdateProjectMemberR
 export { $UpdateProjectRequest } from './schemas/$UpdateProjectRequest';
 export { $UpdateScheduledJobRequest } from './schemas/$UpdateScheduledJobRequest';
 export { $UpdateWebhookRequest } from './schemas/$UpdateWebhookRequest';
+export { $UpsertAlertRuleRequest } from './schemas/$UpsertAlertRuleRequest';
 export { $UserID } from './schemas/$UserID';
 export { $UserSummary } from './schemas/$UserSummary';
 export { $Webhook } from './schemas/$Webhook';
@@ -271,6 +279,7 @@ export { $WebhookDeliveryListResponse } from './schemas/$WebhookDeliveryListResp
 export { $WebhookID } from './schemas/$WebhookID';
 export { $WebhookListResponse } from './schemas/$WebhookListResponse';
 
+export { AlertsService } from './services/AlertsService';
 export { AutomationService } from './services/AutomationService';
 export { CollectionsService } from './services/CollectionsService';
 export { DatabasesService } from './services/DatabasesService';

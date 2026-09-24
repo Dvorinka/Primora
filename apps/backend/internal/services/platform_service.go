@@ -38,6 +38,7 @@ type PlatformService struct {
 	enc            *secrets.Encryptor
 	dispatcher     *WebhookDispatcher
 	scheduler      *JobScheduler
+	alerts         *alertEvaluator
 }
 
 type BootstrapInput struct {
@@ -230,6 +231,8 @@ func NewPlatformService(repo *repositories.CoreRepository, store *storage.LocalS
 		s.dispatcher.Start(context.Background())
 		s.scheduler = NewJobScheduler(repo.Queries(), enc, logger, s.publishEvent)
 		s.scheduler.Start(context.Background())
+		s.alerts = newAlertEvaluator(repo.Queries(), s.publishEvent, logger)
+		s.alerts.Start(context.Background())
 	}
 	return s
 }
@@ -241,6 +244,9 @@ func (s *PlatformService) Close() {
 	}
 	if s.scheduler != nil {
 		s.scheduler.Stop()
+	}
+	if s.alerts != nil {
+		s.alerts.Stop()
 	}
 }
 

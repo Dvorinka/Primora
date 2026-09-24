@@ -307,6 +307,19 @@ Channel subscriptions over the Phase 7 SSE stream, in `@primora/client`.
 - Presence and client-broadcast deliberately deferred — protocol question,
   no consumer yet.
 
+## Notifications — alert rules (unreleased)
+
+Telemetry-driven alerts delivered through the existing webhook dispatcher.
+
+- `core.alert_rules` (migration 00012) — `heartbeat_silence` and
+  `error_spike` kinds, per-component or project-wide scope, evaluated by a
+  60 s backend ticker.
+- Transition-based firing: `alert.fired` once on breach, `alert.resolved`
+  on recovery — no notification storms. Both are webhook event types and
+  realtime events, so any existing subscriber receives them signed.
+- CRUD via `/projects/:id/alerts`; Integrations page manages rules next to
+  webhooks and shows live `firing` state.
+
 ## Future phases — candidates
 
 Ordered loosely by leverage. None committed; each gets scoped when picked.
@@ -317,8 +330,6 @@ Ordered loosely by leverage. None committed; each gets scoped when picked.
 - **Phase 10 — Storage backends** — S3-compatible object storage behind
   the existing bucket abstraction (deferred from Phase 6), plus
   presigned-URL uploads for large files.
-- **Notifications** — alert rules on telemetry (error-rate thresholds,
-  heartbeat silence) fanning out through the webhook dispatcher.
 - **Inbound webhooks** — project-scoped ingest endpoints that turn
   external events into domain events/jobs.
 - **HA mode** — leader-elected scheduler + distributed locks so two
