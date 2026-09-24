@@ -4,9 +4,14 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/tdvorak/primora/apps/backend/internal/services"
 )
 
 func newTestContext(rawQuery string) (*gin.Context, *httptest.ResponseRecorder) {
@@ -101,6 +106,48 @@ func TestHandleErrorStatusMapping(t *testing.T) {
 		ctx, recorder := newTestContext("")
 		handler.handleError(ctx, errors.New("invalid invitation project scope"))
 		if recorder.Code != http.StatusBadRequest {
+			t.Fatalf("unexpected status: %d", recorder.Code)
+		}
+	})
+
+	t.Run("maps missing rows to not found", func(t *testing.T) {
+		t.Parallel()
+		ctx, recorder := newTestContext("")
+		handler.handleError(ctx, pgx.ErrNoRows)
+		if recorder.Code != http.StatusNotFound {
+			t.Fatalf("unexpected status: %d", recorder.Code)
+		}
+	})
+
+	t.Run("maps InputError to bad request with message", func(t *testing.T) {
+		t.Parallel()
+		ctx, recorder := newTestContext("")
+		handler.handleError(ctx, services.NewInputError("webhook url must be https"))
+		if recorder.Code != http.StatusBadRequest {
+			t.Fatalf("unexpected status: %d", recorder.Code)
+		}
+		if !strings.Contains(recorder.Body.String(), "webhook url must be https") {
+			t.Fatalf("expected reason in body, got %s", recorder.Body.String())
+		}
+	})
+
+	t.Run("maps unique violation to conflict without leaking", func(t *testing.T) {
+		t.Parallel()
+		ctx, recorder := newTestContext("")
+		handler.handleError(ctx, &pgconn.PgError{Code: "23505", Message: "duplicate key value violates unique constraint \"projects_slug_key\""})
+		if recorder.Code != http.StatusConflict {
+			t.Fatalf("unexpected status: %d", recorder.Code)
+		}
+		if strings.Contains(recorder.Body.String(), "projects_slug_key") || strings.Contains(recorder.Body.String(), "23505") {
+			t.Fatalf("raw constraint leaked: %s", recorder.Body.String())
+		}
+	})
+
+	t.Run("maps unknown pg error to internal error", func(t *testing.T) {
+		t.Parallel()
+		ctx, recorder := newTestContext("")
+		handler.handleError(ctx, &pgconn.PgError{Code: "XX000", Message: "internal"})
+		if recorder.Code != http.StatusInternalServerError {
 			t.Fatalf("unexpected status: %d", recorder.Code)
 		}
 	})

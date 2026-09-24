@@ -1534,6 +1534,8 @@ type InputError struct{ msg string }
 
 func (e *InputError) Error() string { return e.msg }
 
+func NewInputError(msg string) error { return &InputError{msg: msg} }
+
 func inputErrorf(format string, args ...any) error {
 	return &InputError{msg: fmt.Sprintf(format, args...)}
 }
