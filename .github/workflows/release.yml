@@ -331,6 +331,9 @@ jobs:
       VERSION: ${{ needs.verify.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+      # ghcr.io requires lowercase repo paths; the owner login may be mixed-case.
+      - name: Compute lowercase GHCR owner
+        run: echo "GHCR_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -338,17 +341,17 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: anchore/sbom-action@v0
         with:
-          image: ghcr.io/${{ github.repository_owner }}/primora-backend:${{ needs.verify.outputs.version }}
+          image: ghcr.io/${{ env.GHCR_OWNER }}/primora-backend:${{ needs.verify.outputs.version }}
           format: cyclonedx-json
           output-file: dist-release/sbom-backend.cdx.json
       - uses: anchore/sbom-action@v0
         with:
-          image: ghcr.io/${{ github.repository_owner }}/primora-auth:${{ needs.verify.outputs.version }}
+          image: ghcr.io/${{ env.GHCR_OWNER }}/primora-auth:${{ needs.verify.outputs.version }}
           format: cyclonedx-json
           output-file: dist-release/sbom-auth.cdx.json
       - uses: anchore/sbom-action@v0
         with:
-          image: ghcr.io/${{ github.repository_owner }}/primora-frontend:${{ needs.verify.outputs.version }}
+          image: ghcr.io/${{ env.GHCR_OWNER }}/primora-frontend:${{ needs.verify.outputs.version }}
           format: cyclonedx-json
           output-file: dist-release/sbom-frontend.cdx.json
       - uses: anchore/sbom-action@v0
