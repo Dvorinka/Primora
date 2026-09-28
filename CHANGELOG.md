@@ -4,6 +4,12 @@ All notable changes to Primora. Format follows [Keep a Changelog](https://keepac
 
 ## [Unreleased]
 
+### Fixed
+
+- **Self-hosted sign-up works on any origin** — trusted origins are now derived from the request's public host (forwarded by nginx), so browsing the instance via a LAN IP, hostname, or custom port no longer fails every auth POST with a 403. Static `VITE_APP_URL`/`AUTH_BASE_URL` origins and `BETTER_AUTH_TRUSTED_ORIGINS` still apply.
+- **Sign-up/sign-in failures are surfaced, not swallowed** — better-auth resolves `{ data, error }` instead of throwing, so a failed request previously showed "Account created — signing you in" and bounced back to the bootstrap screen. The real server error (invalid origin, rate limit, disabled sign-up) is now displayed.
+- **Mail probe can no longer break auth** — `hasMailTransport` degrades to "no transport" instead of throwing when `core.settings` is unreadable, and the no-transport startup backfill is best-effort. Previously, auth could crash-loop while the backend was still migrating on a fresh volume — every sign-up 502'd during the window.
+
 ## [0.8.1] - 2026-09-28
 
 ### Fixed
