@@ -339,6 +339,8 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # anchore/sbom-action does not create the output directory.
+      - run: mkdir -p dist-release
       - uses: anchore/sbom-action@v0
         with:
           image: ghcr.io/${{ env.GHCR_OWNER }}/primora-backend:${{ needs.verify.outputs.version }}
