@@ -4,6 +4,10 @@ All notable changes to Primora. Format follows [Keep a Changelog](https://keepac
 
 ## [Unreleased]
 
+### Fixed
+
+- **SMTP-less instances no longer involve email at all** — when no mail transport is configured (no Resend key, no `SMTP_HOST`), new accounts are created `emailVerified=true`, the verification send is skipped entirely, and existing unverified users are marked verified on startup. `.env.example` no longer defaults `SMTP_HOST` to the dev-only `mailpit` service, which left production deploys pointing at a transport that does not exist.
+
 ## [0.8.0] - 2026-09-28
 
 ### Added

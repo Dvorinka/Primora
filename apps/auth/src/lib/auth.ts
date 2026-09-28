@@ -4,7 +4,7 @@ import { admin, jwt } from "better-auth/plugins";
 import { getMigrations } from "better-auth/db/migration";
 
 import { authPool } from "./db.js";
-import { sendTransactionalEmail } from "./mail.js";
+import { hasMailTransport, sendTransactionalEmail } from "./mail.js";
 import { getBoolSetting } from "./settings.js";
 import { env } from "./env.js";
 
@@ -72,20 +72,29 @@ export const auth = betterAuth({
         // Gates only the public sign-up endpoint. Users created through the
         // admin plugin or OAuth callbacks take different paths and pass.
         async before(user, ctx) {
-          if (ctx?.path !== "/sign-up/email") return;
-          const { rows } = await authPool.query<{ n: number }>(
-            `select count(*)::int as n from "user"`,
-          );
-          if (rows[0].n === 0) {
-            // Bootstrap: the first public signup becomes the instance admin.
-            return { data: { ...user, role: "admin" } };
+          const data = { ...user };
+          // Without a mail transport the verification mail can never arrive —
+          // mark every created account verified so nothing downstream nags
+          // "unverified" on users nobody can verify.
+          if (!(await hasMailTransport())) {
+            data.emailVerified = true;
           }
-          const enabled = await getBoolSetting("auth.signup_enabled", env.SIGNUP_ENABLED);
-          if (!enabled) {
-            throw new APIError("FORBIDDEN", {
-              message: "Sign-up is disabled on this instance.",
-            });
+          if (ctx?.path === "/sign-up/email") {
+            const { rows } = await authPool.query<{ n: number }>(
+              `select count(*)::int as n from "user"`,
+            );
+            if (rows[0].n === 0) {
+              // Bootstrap: the first public signup becomes the instance admin.
+              return { data: { ...data, role: "admin" } };
+            }
+            const enabled = await getBoolSetting("auth.signup_enabled", env.SIGNUP_ENABLED);
+            if (!enabled) {
+              throw new APIError("FORBIDDEN", {
+                message: "Sign-up is disabled on this instance.",
+              });
+            }
           }
+          return data.emailVerified === user.emailVerified ? undefined : { data };
         },
       },
     },
@@ -94,6 +103,9 @@ export const auth = betterAuth({
     sendOnSignUp: true,
     autoSignInAfterVerification: true,
     async sendVerificationEmail({ user, url }) {
+      // No transport at all → the mail can never arrive; the user was already
+      // marked verified at creation.
+      if (!(await hasMailTransport())) return;
       // Verification is optional — a misconfigured transport must not fail
       // sign-up or sign-in.
       try {
@@ -141,6 +153,12 @@ export const auth = betterAuth({
 export async function runAuthMigrations() {
   const migrations = await getMigrations(auth.options);
   await migrations.runMigrations();
+}
+
+/** No transport → existing unverified users can never resolve that state. */
+export async function verifyUsersWithoutMailTransport() {
+  if (await hasMailTransport()) return;
+  await authPool.query(`update "user" set "emailVerified" = true where "emailVerified" = false`);
 }
 
 /** Bootstrap admins by email — run after migrations so the role column exists. */
