@@ -8,6 +8,7 @@ import {
   IconCollections,
   IconIntegrations,
   IconChevronRight,
+  IconTerminal,
 } from "./Icons";
 
 interface ProjectDashboardProps {
@@ -15,6 +16,7 @@ interface ProjectDashboardProps {
   overview?: ProjectOverview;
   recentAudit?: AuditLog[];
   onNavigate: (view: string) => void;
+  onAgentSetup?: () => void;
 }
 
 function formatBytes(bytes?: number): string {
@@ -135,6 +137,12 @@ export function ProjectDashboard(props: ProjectDashboardProps) {
           </p>
         </div>
         <div class="page-actions">
+          <Show when={props.onAgentSetup}>
+            <button class="btn btn-secondary btn-sm" onClick={() => props.onAgentSetup!()}>
+              <IconTerminal class="w-3.5 h-3.5" />
+              Agent setup
+            </button>
+          </Show>
           <button class="btn btn-secondary btn-sm" onClick={() => props.onNavigate("settings")}>
             <IconKey class="w-3.5 h-3.5" />
             Keys

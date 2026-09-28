@@ -6,6 +6,8 @@ interface OnboardingModalProps {
   isOpen: boolean;
   projectName: string;
   onClose: () => void;
+  /** fired on the final "Done" step instead of onClose — used to chain into agent setup */
+  onDone?: () => void;
 }
 
 const steps = [
@@ -88,7 +90,16 @@ export function OnboardingModal(props: OnboardingModalProps) {
             </Show>
             <button
               class="btn btn-primary btn-sm"
-              onClick={() => (step() < steps.length - 1 ? setStep(step() + 1) : handleClose())}
+              onClick={() => {
+                if (step() < steps.length - 1) {
+                  setStep(step() + 1);
+                } else if (props.onDone) {
+                  setStep(0);
+                  props.onDone();
+                } else {
+                  handleClose();
+                }
+              }}
             >
               {step() === steps.length - 1 ? "Done" : "Next"}
             </button>

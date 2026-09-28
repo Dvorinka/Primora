@@ -3,7 +3,7 @@ import type { ProjectSummary } from "@primora/api-client";
 import { Badge } from "../components/Badge";
 import { Modal, ModalFooter } from "../components/Modal";
 import { Input, Textarea } from "../components/Input";
-import { IconPlus, IconProjects, IconArrowRight, IconEdit, IconTrash } from "../components/Icons";
+import { IconPlus, IconProjects, IconArrowRight, IconEdit, IconTrash, IconTerminal } from "../components/Icons";
 
 interface ProjectInput {
   name: string;
@@ -32,6 +32,7 @@ interface ProjectsPageProps {
   onDeleteProject: () => void;
   onSelectProject: (id: string) => void;
   onNavigateToDashboard: () => void;
+  onAgentSetup?: () => void;
 }
 
 export function ProjectsPage(props: ProjectsPageProps) {
@@ -169,6 +170,12 @@ export function ProjectsPage(props: ProjectsPageProps) {
             </span>
           </div>
           <div class="flex gap-2">
+            <Show when={props.onAgentSetup}>
+              <button class="btn btn-secondary" onClick={() => props.onAgentSetup!()}>
+                <IconTerminal class="w-4 h-4" />
+                Agent setup
+              </button>
+            </Show>
             <button
               class="btn btn-secondary"
               onClick={() => setSettingsOpen(true)}
