@@ -63,6 +63,9 @@ export const auth = betterAuth({
     if (host) {
       const proto = request?.headers.get("x-forwarded-proto") ?? "http";
       origins.push(`${proto}://${host}`);
+      // TLS often terminates at an external proxy — nginx then reports http.
+      // Both schemes on the serving host are legitimately this instance.
+      origins.push(proto === "https" ? `http://${host}` : `https://${host}`);
     }
     return origins;
   },

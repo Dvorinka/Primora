@@ -77,7 +77,9 @@ Prerequisites: Docker with the Compose plugin.
 curl -fsSL https://raw.githubusercontent.com/Dvorinka/Primora/master/install.sh | bash
 ```
 
-Installs into `./primora`, generates secrets, and starts the stack on port 80.
+Installs into `./primora`, asks one question — the URL you'll open the app on
+(domain, IP, optional port) — generates secrets, and starts the stack.
+Non-interactive: `PUBLIC_URL=https://primora.example.com bash install.sh`.
 Or from a clone:
 
 ```bash
