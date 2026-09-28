@@ -29,6 +29,7 @@ import { authClient, fetchApiToken } from "./lib/auth-client";
 import { configureApiToken, errorMessage } from "./lib/api";
 import { isDemoMode, disableDemoMode, enableDemoMode, demoSession, demoService } from "./lib/demo-mode";
 import {
+  AgentSetupModal,
   AppShell,
   CommandPaletteEnhanced,
   NetworkError,
@@ -127,6 +128,7 @@ export default function App() {
   const [name, setName] = createSignal("");
   const [activeView, setActiveView] = createSignal<ViewType>("dashboard");
   const [showOnboarding, setShowOnboarding] = createSignal(false);
+  const [agentSetupOpen, setAgentSetupOpen] = createSignal(false);
   const [paletteOpen, setPaletteOpen] = createSignal(false);
   const [theme, setTheme] = createSignal<"dark" | "light">(
     (localStorage.getItem("primora_theme") as "dark" | "light") ?? "dark",
@@ -1696,6 +1698,7 @@ export default function App() {
                 overview={projectOverview()}
                 recentAudit={auditLogs()}
                 onNavigate={(view) => setActiveView(view as ViewType)}
+                onAgentSetup={() => setAgentSetupOpen(true)}
               />
             </Show>
           </Show>
@@ -1716,6 +1719,7 @@ export default function App() {
               onDeleteProject={deleteActiveProject}
               onSelectProject={setSelectedProjectID}
               onNavigateToDashboard={() => setActiveView("dashboard")}
+              onAgentSetup={() => setAgentSetupOpen(true)}
             />
           </Show>
 
@@ -1966,6 +1970,23 @@ export default function App() {
         isOpen={showOnboarding()}
         projectName={activeProject()?.name ?? "Your project"}
         onClose={() => setShowOnboarding(false)}
+        onDone={() => {
+          setShowOnboarding(false);
+          setAgentSetupOpen(true);
+        }}
+      />
+
+      <AgentSetupModal
+        open={agentSetupOpen()}
+        onClose={() => setAgentSetupOpen(false)}
+        project={activeProject()}
+        canManage={canUpdateProject() || isDemo}
+        demoMode={isDemo}
+        onKeyCreated={() => {
+          void refetchAPIKeys();
+          void refetchAuditLogs();
+          void refreshProjectOverviewSnapshot();
+        }}
       />
     </Show>
   );

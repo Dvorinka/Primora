@@ -1,4 +1,5 @@
 // Components barrel export
+export { AgentSetupModal, type AgentSetupProject } from "./AgentSetupModal";
 export { AppShell, type ViewType } from "./AppShell";
 export { Badge, StatusBadge } from "./Badge";
 export { Button } from "./Button";

@@ -55,6 +55,7 @@ Supabase, with no hosted tier - your data stays on your hardware.
 - **Automation** - scheduled jobs, inbound webhooks, telemetry alert rules, and `secret://` refs resolved at delivery.
 - **Realtime** - SSE event stream with a typed client SDK (`@primora/client`) — channel subscriptions, presence counts, and client-published `custom.*` events that fan out to webhooks and functions.
 - **API keys** - `prm_<prefix>_<secret>` credentials, shown once.
+- **Agent setup** - every project can mint a `write`-scoped key and generate a copyable AI-agent prompt that wires telemetry, database tracking, and MCP/CLI access into any repository.
 - **Audit log** - every mutating request recorded, with CSV/JSON export.
 - **Demo mode** - fully client-side seeded workspace via `?demo=true`.
 
