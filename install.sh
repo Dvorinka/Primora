@@ -3,8 +3,14 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/Dvorinka/Primora/master/install.sh | bash
 #
-# Installs into ./primora (override with PRIMORA_DIR). Non-interactive:
-#   DOMAIN=example.com NGINX_PORT=8080 bash install.sh
+# Installs into ./primora (override with PRIMORA_DIR). On a fresh install,
+# interactive shells get one question — the URL the app will be opened on
+# (domain or IP, optional port). Non-interactive:
+#   PUBLIC_URL=https://primora.example.com bash install.sh
+#   DOMAIN=192.168.1.50 NGINX_PORT=8085 bash install.sh   (legacy form)
+#
+# https URLs mean TLS terminates at your own proxy in front of Primora's
+# bundled nginx (which always speaks http on NGINX_PORT).
 #
 # Pulls prebuilt GHCR images when available; otherwise downloads the source
 # tarball and builds locally. Either way the result is the same compose stack.
@@ -14,8 +20,8 @@ set -euo pipefail
 REPO="Dvorinka/Primora"
 REF="${PRIMORA_REF:-master}"
 DIR="${PRIMORA_DIR:-primora}"
-DOMAIN="${DOMAIN:-localhost}"
 NGINX_PORT="${NGINX_PORT:-80}"
+PUBLIC_URL="${PUBLIC_URL:-}"
 
 info() { echo "==> $*"; }
 die()  { echo "ERROR: $*" >&2; exit 1; }
@@ -37,7 +43,51 @@ for f in docker-compose.yml .env.example infra/nginx/default.conf; do
   curl -fsSL "https://raw.githubusercontent.com/$REPO/$REF/$f" -o "$f"
 done
 
-if [ ! -f .env ]; then
+if [ -f .env ]; then
+  info "Existing .env kept"
+  # Display URL comes from the file — answers here would change nothing.
+  PUBLIC_URL="$(grep -E '^VITE_APP_URL=' .env | tail -1 | cut -d= -f2- || true)"
+  [ -z "$PUBLIC_URL" ] && PUBLIC_URL="http://localhost"
+else
+  # Public URL — the single question. Env wins, then prompt, then default.
+  if [ -z "$PUBLIC_URL" ] && [ -n "${DOMAIN:-}" ]; then
+    PUBLIC_URL="http://${DOMAIN}"
+    [ "$NGINX_PORT" != "80" ] && PUBLIC_URL="$PUBLIC_URL:$NGINX_PORT"
+  fi
+  if [ -z "$PUBLIC_URL" ]; then
+    DEFAULT_URL="http://localhost"
+    [ "$NGINX_PORT" != "80" ] && DEFAULT_URL="http://localhost:$NGINX_PORT"
+    if [ -t 0 ]; then
+      read -rp "URL where you'll open Primora (domain or IP, e.g. https://primora.example.com) [$DEFAULT_URL]: " PUBLIC_URL
+      PUBLIC_URL="${PUBLIC_URL:-$DEFAULT_URL}"
+    else
+      PUBLIC_URL="$DEFAULT_URL"
+    fi
+  fi
+
+  # Normalize: default scheme http, strip trailing slash.
+  case "$PUBLIC_URL" in
+    http://*|https://*) ;;
+    *) PUBLIC_URL="http://$PUBLIC_URL" ;;
+  esac
+  PUBLIC_URL="${PUBLIC_URL%/}"
+
+  # Split host[:port]; URL paths aren't supported — nginx mounts auth at /auth.
+  REST="${PUBLIC_URL#*://}"
+  HOSTPORT="${REST%%/*}"
+  [ "$REST" != "$HOSTPORT" ] && die "URL paths are not supported — use a domain or port instead: $PUBLIC_URL"
+  if [[ "$HOSTPORT" == *:* ]]; then
+    HOST="${HOSTPORT%%:*}"
+    PORT="${HOSTPORT##*:}"
+  else
+    HOST="$HOSTPORT"; PORT=""
+  fi
+  [ -z "$HOST" ] && die "could not parse a host from: $PUBLIC_URL"
+  if [ -n "$PORT" ]; then
+    [[ "$PORT" =~ ^[0-9]+$ ]] || die "invalid port in: $PUBLIC_URL"
+    NGINX_PORT="$PORT"
+  fi
+
   info "Generating .env with random secrets"
   cp .env.example .env
 
@@ -53,12 +103,15 @@ if [ ! -f .env ]; then
   "${SED[@]}" "s|^PRIMORA_ENCRYPTION_KEY=.*|PRIMORA_ENCRYPTION_KEY=$ENCRYPTION_KEY|" .env
   "${SED[@]}" "s|^NGINX_PORT=.*|NGINX_PORT=$NGINX_PORT|" .env
 
-  if [ "$DOMAIN" != "localhost" ]; then
-    "${SED[@]}" "s|http://localhost|http://$DOMAIN|g" .env
-    "${SED[@]}" "s|^COOKIE_DOMAIN=.*|COOKIE_DOMAIN=$DOMAIN|" .env
+  # Every public URL var (VITE_APP_URL, BETTER_AUTH_URL, AUTH_BASE_URL,
+  # VITE_AUTH_BASE_URL, VITE_API_BASE_URL, BACKEND_PUBLIC_URL) is built on the
+  # http://localhost prefix in .env.example — one rewrite covers them all.
+  "${SED[@]}" "s|http://localhost|$PUBLIC_URL|g" .env
+
+  # Cookie domains only apply to real DNS names — never IPs or localhost.
+  if [ "$HOST" != "localhost" ] && ! [[ "$HOST" =~ ^[0-9.]+$ ]]; then
+    "${SED[@]}" "s|^COOKIE_DOMAIN=.*|COOKIE_DOMAIN=$HOST|" .env
   fi
-else
-  info "Existing .env kept"
 fi
 
 # Compose v5 skips `pull` for services that declare build:, so fetch the
@@ -79,11 +132,12 @@ else
   docker compose up -d --build
 fi
 
-DISPLAY_URL="http://$DOMAIN"
-[ "$NGINX_PORT" != "80" ] && DISPLAY_URL="$DISPLAY_URL:$NGINX_PORT"
-
 info "Primora is starting"
-echo "  Dashboard:  $DISPLAY_URL"
-echo "  Health:     $DISPLAY_URL/api/v1/health/liveness"
+echo "  Dashboard:  $PUBLIC_URL"
+echo "  Health:     $PUBLIC_URL/api/v1/health/liveness"
 echo "  Logs:       cd $DIR && docker compose logs -f"
 echo "  Stop:       cd $DIR && docker compose down"
+if [[ "$PUBLIC_URL" == https://* ]]; then
+  echo
+  echo "  Primora listens on http port $NGINX_PORT — point your TLS proxy there."
+fi
