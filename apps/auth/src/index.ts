@@ -5,7 +5,7 @@ import { requestId } from "hono/request-id";
 import { HTTPException } from "hono/http-exception";
 import { createClient } from "redis";
 
-import { auth, promoteAdminEmails, runAuthMigrations } from "./lib/auth.js";
+import { auth, promoteAdminEmails, runAuthMigrations, verifyUsersWithoutMailTransport } from "./lib/auth.js";
 import { authPool } from "./lib/db.js";
 import { env } from "./lib/env.js";
 
@@ -20,6 +20,7 @@ try {
 }
 
 await retry("auth_migrations", runAuthMigrations);
+await verifyUsersWithoutMailTransport();
 await promoteAdminEmails();
 
 const app = new Hono();

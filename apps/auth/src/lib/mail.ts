@@ -30,6 +30,14 @@ async function resolveMailConfig() {
   } as const;
 }
 
+// True when a mail transport exists (Resend key or SMTP host). Verification
+// and reset mails only make sense when mail can actually leave the box.
+export async function hasMailTransport(): Promise<boolean> {
+  const cfg = await resolveMailConfig();
+  if ("resendApiKey" in cfg && cfg.resendApiKey) return true;
+  return "smtp" in cfg && Boolean(cfg.smtp);
+}
+
 export async function sendTransactionalEmail(input: {
   to: string;
   subject: string;
