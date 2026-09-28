@@ -28,6 +28,7 @@ import { Show, createEffect, createMemo, createResource, createSignal, onCleanup
 import { authClient, fetchApiToken } from "./lib/auth-client";
 import { configureApiToken, errorMessage } from "./lib/api";
 import { isDemoMode, disableDemoMode, enableDemoMode, demoSession, demoService } from "./lib/demo-mode";
+import { applySlugField } from "./lib/slug";
 import {
   AgentSetupModal,
   AppShell,
@@ -1670,14 +1671,14 @@ export default function App() {
                             label="Organization name"
                             placeholder="Acme Corporation"
                             value={organizationInput().name}
-                            onInput={(e) => setOrganizationInput((c) => ({ ...c, name: e.currentTarget.value }))}
+                            onInput={(e) => setOrganizationInput((c) => applySlugField(c, "name", e.currentTarget.value))}
                             required
                           />
                           <Input
                             label="Slug"
                             placeholder="acme"
                             value={organizationInput().slug}
-                            onInput={(e) => setOrganizationInput((c) => ({ ...c, slug: e.currentTarget.value }))}
+                            onInput={(e) => setOrganizationInput((c) => applySlugField(c, "slug", e.currentTarget.value))}
                             required
                           />
                           <button type="submit" class="btn btn-primary w-full" disabled={workspacePending()}>
@@ -1723,7 +1724,7 @@ export default function App() {
               projectMessage={projectMessage()}
               projectPending={projectPending()}
               canUpdateProject={canUpdateProject()}
-              onProjectInputChange={(field, value) => setProjectInput((c) => ({ ...c, [field]: value }))}
+              onProjectInputChange={(field, value) => setProjectInput((c) => applySlugField(c, field, value))}
               onProjectEditInputChange={(field, value) => setProjectEditInput((c) => ({ ...c, [field]: value }))}
               onCreateProject={createProject}
               onUpdateProject={updateActiveProject}
@@ -1822,7 +1823,7 @@ export default function App() {
               previewLoading={objectPreview.loading}
               renameObjectKey={renameObjectKeyInput()}
               moveDestinationBucketID={moveDestinationBucketID()}
-              onBucketInputChange={(field, value) => setBucketInput((c) => ({ ...c, [field]: value }))}
+              onBucketInputChange={(field, value) => setBucketInput((c) => applySlugField(c, field, value))}
               onBucketEditInputChange={(field, value) => setBucketEditInput((c) => ({ ...c, [field]: value }))}
               onCreateBucket={createBucket}
               onUpdateBucket={updateSelectedBucket}
@@ -1859,7 +1860,7 @@ export default function App() {
               collectionPending={collectionPending()}
               documentPending={documentPending()}
               canUpdate={canUpdateProject()}
-              onCollectionInputChange={(field, value) => setCollectionInput((c) => ({ ...c, [field]: value }))}
+              onCollectionInputChange={(field, value) => setCollectionInput((c) => applySlugField(c, field, value))}
               onCreateCollection={createCollection}
               onDeleteCollection={deleteCollection}
               onSelectCollection={setSelectedCollectionID}
