@@ -38,9 +38,12 @@ mkdir -p "$DIR/infra/nginx"
 cd "$DIR"
 
 # The compose stack needs exactly these three files from the repo.
+# Timeouts + retries: a stalled connection must fail loudly, not hang.
 info "Fetching compose files ($REF)"
 for f in docker-compose.yml .env.example infra/nginx/default.conf; do
-  curl -fsSL "https://raw.githubusercontent.com/$REPO/$REF/$f" -o "$f"
+  curl -fsSL --connect-timeout 10 --max-time 60 --retry 3 --retry-delay 1 --retry-all-errors \
+    "https://raw.githubusercontent.com/$REPO/$REF/$f" -o "$f" \
+    || die "could not fetch $f — check connectivity to raw.githubusercontent.com"
 done
 
 if [ -f .env ]; then
@@ -129,7 +132,8 @@ if docker pull "ghcr.io/$GHCR_OWNER/primora-backend:latest" \
 else
   # GHCR packages are private until first published release — build from source.
   info "Prebuilt images unavailable; building from source"
-  curl -fsSL "https://codeload.github.com/$REPO/tar.gz/refs/heads/$REF" | tar xz --strip-components=1
+  curl -fsSL --connect-timeout 10 --max-time 120 --retry 3 --retry-delay 1 --retry-all-errors \
+    "https://codeload.github.com/$REPO/tar.gz/refs/heads/$REF" | tar xz --strip-components=1
   docker compose up -d --build
 fi
 
