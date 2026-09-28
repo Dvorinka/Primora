@@ -60,11 +60,13 @@ else
   if [ -z "$PUBLIC_URL" ]; then
     DEFAULT_URL="http://localhost"
     [ "$NGINX_PORT" != "80" ] && DEFAULT_URL="http://localhost:$NGINX_PORT"
-    # Under `curl | bash` stdin is the script pipe — prompt on the
-    # controlling terminal instead. No tty (CI/cron) → default silently.
-    if exec 9</dev/tty 2>/dev/null; then
-      read -rp "URL where you'll open Primora (domain or IP, e.g. https://primora.example.com) [$DEFAULT_URL]: " PUBLIC_URL <&9 || true
-      exec 9>&-
+    # Under `curl | bash` stdin is the script pipe — ask on the controlling
+    # terminal instead. `true </dev/tty` probes the open quietly; read's own
+    # redirect fails non-fatally (default applies) where there is no tty.
+    # Never `exec ... 2>/dev/null` here — exec redirections persist and would
+    # silence stderr, including the read prompt below, for the whole script.
+    if true 2>/dev/null </dev/tty; then
+      read -rp "URL where you'll open Primora (domain or IP, e.g. https://primora.example.com) [$DEFAULT_URL]: " PUBLIC_URL </dev/tty || true
     fi
     PUBLIC_URL="${PUBLIC_URL:-$DEFAULT_URL}"
   fi
