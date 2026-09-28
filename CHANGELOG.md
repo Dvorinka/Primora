@@ -4,9 +4,15 @@ All notable changes to Primora. Format follows [Keep a Changelog](https://keepac
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-09-28
+
 ### Added
 
 - **Install script asks for the public URL** — `install.sh` now prompts for where you'll open the app and accepts a full URL: `https://primora.example.com` (TLS at your proxy, hints printed at the end), `primora.example.com`, or `192.168.1.50:8085` (the port becomes `NGINX_PORT`). The answer rewrites every public URL var in `.env` and `COOKIE_DOMAIN` for real DNS names. The prompt reads the controlling terminal so it appears under `curl | bash`; no tty (CI, cron) falls back to `localhost`. Non-interactive via `PUBLIC_URL=`; legacy `DOMAIN`/`NGINX_PORT` envs still work; reruns over an existing `.env` skip the question.
+
+### Fixed
+
+- **Auth origins behind external TLS terminators** — trusted origins now accept both URL schemes on the serving host. Verified live over a Cloudflare quick tunnel: a real browser session cookie + `https://*.trycloudflare.com` origin was 403'd on v0.8.2 (nginx reports `X-Forwarded-Proto: http` inbound); the same request now signs in cleanly while cross-site origins still 403.
 
 ## [0.8.2] - 2026-09-28
 
