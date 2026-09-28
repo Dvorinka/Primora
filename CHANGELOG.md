@@ -4,9 +4,16 @@ All notable changes to Primora. Format follows [Keep a Changelog](https://keepac
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-09-28
+
 ### Added
 
 - **Slugs auto-derive from names** — typing an organization, project, bucket, or collection name now fills its slug (`TDvorak` → `tdvorak`); hand-editing the slug stops the derivation, and manual edits are sanitized as you type. Edit forms stay manual.
+
+### Fixed
+
+- **Installer URL prompt was invisible under `curl | bash`** — `exec 9</dev/tty 2>/dev/null` sent the whole shell's stderr to `/dev/null` permanently, so the `read` prompt rendered nowhere while the script blocked on input. The prompt now reads `/dev/tty` directly with a quiet probe; no-tty runs default silently.
+- **Installer fetches fail fast** — the compose-file and source-tarball `curl` calls now carry connect/max-time timeouts plus retries, so a stalled GitHub connection errors within seconds naming the file instead of hanging forever.
 
 ## [0.8.3] - 2026-09-28
 
