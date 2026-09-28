@@ -1096,6 +1096,8 @@ code {
   /* ---------- page scaffold ---------- */
   .page {
     max-width: 72rem;
+    width: 100%;
+    margin-inline: auto;
     display: flex;
     flex-direction: column;
     gap: 1.5rem;

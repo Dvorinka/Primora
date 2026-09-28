@@ -4,6 +4,10 @@ All notable changes to Primora. Format follows [Keep a Changelog](https://keepac
 
 ## [Unreleased]
 
+### Fixed
+
+- **Content column centers on wide screens** — `.page` was capped at 72rem but left-aligned, so above ~1200px the dashboard hugged the left with a growing dead zone on the right. It now centers (`margin-inline: auto`) while staying full-width below the cap.
+
 ## [0.8.4] - 2026-09-28
 
 ### Added
