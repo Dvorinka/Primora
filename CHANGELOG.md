@@ -4,6 +4,10 @@ All notable changes to Primora. Format follows [Keep a Changelog](https://keepac
 
 ## [Unreleased]
 
+### Added
+
+- **Slugs auto-derive from names** — typing an organization, project, bucket, or collection name now fills its slug (`TDvorak` → `tdvorak`); hand-editing the slug stops the derivation, and manual edits are sanitized as you type. Edit forms stay manual.
+
 ## [0.8.3] - 2026-09-28
 
 ### Added
