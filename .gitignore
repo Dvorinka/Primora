@@ -39,3 +39,5 @@ infra/mailpit
 # Generated code-graph artifacts
 graphify-out/
 .playwright-mcp/
+# Local brag/launch-video output
+brag-output/
