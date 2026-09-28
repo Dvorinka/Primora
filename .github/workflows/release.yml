@@ -327,6 +327,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       packages: read
+      # contents: write — the job uploads SBOM assets onto the release.
+      contents: write
     env:
       VERSION: ${{ needs.verify.outputs.version }}
     steps:
