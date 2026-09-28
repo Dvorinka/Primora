@@ -735,11 +735,22 @@ export default function App() {
     await runPending("auth-submit", async () => {
       setAuthMessage("");
       try {
+        // better-auth client resolves { data, error } instead of throwing on
+        // HTTP failures — surface res.error or the UI claims success while
+        // nothing was created.
         if (mode() === "sign-up") {
-          await authClient.signUp.email({ email: email(), password: password(), name: name() });
+          const res = await authClient.signUp.email({ email: email(), password: password(), name: name() });
+          if (res.error) {
+            setAuthMessage(res.error.message ?? "Sign-up failed");
+            return;
+          }
           setAuthMessage("Account created — signing you in.");
         } else {
-          await authClient.signIn.email({ email: email(), password: password() });
+          const res = await authClient.signIn.email({ email: email(), password: password() });
+          if (res.error) {
+            setAuthMessage(res.error.message ?? "Sign-in failed");
+            return;
+          }
         }
       } catch (error) {
         setAuthMessage(getErrorMessage(error, "Authentication failed"));

@@ -53,7 +53,19 @@ export const auth = betterAuth({
   appName: "Primora",
   secret: env.BETTER_AUTH_SECRET,
   baseURL: env.BETTER_AUTH_URL,
-  trustedOrigins: [env.VITE_APP_URL, env.AUTH_BASE_URL],
+  // Self-host: the browser reaches /auth through the same nginx origin as the
+  // app, so whatever host actually served this request is trusted — static
+  // localhost defaults alone 403 every sign-up on LAN IPs or custom ports.
+  // An attacker's cross-site Origin still won't match the server host.
+  trustedOrigins: (request) => {
+    const origins = [env.VITE_APP_URL, env.AUTH_BASE_URL];
+    const host = request?.headers.get("x-forwarded-host") ?? request?.headers.get("host");
+    if (host) {
+      const proto = request?.headers.get("x-forwarded-proto") ?? "http";
+      origins.push(`${proto}://${host}`);
+    }
+    return origins;
+  },
   database: authPool,
   emailAndPassword: {
     enabled: true,
@@ -155,10 +167,15 @@ export async function runAuthMigrations() {
   await migrations.runMigrations();
 }
 
-/** No transport → existing unverified users can never resolve that state. */
+/** No transport → existing unverified users can never resolve that state.
+ *  Best-effort: a startup failure here must never take the service down. */
 export async function verifyUsersWithoutMailTransport() {
-  if (await hasMailTransport()) return;
-  await authPool.query(`update "user" set "emailVerified" = true where "emailVerified" = false`);
+  try {
+    if (await hasMailTransport()) return;
+    await authPool.query(`update "user" set "emailVerified" = true where "emailVerified" = false`);
+  } catch (error) {
+    console.warn(JSON.stringify({ level: "warn", msg: "verify_without_transport_failed", error }));
+  }
 }
 
 /** Bootstrap admins by email — run after migrations so the role column exists. */

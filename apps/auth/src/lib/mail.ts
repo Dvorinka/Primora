@@ -32,10 +32,17 @@ async function resolveMailConfig() {
 
 // True when a mail transport exists (Resend key or SMTP host). Verification
 // and reset mails only make sense when mail can actually leave the box.
+// Mail is optional — a failed settings read must degrade to "no transport",
+// never break sign-up.
 export async function hasMailTransport(): Promise<boolean> {
-  const cfg = await resolveMailConfig();
-  if ("resendApiKey" in cfg && cfg.resendApiKey) return true;
-  return "smtp" in cfg && Boolean(cfg.smtp);
+  try {
+    const cfg = await resolveMailConfig();
+    if ("resendApiKey" in cfg && cfg.resendApiKey) return true;
+    return "smtp" in cfg && Boolean(cfg.smtp);
+  } catch (error) {
+    console.warn(JSON.stringify({ level: "warn", msg: "mail_transport_probe_failed", error }));
+    return false;
+  }
 }
 
 export async function sendTransactionalEmail(input: {
