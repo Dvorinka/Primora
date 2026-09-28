@@ -4,6 +4,8 @@ All notable changes to Primora. Format follows [Keep a Changelog](https://keepac
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-28
+
 ### Added
 
 - **Agent setup prompt** — a "Set up with an AI agent" dialog that mints a fresh `write`-scoped API key (ingest + reads + non-admin mutations, never key-minting) and renders a copyable prompt handing a coding agent everything it needs: the deployment endpoint, project id, the key itself, plus tasks to instrument error/metric/log/heartbeat reporting per component (`POST /api/v1/ingest` — works from any language), register the app's databases via `db-connections` (postgres → cassandra), wire the MCP server / CLI for future agents, and verify with a test event + deploy marker. Opens at the end of the new-project onboarding and is re-reachable from the project dashboard and Projects page; keys are shown only inside the prompt (revoke under Settings → API keys).
