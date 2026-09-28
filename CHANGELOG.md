@@ -4,6 +4,8 @@ All notable changes to Primora. Format follows [Keep a Changelog](https://keepac
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-09-28
+
 ### Fixed
 
 - **Self-hosted sign-up works on any origin** — trusted origins are now derived from the request's public host (forwarded by nginx), so browsing the instance via a LAN IP, hostname, or custom port no longer fails every auth POST with a 403. Static `VITE_APP_URL`/`AUTH_BASE_URL` origins and `BETTER_AUTH_TRUSTED_ORIGINS` still apply.
