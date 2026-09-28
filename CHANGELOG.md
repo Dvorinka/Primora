@@ -55,6 +55,7 @@ All notable changes to Primora. Format follows [Keep a Changelog](https://keepac
 - **`fetch failed` polish** — connection failures report the cause code and suggest `primora context` instead of bare undici errors.
 - **`login --json`** — the flag now emits JSON on both the session and API-key paths.
 - **Dashboard fonts vendored** — Geist/Geist Mono now ship via `@fontsource` inside the bundle instead of a Google Fonts `<link>` the nginx CSP blocked (`style-src 'self'`). Removes the runtime Google dependency, works airgapped, and eliminates the console CSP violation.
+- **Release image builds moved off QEMU** — arm64 `npm ci` under `docker/setup-qemu-action` SIGILLed on current `node:20-alpine` layers (`uncaught target signal 4`) and wedged the build step for over an hour. Images now build per-arch on native runners (`ubuntu-24.04-arm` for arm64) and a `manifests` job joins them into the multi-arch `:<version>`/`:latest` tags.
 
 ## [0.7.1] - 2026-09-23
 
