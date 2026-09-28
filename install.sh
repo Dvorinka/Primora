@@ -57,12 +57,13 @@ else
   if [ -z "$PUBLIC_URL" ]; then
     DEFAULT_URL="http://localhost"
     [ "$NGINX_PORT" != "80" ] && DEFAULT_URL="http://localhost:$NGINX_PORT"
-    if [ -t 0 ]; then
-      read -rp "URL where you'll open Primora (domain or IP, e.g. https://primora.example.com) [$DEFAULT_URL]: " PUBLIC_URL
-      PUBLIC_URL="${PUBLIC_URL:-$DEFAULT_URL}"
-    else
-      PUBLIC_URL="$DEFAULT_URL"
+    # Under `curl | bash` stdin is the script pipe — prompt on the
+    # controlling terminal instead. No tty (CI/cron) → default silently.
+    if exec 9</dev/tty 2>/dev/null; then
+      read -rp "URL where you'll open Primora (domain or IP, e.g. https://primora.example.com) [$DEFAULT_URL]: " PUBLIC_URL <&9 || true
+      exec 9>&-
     fi
+    PUBLIC_URL="${PUBLIC_URL:-$DEFAULT_URL}"
   fi
 
   # Normalize: default scheme http, strip trailing slash.

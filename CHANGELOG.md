@@ -6,7 +6,7 @@ All notable changes to Primora. Format follows [Keep a Changelog](https://keepac
 
 ### Added
 
-- **Install script asks for the public URL** — `install.sh` now prompts for where you'll open the app and accepts a full URL: `https://primora.example.com` (TLS at your proxy, hints printed at the end), `primora.example.com`, or `192.168.1.50:8085` (the port becomes `NGINX_PORT`). The answer rewrites every public URL var in `.env` and `COOKIE_DOMAIN` for real DNS names. Non-interactive via `PUBLIC_URL=`; legacy `DOMAIN`/`NGINX_PORT` envs still work; reruns over an existing `.env` skip the question.
+- **Install script asks for the public URL** — `install.sh` now prompts for where you'll open the app and accepts a full URL: `https://primora.example.com` (TLS at your proxy, hints printed at the end), `primora.example.com`, or `192.168.1.50:8085` (the port becomes `NGINX_PORT`). The answer rewrites every public URL var in `.env` and `COOKIE_DOMAIN` for real DNS names. The prompt reads the controlling terminal so it appears under `curl | bash`; no tty (CI, cron) falls back to `localhost`. Non-interactive via `PUBLIC_URL=`; legacy `DOMAIN`/`NGINX_PORT` envs still work; reruns over an existing `.env` skip the question.
 
 ## [0.8.2] - 2026-09-28
 
