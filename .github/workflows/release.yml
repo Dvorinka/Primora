@@ -59,17 +59,20 @@ jobs:
           fi
 
   images:
-    name: Build + push ${{ matrix.app }}
+    name: Build + push ${{ matrix.app }} (${{ matrix.platform }})
     needs: verify
     if: needs.verify.outputs.needed == 'true'
-    runs-on: ubuntu-latest
+    # Native runners per arch — QEMU emulation SIGILLs on the current
+    # node:20-alpine arm64 layers (uncaught target signal 4) and wedges
+    # the build step indefinitely.
+    runs-on: ${{ matrix.platform == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
         app: [backend, auth, frontend]
+        platform: [amd64, arm64]
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       # ghcr.io requires lowercase repo paths; the owner login may be mixed-case.
       - name: Compute lowercase GHCR owner
@@ -84,13 +87,38 @@ jobs:
         with:
           context: .
           file: apps/${{ matrix.app }}/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/${{ matrix.platform }}
           push: true
-          tags: |
-            ghcr.io/${{ env.GHCR_OWNER }}/primora-${{ matrix.app }}:${{ needs.verify.outputs.version }}
-            ghcr.io/${{ env.GHCR_OWNER }}/primora-${{ matrix.app }}:latest
-          cache-from: type=gha,scope=${{ matrix.app }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+          tags: ghcr.io/${{ env.GHCR_OWNER }}/primora-${{ matrix.app }}:${{ needs.verify.outputs.version }}-${{ matrix.platform }}
+          cache-from: type=gha,scope=${{ matrix.app }}-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}-${{ matrix.platform }}
+
+  # Joins the per-arch images into the real version + latest tags.
+  manifests:
+    name: Image manifests
+    needs: [verify, images]
+    if: needs.verify.outputs.needed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - name: Compute lowercase GHCR owner
+        run: echo "GHCR_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create multi-arch manifests
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          set -e
+          for app in backend auth frontend; do
+            img="ghcr.io/${GHCR_OWNER}/primora-${app}"
+            docker buildx imagetools create \
+              -t "$img:$VERSION" -t "$img:latest" \
+              "$img:$VERSION-amd64" "$img:$VERSION-arm64"
+          done
 
   cli-binaries:
     name: Compile ${{ matrix.name }}
@@ -192,7 +220,7 @@ jobs:
 
   release:
     name: GitHub Release
-    needs: [verify, images, cli-binaries, desktop, npm-packages]
+    needs: [verify, manifests, cli-binaries, desktop, npm-packages]
     if: needs.verify.outputs.needed == 'true'
     runs-on: ubuntu-latest
     env:
