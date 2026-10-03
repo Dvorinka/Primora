@@ -48,15 +48,32 @@ fi
 read -p "🌐 Enter your domain or IP (default: localhost): " DOMAIN
 DOMAIN=${DOMAIN:-localhost}
 
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    sed -i '' "s/COOKIE_DOMAIN=localhost/COOKIE_DOMAIN=$DOMAIN/g" .env
-    sed -i '' "s/BETTER_AUTH_URL=http:\/\/localhost/BETTER_AUTH_URL=http:\/\/$DOMAIN/g" .env
-    sed -i '' "s/VITE_APP_URL=http:\/\/localhost/VITE_APP_URL=http:\/\/$DOMAIN/g" .env
+# Plain HTTP for localhost/IPs; domains are presumed to sit behind a TLS
+# proxy (see DEPLOYMENT_GUIDE.md — Primora never terminates TLS itself).
+if [[ "$DOMAIN" == "localhost" || "$DOMAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    SCHEME="http"
 else
-    sed -i "s/COOKIE_DOMAIN=localhost/COOKIE_DOMAIN=$DOMAIN/g" .env
-    sed -i "s/BETTER_AUTH_URL=http:\/\/localhost/BETTER_AUTH_URL=http:\/\/$DOMAIN/g" .env
-    sed -i "s/VITE_APP_URL=http:\/\/localhost/VITE_APP_URL=http:\/\/$DOMAIN/g" .env
+    SCHEME="https"
 fi
+BASE_URL="$SCHEME://$DOMAIN"
+
+rewrite_env() {
+    # $1 = var name, $2 = new value — anchor to the full line so prior values
+    # (ports, stale paths) are replaced regardless of what .env.example held.
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' "s|^$1=.*|$1=$2|" .env
+    else
+        sed -i "s|^$1=.*|$1=$2|" .env
+    fi
+}
+
+rewrite_env AUTH_BASE_URL "$BASE_URL/auth"
+rewrite_env BETTER_AUTH_URL "$BASE_URL/auth"
+rewrite_env VITE_APP_URL "$BASE_URL"
+rewrite_env VITE_AUTH_BASE_URL "$BASE_URL/auth"
+rewrite_env VITE_API_BASE_URL "$BASE_URL/api/v1"
+rewrite_env BACKEND_PUBLIC_URL "$BASE_URL/api/v1"
+rewrite_env COOKIE_DOMAIN "$DOMAIN"
 
 # Start services — the dev overlay adds mailpit for local email capture.
 # Production deploys use the base file alone: docker compose up -d

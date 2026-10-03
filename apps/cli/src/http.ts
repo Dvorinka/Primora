@@ -1,4 +1,4 @@
-import { OpenAPI, StorageService } from "@primora/api-client";
+import { AutomationService, OpenAPI, StorageService } from "@primora/api-client";
 
 import type { CliConfig } from "./config.js";
 
@@ -106,6 +106,19 @@ export async function resolveBucketId(projectId: string, ref: string): Promise<s
     throw new CliError(
       `Bucket "${ref}" not found.`,
       `Known buckets: ${items.map((b) => b.slug).join(", ") || "(none)"}`,
+    );
+  }
+  return match.id;
+}
+
+/** Resolve a scheduled job reference that may be an id or a name. */
+export async function resolveJobId(projectId: string, ref: string): Promise<string> {
+  const { items } = await AutomationService.listScheduledJobs({ projectId });
+  const match = items.find((j) => j.id === ref || j.name === ref);
+  if (!match) {
+    throw new CliError(
+      `Job "${ref}" not found.`,
+      `Known jobs: ${items.map((j) => j.name).join(", ") || "(none)"}`,
     );
   }
   return match.id;
