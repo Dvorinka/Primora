@@ -40,7 +40,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 | `PRIMORA_ENCRYPTION_KEY` | AES-256 key (64 hex chars) for project secrets (Vault page, `secret://` job refs), integration credentials + webhook secrets at rest | production |
 | `AUTH_BASE_URL` / `BETTER_AUTH_URL` | public auth URL (`https://host/auth`) | yes |
 | `AUTH_INTERNAL_BASE_URL` | backend → auth internal URL (`http://auth:3001`) | yes |
-| `VITE_APP_URL` / `VITE_AUTH_BASE_URL` / `VITE_API_BASE_URL` | frontend public URLs — **baked into the frontend image at build time** | yes |
+| `VITE_APP_URL` / `VITE_AUTH_BASE_URL` / `VITE_API_BASE_URL` | frontend public URLs — informational only; the shipped image resolves API/auth URLs same-origin at runtime, so no rebuild is needed when the host changes | yes |
 | `BACKEND_STORAGE_ROOT` | object storage directory inside the backend container (local driver) | yes |
 | `BACKEND_STORAGE_DRIVER` | `local` (default) or `s3` — S3-compatible object storage | no |
 | `S3_ENDPOINT` / `S3_REGION` / `S3_BUCKET` | S3 API endpoint (empty endpoint → AWS `s3.<region>.amazonaws.com`), region, bucket | with `s3` |
@@ -81,8 +81,12 @@ labels:
 ```
 
 Once TLS is live, update `VITE_APP_URL`, `VITE_AUTH_BASE_URL`,
-`AUTH_BASE_URL`, `BETTER_AUTH_URL`, and `COOKIE_DOMAIN` to the https origin
-and rebuild the frontend image (`docker compose build frontend`).
+`AUTH_BASE_URL`, `BETTER_AUTH_URL`, `BACKEND_PUBLIC_URL`, and
+`COOKIE_DOMAIN` to the https origin and restart the stack
+(`docker compose up -d`). The frontend resolves API/auth URLs
+same-origin, so no image rebuild is needed — HTTPS is still required for
+PWA install, service workers, and other secure-context features on
+non-localhost origins.
 
 ## SMTP / email
 

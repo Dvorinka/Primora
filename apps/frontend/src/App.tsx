@@ -1637,7 +1637,7 @@ export default function App() {
         <PwaInstallBanner />
 
         <Show
-          when={platform() || isDemo}
+          when={platform()}
           fallback={
             <div class="page">
               <div class="skeleton" style="height:2rem;width:12rem;border-radius:8px" />
@@ -1656,6 +1656,14 @@ export default function App() {
               when={activeProject()}
               fallback={
                 <div class="page">
+                  <Show
+                    when={!organizationProjects.loading}
+                    fallback={
+                      <div class="card" style="min-height:20rem">
+                        <div class="skeleton" style="height:100%;min-height:20rem;border-radius:12px" />
+                      </div>
+                    }
+                  >
                   <Show
                     when={(platform()?.organizations ?? []).length > 0}
                     fallback={
@@ -1701,6 +1709,7 @@ export default function App() {
                         Create project
                       </button>
                     </div>
+                  </Show>
                   </Show>
                 </div>
               }

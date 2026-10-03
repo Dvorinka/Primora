@@ -2,7 +2,7 @@ import type { ScheduledJob, ScheduledJobRun } from "@primora/api-client";
 import { AutomationService } from "@primora/api-client";
 
 import { loadConfig } from "../config.js";
-import { configureClient, requireAuth, requireProject } from "../http.js";
+import { configureClient, requireAuth, requireProject, resolveJobId } from "../http.js";
 import { formatDate, isJson, printJson, printTable, success } from "../out.js";
 
 interface JobOptions {
@@ -88,12 +88,13 @@ export async function cmdJobsCreate(
   }
 }
 
-export async function cmdJobsRemove(jobId: string, options: JobOptions & { yes?: boolean }): Promise<void> {
+export async function cmdJobsRemove(jobRef: string, options: JobOptions & { yes?: boolean }): Promise<void> {
   const cfg = loadConfig();
   requireAuth(cfg);
   configureClient(cfg);
 
   const projectId = requireProject(cfg, options.project);
+  const jobId = await resolveJobId(projectId, jobRef);
   await AutomationService.deleteScheduledJob({ projectId, jobId });
   if (isJson(options)) {
     printJson({ deleted: jobId });
@@ -102,12 +103,13 @@ export async function cmdJobsRemove(jobId: string, options: JobOptions & { yes?:
   }
 }
 
-export async function cmdJobsRun(jobId: string, options: JobOptions): Promise<void> {
+export async function cmdJobsRun(jobRef: string, options: JobOptions): Promise<void> {
   const cfg = loadConfig();
   requireAuth(cfg);
   configureClient(cfg);
 
   const projectId = requireProject(cfg, options.project);
+  const jobId = await resolveJobId(projectId, jobRef);
   const run = await AutomationService.runScheduledJob({ projectId, jobId });
   if (isJson(options)) {
     printJson(run);
@@ -128,7 +130,7 @@ function runRow(run: ScheduledJobRun): string[] {
 }
 
 export async function cmdJobsRuns(
-  jobId: string,
+  jobRef: string,
   options: JobOptions & { limit?: string },
 ): Promise<void> {
   const cfg = loadConfig();
@@ -136,6 +138,7 @@ export async function cmdJobsRuns(
   configureClient(cfg);
 
   const projectId = requireProject(cfg, options.project);
+  const jobId = await resolveJobId(projectId, jobRef);
   const page = await AutomationService.listScheduledJobRuns({
     projectId,
     jobId,

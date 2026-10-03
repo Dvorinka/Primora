@@ -21,7 +21,7 @@ project interactively.
 ## Commands
 
 `orgs`, `projects`, `buckets`, `objects` (list/upload/download/rm), `keys`,
-`jobs`, `events:send`, `audit list --follow`. Every command accepts `--json`.
+`jobs`, `events:send`, `audit:list --follow`. Every command accepts `--json`.
 
 ```sh
 primora events:send custom.deploy.done --data '{"sha":"abc123"}'
@@ -31,7 +31,7 @@ primora events:send custom.deploy.done --data '{"sha":"abc123"}'
 webhooks, and `event_pattern` functions all fire.
 
 ```sh
-primora documents list --collection users \
+primora documents:list --collection users \
   --filter "status.eq.active,age.gt.18" --order "age.desc"
 ```
 

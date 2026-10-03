@@ -51,7 +51,7 @@ cli
   .option("--url <url>", "Primora base URL (default http://localhost)")
   .option("--email <email>", "Account email")
   .option("--password <password>", "Account password")
-  .option("--api-key <key>", "Store a pk_live_/pk_test_ API key instead of a session")
+  .option("--api-key <key>", "Store a prm_ API key instead of a session")
   .option("--json", "Machine-readable output")
   .action(cmdLogin);
 

@@ -253,7 +253,13 @@ export function CollectionsPage(props: CollectionsPageProps) {
         title="Create collection"
         description="Collections store JSON documents scoped to a project."
       >
-        <form onSubmit={props.onCreateCollection} class="space-y-4">
+        <form
+          onSubmit={(e) => {
+            props.onCreateCollection(e);
+            setCreateOpen(false);
+          }}
+          class="space-y-4"
+        >
           <Input
             label="Collection name"
             placeholder="Posts"
