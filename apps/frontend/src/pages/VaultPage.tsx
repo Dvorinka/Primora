@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js";
 import {
   SecretsService,
+  type ProjectLogin,
   type ProjectSecret,
 } from "@primora/api-client";
 import { Modal } from "../components/Modal";
@@ -22,6 +23,12 @@ const DEMO_SECRETS: ProjectSecret[] = [
   { id: "d2", name: "SLACK_WEBHOOK", url: "https://hooks.slack.com", notes: "alerts channel", created_at: "", updated_at: "2026-09-10T08:00:00Z" },
 ];
 
+const DEMO_LOGINS: ProjectLogin[] = [
+  { id: "l1", app: "primora", username: "ada", origin: "http://localhost:3000", notes: "test account", created_at: "", updated_at: "2026-09-18T10:00:00Z" },
+];
+
+const APP_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
 // Inside the Tauri shell, __TAURI__ is injected into every webview — the same
 // IPC commands the dedicated vault window uses. Absent in a plain browser.
 const tauri = () =>
@@ -35,6 +42,13 @@ interface LocalSecret {
   notes: string | null;
   updated_at: string;
 }
+interface LocalLogin {
+  app: string;
+  username: string;
+  origin: string;
+  notes: string;
+  updated_at: string;
+}
 interface LocalStatus {
   exists: boolean;
   unlocked: boolean;
@@ -45,16 +59,20 @@ interface LocalStatus {
 
 export function VaultPage(props: VaultPageProps) {
   const [secrets, setSecrets] = createSignal<ProjectSecret[]>([]);
+  const [logins, setLogins] = createSignal<ProjectLogin[]>([]);
   const [message, setMessage] = createSignal("");
   const [error, setError] = createSignal("");
   const [busy, setBusy] = createSignal<string>();
   const [showCreate, setShowCreate] = createSignal(false);
+  const [showLogin, setShowLogin] = createSignal(false);
   const [showImport, setShowImport] = createSignal(false);
   const [form, setForm] = createSignal({ name: "", value: "", url: "", notes: "" });
+  const [loginForm, setLoginForm] = createSignal({ app: "", username: "", password: "", origin: "", notes: "" });
   const [importText, setImportText] = createSignal("");
 
   const [localStatus, setLocalStatus] = createSignal<LocalStatus>();
   const [localSecrets, setLocalSecrets] = createSignal<LocalSecret[]>([]);
+  const [localLogins, setLocalLogins] = createSignal<LocalLogin[]>([]);
   const [localErr, setLocalErr] = createSignal("");
   const [localPw, setLocalPw] = createSignal("");
   const [localTtl, setLocalTtl] = createSignal("900");
@@ -62,15 +80,30 @@ export function VaultPage(props: VaultPageProps) {
   const timer = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
   onCleanup(() => clearInterval(timer));
 
+  // Demo data is in-memory. Seed once per project so a later refresh keeps
+  // rows the user added or deleted, including an empty list.
+  let demoProject = "";
+
   const refresh = async () => {
     if (!props.projectID) return;
     if (props.demoMode) {
-      setSecrets(DEMO_SECRETS);
+      if (demoProject !== props.projectID) {
+        const switched = demoProject !== "";
+        demoProject = props.projectID;
+        setSecrets(DEMO_SECRETS);
+        setLogins(DEMO_LOGINS);
+        if (switched) {
+          setMessage("");
+          setError("");
+        }
+      }
       return;
     }
     try {
       const res = await SecretsService.listProjectSecrets({ projectId: props.projectID });
       setSecrets(res.items);
+      const log = await SecretsService.listProjectLogins({ projectId: props.projectID });
+      setLogins(log.items);
     } catch (e) {
       setError(err(e));
     }
@@ -83,6 +116,7 @@ export function VaultPage(props: VaultPageProps) {
       const st = (await t.core.invoke("vault_status")) as LocalStatus;
       setLocalStatus(st);
       setLocalSecrets(st.unlocked ? ((await t.core.invoke("vault_secrets")) as LocalSecret[]) : []);
+      setLocalLogins(st.unlocked ? ((await t.core.invoke("vault_logins")) as LocalLogin[]) : []);
     } catch (e) {
       setLocalErr(err(e));
     }
@@ -163,6 +197,53 @@ export function VaultPage(props: VaultPageProps) {
     }, `Secret ${f.name} stored`);
   };
 
+  const revealLogin = (app: string) =>
+    run(`reveal-login-${app}`, async () => {
+      if (props.demoMode) {
+        await copy("demo-password", app);
+        return;
+      }
+      const res = await SecretsService.revealProjectLogin({ projectId: props.projectID!, app });
+      await copy(res.password, app);
+    });
+
+  const createLogin = (e: Event) => {
+    e.preventDefault();
+    const f = loginForm();
+    const app = f.app.trim();
+    if (!APP_RE.test(app)) {
+      setError("App id must be a stable name like my-app - not a URL or a port.");
+      return;
+    }
+    void run("create-login", async () => {
+      if (props.demoMode) {
+        setLogins([...logins(), { id: `l${Date.now()}`, app, username: f.username.trim(), origin: f.origin.trim(), notes: f.notes.trim(), created_at: "", updated_at: new Date().toISOString() }]);
+      } else {
+        await SecretsService.setProjectLogin({
+          projectId: props.projectID!,
+          app,
+          requestBody: {
+            username: f.username.trim(),
+            password: f.password,
+            origin: f.origin.trim() || undefined,
+            notes: f.notes.trim() || undefined,
+          },
+        });
+      }
+      setShowLogin(false);
+      setLoginForm({ app: "", username: "", password: "", origin: "", notes: "" });
+    }, `Login ${app} stored`);
+  };
+
+  const removeLogin = (app: string) =>
+    run(`del-login-${app}`, async () => {
+      if (props.demoMode) {
+        setLogins(logins().filter((s) => s.app !== app));
+        return;
+      }
+      await SecretsService.deleteProjectLogin({ projectId: props.projectID!, app });
+    }, `Login ${app} deleted`);
+
   const removeSecret = (name: string) =>
     run(`del-${name}`, async () => {
       if (props.demoMode) {
@@ -207,13 +288,16 @@ export function VaultPage(props: VaultPageProps) {
         <div class="flex-1 min-w-0">
           <h1 class="page-title">Vault</h1>
           <p class="page-description">
-            Encrypted project secrets — reference them in job payloads as <code>secret://NAME</code>, resolved at
-            delivery. Values are never included in lists.
+            Encrypted project secrets and app logins. Secrets are referenced in job payloads as <code>secret://NAME</code>.
+            A login is a username and password for a stable app id - the URL can change. Lists never include passwords.
           </p>
         </div>
         <div class="flex gap-2 flex-wrap">
           <Show when={props.canManage}>
             <button class="btn btn-ghost btn-sm" onClick={() => setShowImport(true)}>Import .env</button>
+            <button class="btn btn-ghost btn-sm" onClick={() => setShowLogin(true)}>
+              <IconPlus class="w-4 h-4" /> New login
+            </button>
             <button class="btn btn-primary btn-sm" onClick={() => setShowCreate(true)}>
               <IconPlus class="w-4 h-4" /> New secret
             </button>
@@ -266,6 +350,61 @@ export function VaultPage(props: VaultPageProps) {
                           </button>
                           <Show when={props.canManage}>
                             <button class="btn btn-ghost btn-sm" title="Delete" onClick={() => void removeSecret(s.name)} disabled={busy() === `del-${s.name}`}>
+                              <IconTrash class="w-4 h-4" />
+                            </button>
+                          </Show>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </For>
+              </tbody>
+            </table>
+          </div>
+        </Show>
+      </div>
+
+      <div class="card card-flush">
+        <div class="card-header">
+          <div class="flex-1">
+            <div class="card-header-title">App logins</div>
+            <div class="card-header-description">
+              Username and password for an app. The app id stays put when the port changes. Copy is audit-logged.
+            </div>
+          </div>
+        </div>
+        <Show
+          when={logins().length > 0}
+          fallback={<p class="text-text-2 text-sm p-4">No logins yet.</p>}
+        >
+          <div class="table-container">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>App</th>
+                  <th>Username</th>
+                  <th>Origin</th>
+                  <th>Notes</th>
+                  <th>Updated</th>
+                  <th class="text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <For each={logins()}>
+                  {(s) => (
+                    <tr>
+                      <td class="font-mono text-sm">{s.app}</td>
+                      <td class="text-sm">{s.username}</td>
+                      <td class="text-sm">{s.origin ? <a href={s.origin} target="_blank" rel="noreferrer">{s.origin.replace(/^https?:\/\//, "")}</a> : "—"}</td>
+                      <td class="text-sm text-text-2" title={s.notes}>{s.notes || "—"}</td>
+                      <td class="text-sm text-text-2">{fmtTime(s.updated_at)}</td>
+                      <td>
+                        <div class="flex gap-2 justify-end">
+                          <button class="btn btn-ghost btn-sm" title="Copy password (audit-logged)" onClick={() => void revealLogin(s.app)} disabled={busy() === `reveal-login-${s.app}`}>
+                            <IconCopy class="w-4 h-4" />
+                          </button>
+                          <Show when={props.canManage}>
+                            <button class="btn btn-ghost btn-sm" title="Delete" onClick={() => void removeLogin(s.app)} disabled={busy() === `del-login-${s.app}`}>
                               <IconTrash class="w-4 h-4" />
                             </button>
                           </Show>
@@ -366,6 +505,40 @@ export function VaultPage(props: VaultPageProps) {
                   </table>
                 </div>
               </Show>
+              <Show when={localLogins().length > 0}>
+                <p class="text-xs text-text-2 mt-4 mb-2">Logins on this machine</p>
+                <div class="table-container">
+                  <table class="table">
+                    <thead>
+                      <tr><th>App</th><th>Username</th><th>Origin</th><th class="text-right">Actions</th></tr>
+                    </thead>
+                    <tbody>
+                      <For each={localLogins()}>
+                        {(s) => (
+                          <tr>
+                            <td class="font-mono text-sm">{s.app}</td>
+                            <td class="text-sm">{s.username}</td>
+                            <td class="text-sm">{s.origin || "—"}</td>
+                            <td>
+                              <div class="flex gap-2 justify-end">
+                                <button class="btn btn-ghost btn-sm" title="Copy password" onClick={() => void runLocal(async () => {
+                                  const row = (await tauri()!.core.invoke("vault_login_reveal", { app: s.app })) as { password: string };
+                                  await copy(row.password, s.app);
+                                })}>
+                                  <IconCopy class="w-4 h-4" />
+                                </button>
+                                <button class="btn btn-ghost btn-sm" title="Delete" onClick={() => void runLocal(() => tauri()!.core.invoke("vault_login_rm", { app: s.app }))}>
+                                  <IconTrash class="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </For>
+                    </tbody>
+                  </table>
+                </div>
+              </Show>
               <div class="flex justify-between items-center mt-3">
                 <p class="text-xs text-text-2">
                   Injection and the credential broker stay in the CLI: <code>primora inject</code> / <code>primora agent</code>.
@@ -386,6 +559,20 @@ export function VaultPage(props: VaultPageProps) {
           <div class="flex justify-end gap-2">
             <button type="button" class="btn btn-ghost" onClick={() => setShowCreate(false)}>Cancel</button>
             <button type="submit" class="btn btn-primary" disabled={busy() === "create"}>Store secret</button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal error={error()} open={showLogin()} onClose={() => setShowLogin(false)} title="New login" size="md">
+        <form onSubmit={createLogin} class="space-y-4">
+          <Input label="App" placeholder="my-app" value={loginForm().app} onInput={(e) => setLoginForm({ ...loginForm(), app: e.currentTarget.value })} required />
+          <Input label="Username" placeholder="ada" value={loginForm().username} onInput={(e) => setLoginForm({ ...loginForm(), username: e.currentTarget.value })} required />
+          <Input label="Password" type="password" value={loginForm().password} onInput={(e) => setLoginForm({ ...loginForm(), password: e.currentTarget.value })} required />
+          <Input label="Origin" placeholder="http://localhost:3000 (optional, not the identity)" value={loginForm().origin} onInput={(e) => setLoginForm({ ...loginForm(), origin: e.currentTarget.value })} />
+          <Input label="Notes" placeholder="optional" value={loginForm().notes} onInput={(e) => setLoginForm({ ...loginForm(), notes: e.currentTarget.value })} />
+          <div class="flex justify-end gap-2">
+            <button type="button" class="btn btn-ghost" onClick={() => setShowLogin(false)}>Cancel</button>
+            <button type="submit" class="btn btn-primary" disabled={busy() === "create-login"}>Store login</button>
           </div>
         </form>
       </Modal>

@@ -420,6 +420,21 @@ Ordered loosely by leverage. None committed; each gets scoped when picked.
   broadcasts on join/leave (stream-only), `GET …/realtime/presence`
   reads the count. SDK: `publish()` + `presence()`; CLI: `events:send`.
 
+## App logins (shipped, unreleased)
+
+Username and password for a website or for an app the user is building.
+Stored in both the local vault and the project vault. The app id is a
+stable name (`my-app`, the project slug), not a host or a port, because
+`localhost:3000` can serve something else later. `origin` is only the
+current URL.
+
+Agents read one named secret or login when they need it
+(`primora_vault_get`, `primora_secrets_get`, `primora_logins_get`).
+That is the point of the vault: encrypted at rest, fetched at use, not
+pasted into chat and not written to `.env`. Lists stay metadata.
+Project reveals are audit-logged. A `write` API key can reveal; a `read`
+key cannot.
+
 ---
 
 ## What is deliberately out of scope

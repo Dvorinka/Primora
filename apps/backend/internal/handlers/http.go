@@ -137,6 +137,10 @@ func (h *HTTPHandler) Register(router *gin.Engine) {
 	api.PUT("/projects/:projectID/secrets/:name", h.setProjectSecret)
 	api.DELETE("/projects/:projectID/secrets/:name", h.deleteProjectSecret)
 	api.POST("/projects/:projectID/secrets/:name/reveal", h.revealProjectSecret)
+	api.GET("/projects/:projectID/logins", h.listProjectLogins)
+	api.PUT("/projects/:projectID/logins/:app", h.setProjectLogin)
+	api.DELETE("/projects/:projectID/logins/:app", h.deleteProjectLogin)
+	api.POST("/projects/:projectID/logins/:app/reveal", h.revealProjectLogin)
 
 	api.GET("/projects/:projectID/alerts", h.listAlertRules)
 	api.POST("/projects/:projectID/alerts", h.createAlertRule)

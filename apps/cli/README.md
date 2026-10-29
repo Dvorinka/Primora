@@ -53,7 +53,13 @@ primora secrets import .env           # import KEY=value pairs
 primora secrets list                  # names + urls + timestamps, never values
 primora secrets get STRIPE_KEY        # prints the value (scriptable)
 primora secrets rm STRIPE_KEY --yes
+primora logins set my-app --username ada --origin http://localhost:3000
+primora logins get my-app --json
+primora logins list
 ```
+
+`logins` is a username and password for a stable app id (`my-app`, a project
+slug). The id is not a host or a port. `origin` is only the current URL.
 
 Format: Argon2id (64 MiB / 3 / 4) → XChaCha20-Poly1305 over a single JSON
 payload; the parameter header is the AEAD's AAD, atomic tmp+rename writes.
@@ -76,6 +82,8 @@ primora secrets list --remote          # metadata only — names, urls, notes
 primora secrets get STRIPE_KEY --remote  # explicit reveal, audit-logged
 primora secrets rm STRIPE_KEY --remote --yes
 primora secrets import .env --remote --overwrite
+primora logins set my-app --username ada --remote
+primora logins get my-app --remote
 ```
 
 Job payloads reference secrets as `secret://NAME`; the scheduler resolves them
@@ -146,15 +154,18 @@ storage volume, `scripts/backup.sh` remains the tool.
 
 ## For AI agents
 
-Two safe paths, no secret ever in the agent's context:
+Fetch one named value when you need it. Do not paste it into chat and do
+not write it to a `.env` file. Lists omit passwords. Project reveals are
+audit-logged. The local vault must be unlocked (`primora vault unlock`).
 
-- **Wrapped** — launch the agent under `primora agent … -- claude`. It holds
-  dummy tokens; the broker attaches real ones on the wire.
-- **MCP** — `primora_vault_status`, `primora_vault_list` (metadata only),
-  `primora_vault_exec` (runs `primora` commands with a secret injected into
-  the process env; vault/secrets/inject/agent/login and `keys:create` are
-  denied, so output can never carry a credential). Requires an unlocked
-  vault session on the host.
-- **MCP project vault** — `primora_secrets_list` (metadata only) and
-  `primora_secrets_set` (write-only). No reveal, no delete: agents reference
-  `secret://NAME` in job payloads without ever holding the value.
+- **Read** — `primora_vault_get` / `primora secrets get` for a local secret,
+  `primora_secrets_get` for a project secret, `primora_logins_get` (or
+  `primora logins get`) for a username and password. `remote: true` /
+  `--remote` selects the project vault.
+- **Store a login** — `primora_logins_set` or `primora logins set <app>`.
+  The app id is stable. Use it again when the port changes.
+- **Wrapped** — `primora agent … -- claude` still attaches API tokens on
+  the wire for providers that honor a base-URL override. Form logins need
+  the read path above, because the broker cannot type into a website.
+- **Inject** — `primora_vault_exec` still runs an allow-listed command with
+  a secret in its environment, for tools that read env and must not print it.

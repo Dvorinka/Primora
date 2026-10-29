@@ -361,6 +361,18 @@ type CoreProjectInvitation struct {
 	CreatedAt       pgtype.Timestamptz  `json:"created_at"`
 }
 
+type CoreProjectLogin struct {
+	ID         uuid.UUID          `json:"id"`
+	ProjectID  uuid.UUID          `json:"project_id"`
+	App        string             `json:"app"`
+	Username   string             `json:"username"`
+	Ciphertext []byte             `json:"ciphertext"`
+	Origin     string             `json:"origin"`
+	Notes      string             `json:"notes"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+}
+
 type CoreProjectMember struct {
 	ID        uuid.UUID          `json:"id"`
 	ProjectID uuid.UUID          `json:"project_id"`

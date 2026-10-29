@@ -34,9 +34,21 @@ export interface SecretEntry {
   updated_at: string;
 }
 
+/** A website or app account. `app` is the stable id; `origin` is the current URL. */
+export interface LoginEntry {
+  username: string;
+  password: string;
+  origin?: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface VaultData {
   v: 1;
   secrets: Record<string, SecretEntry>;
+  /** Absent in vaults written before logins existed. */
+  logins?: Record<string, LoginEntry>;
 }
 
 const MAGIC = "PRMVLT01";
@@ -189,7 +201,10 @@ function decrypt(f: ParsedFile, key: Uint8Array): VaultData {
   try {
     const plain = xchacha20poly1305(key, f.nonce, f.header).decrypt(f.buf.subarray(HEADER_LEN));
     const data = JSON.parse(dec.decode(plain)) as VaultData;
-    if (data.v !== 1 || typeof data.secrets !== "object") throw new Error("shape");
+    if (data.v !== 1 || typeof data.secrets !== "object" || data.secrets === null) throw new Error("shape");
+    // Old vaults have no logins map. Treat that as empty so the first save
+    // keeps every secret and just adds the field.
+    if (typeof data.logins !== "object" || data.logins === null) data.logins = {};
     return data;
   } catch {
     throw new CliError("Wrong password or corrupt vault.");
@@ -243,5 +258,5 @@ export function createVault(password: Uint8Array): void {
   }
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const key = argon2id(password, salt, { ...KDF, dkLen: 32 });
-  saveVault({ data: { v: 1, secrets: {} }, key, salt, params: KDF });
+  saveVault({ data: { v: 1, secrets: {}, logins: {} }, key, salt, params: KDF });
 }

@@ -2,9 +2,13 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ProjectLogin } from '../models/ProjectLogin';
+import type { ProjectLoginListResponse } from '../models/ProjectLoginListResponse';
 import type { ProjectSecret } from '../models/ProjectSecret';
 import type { ProjectSecretListResponse } from '../models/ProjectSecretListResponse';
+import type { RevealProjectLoginResponse } from '../models/RevealProjectLoginResponse';
 import type { RevealProjectSecretResponse } from '../models/RevealProjectSecretResponse';
+import type { SetProjectLoginRequest } from '../models/SetProjectLoginRequest';
 import type { SetProjectSecretRequest } from '../models/SetProjectSecretRequest';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
@@ -102,6 +106,114 @@ export class SecretsService {
             path: {
                 'projectID': projectId,
                 'name': name,
+            },
+            errors: {
+                401: `Error response`,
+                404: `Error response`,
+            },
+        });
+    }
+    /**
+     * Lists app logins — username and origin, never the password.
+     * @returns ProjectLoginListResponse Project logins (password omitted)
+     * @throws ApiError
+     */
+    public static listProjectLogins({
+        projectId,
+    }: {
+        projectId: string,
+    }): CancelablePromise<ProjectLoginListResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/projects/{projectID}/logins',
+            path: {
+                'projectID': projectId,
+            },
+            errors: {
+                401: `Error response`,
+            },
+        });
+    }
+    /**
+     * Creates or replaces an app login. The password is AES-256-GCM at rest. Omitted origin/notes keep existing values. The app id is stable — it is not a host or port.
+     * @returns ProjectLogin Login stored
+     * @throws ApiError
+     */
+    public static setProjectLogin({
+        projectId,
+        app,
+        requestBody,
+    }: {
+        projectId: string,
+        /**
+         * Stable app id. Not a URL and not a port.
+         */
+        app: string,
+        requestBody: SetProjectLoginRequest,
+    }): CancelablePromise<ProjectLogin> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/projects/{projectID}/logins/{app}',
+            path: {
+                'projectID': projectId,
+                'app': app,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                400: `Error response`,
+                401: `Error response`,
+            },
+        });
+    }
+    /**
+     * @returns void
+     * @throws ApiError
+     */
+    public static deleteProjectLogin({
+        projectId,
+        app,
+    }: {
+        projectId: string,
+        /**
+         * Stable app id. Not a URL and not a port.
+         */
+        app: string,
+    }): CancelablePromise<void> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/projects/{projectID}/logins/{app}',
+            path: {
+                'projectID': projectId,
+                'app': app,
+            },
+            errors: {
+                401: `Error response`,
+                404: `Error response`,
+            },
+        });
+    }
+    /**
+     * Returns the username, password, and origin for one app. Every call is audit-logged. Read one login when you need it. Do not copy it into chat or a .env file.
+     * @returns RevealProjectLoginResponse Decrypted login
+     * @throws ApiError
+     */
+    public static revealProjectLogin({
+        projectId,
+        app,
+    }: {
+        projectId: string,
+        /**
+         * Stable app id. Not a URL and not a port.
+         */
+        app: string,
+    }): CancelablePromise<RevealProjectLoginResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/projects/{projectID}/logins/{app}/reveal',
+            path: {
+                'projectID': projectId,
+                'app': app,
             },
             errors: {
                 401: `Error response`,

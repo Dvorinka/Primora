@@ -2041,6 +2041,91 @@ paths:
           $ref: "#/components/responses/ErrorResponse"
         "404":
           $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/logins:
+    get:
+      tags: [Secrets]
+      operationId: listProjectLogins
+      summary: Lists app logins — username and origin, never the password.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "200":
+          description: Project logins (password omitted)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectLoginListResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/logins/{app}:
+    put:
+      tags: [Secrets]
+      operationId: setProjectLogin
+      summary: Creates or replaces an app login. The password is AES-256-GCM at rest. Omitted origin/notes keep existing values. The app id is stable — it is not a host or port.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/LoginApp"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetProjectLoginRequest"
+      responses:
+        "200":
+          description: Login stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectLogin"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+    delete:
+      tags: [Secrets]
+      operationId: deleteProjectLogin
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/LoginApp"
+      responses:
+        "204":
+          description: Login deleted
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+  /projects/{projectID}/logins/{app}/reveal:
+    post:
+      tags: [Secrets]
+      operationId: revealProjectLogin
+      summary: Returns the username, password, and origin for one app. Every call is audit-logged. Read one login when you need it. Do not copy it into chat or a .env file.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/LoginApp"
+      responses:
+        "200":
+          description: Decrypted login
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevealProjectLoginResponse"
+        "401":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
   /projects/{projectID}/alerts:
     get:
       tags: [Alerts]
@@ -2475,6 +2560,14 @@ components:
       schema:
         type: string
         pattern: "^[A-Za-z_][A-Za-z0-9_]*$"
+    LoginApp:
+      name: app
+      in: path
+      required: true
+      description: Stable app id. Not a URL and not a port.
+      schema:
+        type: string
+        pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
     BucketID:
       name: bucketID
       in: path
@@ -4408,6 +4501,62 @@ components:
         value:
           type: string
       required: [name, value]
+    ProjectLogin:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        app:
+          type: string
+          description: Stable app id. The current origin is separate and may change.
+        username:
+          type: string
+        origin:
+          type: string
+          description: Current URL of the app, if known. Not the identity.
+        notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required: [id, app, username, origin, notes, created_at, updated_at]
+    ProjectLoginListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectLogin"
+      required: [items]
+    SetProjectLoginRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          description: Plaintext — stored AES-256-GCM encrypted, never returned by list.
+        origin:
+          type: string
+        notes:
+          type: string
+      required: [username, password]
+    RevealProjectLoginResponse:
+      type: object
+      properties:
+        app:
+          type: string
+        username:
+          type: string
+        password:
+          type: string
+        origin:
+          type: string
+      required: [app, username, password, origin]
     AlertRuleConfig:
       type: object
       properties:

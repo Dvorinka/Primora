@@ -186,6 +186,42 @@ fn vault_rm(name: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn vault_logins() -> Result<Value, String> {
+    let out = run_cli(&["logins", "list", "--json"], None, None)?;
+    serde_json::from_str(&out).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn vault_login_reveal(app: String) -> Result<Value, String> {
+    let out = run_cli(&["logins", "get", &app, "--json"], None, None)?;
+    serde_json::from_str(&out).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn vault_login_set(
+    app: String,
+    username: String,
+    password: String,
+    origin: Option<String>,
+    notes: Option<String>,
+) -> Result<(), String> {
+    // Password on stdin, not argv — the CLI reads stdin when --password is omitted.
+    let mut args = vec!["logins", "set", app.as_str(), "--username", username.as_str()];
+    if let Some(o) = origin.as_deref().filter(|s| !s.is_empty()) {
+        args.extend(["--origin", o]);
+    }
+    if let Some(n) = notes.as_deref().filter(|s| !s.is_empty()) {
+        args.extend(["--notes", n]);
+    }
+    run_cli(&args, Some(&password), None).map(|_| ())
+}
+
+#[tauri::command]
+fn vault_login_rm(app: String) -> Result<(), String> {
+    run_cli(&["logins", "rm", &app, "--yes"], None, None).map(|_| ())
+}
+
+#[tauri::command]
 fn vault_import(path: String, overwrite: bool) -> Result<String, String> {
     let mut args = vec!["secrets", "import", path.as_str()];
     if overwrite {
@@ -215,6 +251,10 @@ pub fn run() {
             vault_set,
             vault_rm,
             vault_import,
+            vault_logins,
+            vault_login_reveal,
+            vault_login_set,
+            vault_login_rm,
         ])
         .setup(|app| {
             let show = MenuItem::with_id(app, "show", "Show Primora", true, None::<&str>)?;

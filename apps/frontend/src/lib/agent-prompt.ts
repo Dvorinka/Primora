@@ -113,7 +113,28 @@ ${mcpSection}
 
 Optional CLI path: \`primora login --api-key $PRIMORA_API_KEY\`, then \`primora use\`. For wrapping third-party agents with brokered credentials (the agent never holds real keys), use \`primora agent --<provider> <vault-secret> -- <cmd>\`.
 
-## 4. Prove it works
+## 4. Logins — accounts you create or sign in with
+
+When you create a test account for this app, or you need a username and password for any site, store it. Do not paste the password into the chat and do not write it into \`.env\`.
+
+The app id is stable. Use \`${input.projectSlug}\` for this project. A port is not an identity — \`localhost:3000\` can serve a different app later. For any other site, use a short slug (\`github\`, \`stripe-dashboard\`). \`origin\` is only the current URL.
+
+\`\`\`
+PUT ${api}/projects/${p}/logins/${input.projectSlug}
+X-Primora-Key: $PRIMORA_API_KEY
+
+{"username":"…","password":"…","origin":"http://localhost:3000"}
+\`\`\`
+
+Read it back only when you are about to sign in. The call is audit-logged:
+
+\`\`\`
+POST ${api}/projects/${p}/logins/${input.projectSlug}/reveal
+\`\`\`
+
+The same tools cover the local vault on this machine once \`primora vault unlock\` has been run: \`primora logins set ${input.projectSlug} --username …\` (add \`--remote\` for the project vault). MCP: \`primora_logins_set\`, \`primora_logins_get\`, \`primora_secrets_get\`, \`primora_vault_get\`. Lists never include the password.
+
+## 5. Prove it works
 
 1. \`curl -sS -X POST ${api}/ingest -H "X-Primora-Key: $PRIMORA_API_KEY" -H "Content-Type: application/json" -d '{"events":[{"type":"event","component":"setup","message":"primora.setup.done"}]}'\` — expect \`{"accepted":1}\`.
 2. Record a deploy marker: \`curl -sS -X POST ${api}/projects/${p}/deploy-markers -H "X-Primora-Key: $PRIMORA_API_KEY" -H "Content-Type: application/json" -d '{"ref":"<git sha>","environment":"dev","note":"agent setup"}'\`.

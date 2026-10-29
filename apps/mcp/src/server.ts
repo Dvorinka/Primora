@@ -949,13 +949,12 @@ server.registerTool(
 );
 
 /* ---------------------------------------------------------- */
-/* local vault — metadata only, values never leave the CLI     */
+/* local vault — list is metadata; get returns one named value */
 /* ---------------------------------------------------------- */
 
 const PRIMORA_CLI = process.env.PRIMORA_CLI ?? "primora";
 
-/** Run the primora CLI; returns {code, stdout, stderr}. Values fetched via
- *  `secrets get` stay inside this process — they are never returned. */
+/** Run the primora CLI; returns {code, stdout, stderr}. */
 function runCli(args: string[], env?: Record<string, string>) {
   const res = spawnSync(PRIMORA_CLI, args, {
     env: { ...process.env, ...env },
@@ -987,10 +986,28 @@ server.registerTool(
 );
 
 server.registerTool(
+  "primora_vault_get",
+  {
+    description:
+      "Read one local-vault secret by name. Requires `primora vault unlock` on the host. Use the value here — do not paste it into chat or write it to a .env file.",
+    inputSchema: { name: z.string().describe("Secret name") },
+  },
+  async ({ name }) => {
+    try {
+      const r = runCli(["secrets", "get", name, "--json"]);
+      if (r.code !== 0) throw new Error(r.stderr.trim() || "vault locked — run `primora vault unlock`");
+      return ok(JSON.parse(r.stdout));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
   "primora_vault_list",
   {
     description:
-      "List vault secrets — names, urls, notes, timestamps only. Secret values are never returned by any tool; they are injected at exec time.",
+      "List local-vault secrets — names, urls, notes, timestamps only. Read one value with primora_vault_get.",
   },
   async () => {
     try {
@@ -1088,14 +1105,32 @@ server.registerTool(
   },
 );
 
-// Project vault — server-side store. Agents get metadata + write; there is no
-// reveal or delete tool. To use a secret, reference it as secret://NAME in a
-// scheduled-job payload and the server resolves it at delivery.
+// Project vault — encrypted at rest. List is metadata. Get returns one value
+// and is audit-logged. Job payloads can still use secret://NAME.
+server.registerTool(
+  "primora_secrets_get",
+  {
+    description:
+      "Read one project-vault secret by name. The server audit-logs the reveal. Do not paste the value into chat or write it to a .env file.",
+    inputSchema: {
+      name: z.string().describe("Secret name"),
+      projectId: z.string().optional(),
+    },
+  },
+  async ({ name, projectId: p }) => {
+    try {
+      return ok(await SecretsService.revealProjectSecret({ projectId: await projectId(p), name }));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
 server.registerTool(
   "primora_secrets_list",
   {
     description:
-      "List project vault secrets — names, urls, notes, timestamps only. Values are never returned; reference them as secret://NAME in job payloads.",
+      "List project vault secrets — names, urls, notes, timestamps only. Read one value with primora_secrets_get. Job payloads can reference a secret as secret://NAME.",
     inputSchema: { projectId: z.string().optional() },
   },
   async ({ projectId: p }) => {
@@ -1111,7 +1146,7 @@ server.registerTool(
   "primora_secrets_set",
   {
     description:
-      "Store a secret in the project vault (encrypted at rest, write-only). The value is sent once and can never be read back through MCP. Omitted url/notes keep existing values.",
+      "Store a secret in the project vault (AES-256-GCM at rest). Read it back with primora_secrets_get. Omitted url/notes keep existing values.",
     inputSchema: {
       name: z.string().describe("Env-var-safe name, e.g. STRIPE_SECRET — referenced as secret://NAME"),
       value: z.string().describe("Secret value — sent once, never returned"),
@@ -1130,6 +1165,95 @@ server.registerTool(
       // Return metadata only — echoing the value back would put it in context.
       const { id: _, ...meta } = res;
       return ok(meta);
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+// Logins: username + password bound to a stable app id (not a host:port).
+// The same record can live in the local vault or the project vault.
+server.registerTool(
+  "primora_logins_list",
+  {
+    description:
+      "List app logins (app id, username, origin). Passwords are omitted — read one with primora_logins_get. remote=true uses the project vault; otherwise the local vault (needs `primora vault unlock`).",
+    inputSchema: {
+      remote: z.boolean().optional().describe("true = project vault on the server"),
+      projectId: z.string().optional(),
+    },
+  },
+  async ({ remote, projectId: p }) => {
+    try {
+      if (remote) {
+        return ok(await SecretsService.listProjectLogins({ projectId: await projectId(p) }));
+      }
+      const r = runCli(["logins", "list", "--json"]);
+      if (r.code !== 0) throw new Error(r.stderr.trim() || "vault locked — run `primora vault unlock`");
+      return ok(JSON.parse(r.stdout));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
+  "primora_logins_get",
+  {
+    description:
+      "Read one app login (username, password, origin). Use it to sign in. Do not paste it into chat or write it to a .env file. Project-vault reads are audit-logged. remote=true uses the project vault.",
+    inputSchema: {
+      app: z.string().describe("Stable app id, e.g. my-app or github"),
+      remote: z.boolean().optional(),
+      projectId: z.string().optional(),
+    },
+  },
+  async ({ app, remote, projectId: p }) => {
+    try {
+      if (remote) {
+        return ok(await SecretsService.revealProjectLogin({ projectId: await projectId(p), app }));
+      }
+      const r = runCli(["logins", "get", app, "--json"]);
+      if (r.code !== 0) throw new Error(r.stderr.trim() || "vault locked or login missing");
+      return ok(JSON.parse(r.stdout));
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
+  "primora_logins_set",
+  {
+    description:
+      "Store a username and password for an app. app is a stable id, not a port. origin is the current URL and may change later. remote=true stores it in the project vault.",
+    inputSchema: {
+      app: z.string(),
+      username: z.string(),
+      password: z.string(),
+      origin: z.string().optional(),
+      notes: z.string().optional(),
+      remote: z.boolean().optional(),
+      projectId: z.string().optional(),
+    },
+  },
+  async ({ app, username, password, origin, notes, remote, projectId: p }) => {
+    try {
+      if (remote) {
+        const res = await SecretsService.setProjectLogin({
+          projectId: await projectId(p),
+          app,
+          requestBody: { username, password, origin, notes },
+        });
+        const { id: _, ...meta } = res;
+        return ok(meta);
+      }
+      const args = ["logins", "set", app, "--username", username, "--password", password];
+      if (origin !== undefined) args.push("--origin", origin);
+      if (notes !== undefined) args.push("--notes", notes);
+      const r = runCli(args);
+      if (r.code !== 0) throw new Error(r.stderr.trim() || "failed to store login");
+      return ok({ app, username, origin: origin ?? "", stored: "local" });
     } catch (e) {
       return fail(e);
     }
