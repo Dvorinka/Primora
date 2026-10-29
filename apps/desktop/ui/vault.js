@@ -203,6 +203,41 @@ async function renderUnlocked(st) {
     },
   }, "Import .env");
 
+  const logins = await tauri.core.invoke("vault_logins").catch(() => []);
+  const loginTable = logins.length
+    ? el("table", { class: "vtable" },
+        el("thead", {}, el("tr", {},
+          el("th", {}, "app"), el("th", {}, "username"), el("th", {}, "origin"), el("th", {}, ""))),
+        el("tbody", {}, ...logins.map(loginRow)))
+    : dimNote("No logins yet.");
+
+  const app = el("input", { placeholder: "app id", class: "mono", spellcheck: "false" });
+  const user = el("input", { placeholder: "username", autocomplete: "off" });
+  const pass = el("input", { type: "password", placeholder: "password", autocomplete: "off" });
+  const origin = el("input", { placeholder: "origin (optional)", inputmode: "url" });
+  const loginErr = el("p", { class: "err", hidden: true });
+  const addLogin = el("button", {
+    onclick: async () => {
+      loginErr.hidden = true;
+      if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(app.value)) {
+        loginErr.textContent = "App id is a stable name like my-app — not a URL or a port.";
+        loginErr.hidden = false; return;
+      }
+      if (!user.value.trim() || !pass.value) {
+        loginErr.textContent = "Username and password are required.";
+        loginErr.hidden = false; return;
+      }
+      busy(addLogin, "Encrypting…");
+      try {
+        await tauri.core.invoke("vault_login_set", {
+          app: app.value, username: user.value.trim(), password: pass.value,
+          origin: origin.value || null, notes: null,
+        });
+      } catch (e) { loginErr.textContent = String(e); loginErr.hidden = false; unbusy(addLogin); return; }
+      refresh();
+    },
+  }, "Add login");
+
   view.replaceChildren(
     el("section", { class: "vcard" },
       el("h2", {}, `${secrets.length} secret${secrets.length === 1 ? "" : "s"}`),
@@ -210,10 +245,45 @@ async function renderUnlocked(st) {
       el("div", { class: "vform" }, name, value, url, notes, addBtn),
       el("div", { class: "vform" }, importPath, importBtn),
       err),
+    el("section", { class: "vcard" },
+      el("h2", {}, `${logins.length} login${logins.length === 1 ? "" : "s"}`),
+      el("p", { class: "sub" }, "Username and password for an app. The app id stays put when the port changes."),
+      loginTable,
+      el("div", { class: "vform" }, app, user, pass, origin, addLogin),
+      loginErr),
     el("p", { class: "hint" },
       "Values are never shown here — copy goes straight to the clipboard. " +
-      "Injection and the credential broker stay in the CLI: primora inject / primora agent.")
+      "Read one secret or login from an agent with primora_vault_get or primora_logins_get. " +
+      "Do not paste it into chat or a .env file.")
   );
+}
+
+function loginRow(s) {
+  const copy = el("button", { class: "ghost sm", title: "Copy password" }, "copy");
+  copy.addEventListener("click", async () => {
+    try {
+      const row = await tauri.core.invoke("vault_login_reveal", { app: s.app });
+      await navigator.clipboard.writeText(row.password);
+      copy.textContent = "copied";
+      setTimeout(() => (copy.textContent = "copy"), 1200);
+    } catch { copy.textContent = "error"; setTimeout(() => (copy.textContent = "copy"), 1500); }
+  });
+  const del = el("button", { class: "ghost sm danger", title: "Delete" }, "delete");
+  del.addEventListener("click", async () => {
+    if (del.dataset.armed) {
+      try { await tauri.core.invoke("vault_login_rm", { app: s.app }); } catch {}
+      refresh();
+      return;
+    }
+    del.dataset.armed = "1";
+    del.textContent = "sure?";
+    setTimeout(() => { delete del.dataset.armed; del.textContent = "delete"; }, 2500);
+  });
+  return el("tr", {},
+    el("td", { class: "mono" }, s.app),
+    el("td", {}, s.username),
+    el("td", { class: "dimcell" }, s.origin || "—"),
+    el("td", { class: "acts" }, copy, del));
 }
 
 /* ---------- boot ---------- */

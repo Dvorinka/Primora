@@ -12,7 +12,8 @@
   "scripts": {
     "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/cli.js --banner:js=\"#!/usr/bin/env node\"",
     "dev": "npm run build && node dist/cli.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --experimental-strip-types --test src/login-id.test.ts"
   },
   "publishConfig": {
     "access": "public"

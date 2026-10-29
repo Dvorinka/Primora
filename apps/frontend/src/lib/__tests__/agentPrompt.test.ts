@@ -28,6 +28,8 @@ describe("buildAgentPrompt", () => {
     expect(prompt).toContain("/db-connections");
     expect(prompt).toContain("deploy-markers");
     expect(prompt).toContain("PRIMORA_PROJECT");
+    expect(prompt).toContain(`/logins/${base.projectSlug}`);
+    expect(prompt).toContain("do not write it into `.env`");
     for (const t of ["postgres", "mysql", "mongodb", "redis"]) {
       expect(prompt).toContain(t);
     }

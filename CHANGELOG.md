@@ -4,6 +4,11 @@ All notable changes to Primora. Format follows [Keep a Changelog](https://keepac
 
 ## [Unreleased]
 
+### Added
+
+- **App logins** - a username and password bound to a stable app id, in the local vault and in the project vault. The app id is not a host or a port, so `localhost:3000` can change without losing the account. `primora logins set|get|list|rm` (`--remote` for the project). The dashboard Vault page and the desktop vault window manage both.
+- **Agent reads** - `primora_vault_get`, `primora_secrets_get`, `primora_logins_get`, `primora_logins_set`, and `primora_logins_list`. An agent fetches one named value when it needs to sign in. Lists still omit passwords. Project reveals stay audit-logged. Do not paste the value into chat or a `.env` file.
+
 ## [0.8.5] - 2026-09-28
 
 ### Fixed

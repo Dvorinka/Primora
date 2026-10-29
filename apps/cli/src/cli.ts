@@ -19,6 +19,12 @@ import {
 import { cmdOrgsCreate, cmdOrgsList, cmdOrgsRemove } from "./commands/orgs.js";
 import { cmdProjectsCreate, cmdProjectsList, cmdProjectsRemove } from "./commands/projects.js";
 import {
+  cmdLoginsGet,
+  cmdLoginsList,
+  cmdLoginsRemove,
+  cmdLoginsSet,
+} from "./commands/logins.js";
+import {
   cmdSecretsGet,
   cmdSecretsImport,
   cmdSecretsList,
@@ -261,6 +267,36 @@ cli
   .action(cmdSecretsImport);
 
 cli
+  .command("logins:set <app>", "Store a username and password for an app")
+  .option("--username <user>", "Account username")
+  .option("--password <password>", "Account password (otherwise prompted or read from stdin)")
+  .option("--origin <url>", "Current URL of the app — not its identity")
+  .option("--notes <text>", "Free-text notes")
+  .option("--remote", "Target the project vault on the server instead of the local vault")
+  .option("--project <id>", "Project override (with --remote)")
+  .option("--password-file <path>", "Read the vault password from a file")
+  .action(cmdLoginsSet);
+cli
+  .command("logins:get [app]", "Print one login (username, password, origin)")
+  .option("--remote", "Reveal from the project vault on the server (audit-logged)")
+  .option("--project <id>", "Project override (with --remote)")
+  .option("--password-file <path>", "Read the vault password from a file")
+  .action(cmdLoginsGet);
+cli
+  .command("logins:list", "List logins (app, username, origin — never the password)")
+  .option("--remote", "List project logins on the server")
+  .option("--project <id>", "Project override (with --remote)")
+  .option("--password-file <path>", "Read the vault password from a file")
+  .action(cmdLoginsList);
+cli
+  .command("logins:rm [app]", "Delete a login")
+  .option("--remote", "Delete from the project vault on the server")
+  .option("--project <id>", "Project override (with --remote)")
+  .option("--password-file <path>", "Read the vault password from a file")
+  .option("--yes", "Skip the confirmation prompt")
+  .action(cmdLoginsRemove);
+
+cli
   .command("inject", "Run a command with vault secrets in its environment")
   .option("--all", "Inject every vault secret (default when no --env-file)")
   .option("--env-file <path>", "env template; primora://NAME values resolve from the vault")
@@ -317,6 +353,7 @@ cli.example("primora login --url https://primora.example.com");
 cli.example("primora vault init");
 cli.example("primora secrets import .env");
 cli.example("primora secrets list --remote");
+cli.example("primora logins set my-app --username ada --remote");
 cli.example("primora inject --env-file .env -- npm run dev");
 cli.example("primora agent --anthropic CLAUDE_KEY -- claude");
 
@@ -334,6 +371,7 @@ const GROUPS = new Set([
   "audit",
   "vault",
   "secrets",
+  "logins",
   "stack",
 ]);
 const argv = process.argv.slice(2);
@@ -343,6 +381,8 @@ if (GROUPS.has(argv[0]) && argv[1] && !argv[1].startsWith("-")) {
   argv[0] = "vault:status";
 } else if (argv[0] === "secrets" && !argv[1]) {
   argv[0] = "secrets:list";
+} else if (argv[0] === "logins" && !argv[1]) {
+  argv[0] = "logins:list";
 }
 
 // mri coerces numeric-looking option values ("007" → 7, "" → 0), which

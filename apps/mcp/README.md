@@ -22,17 +22,18 @@ collections, API keys, integrations, webhooks, scheduled jobs, telemetry,
 and audit: `primora_whoami`, `primora_list_projects`,
 `primora_upload_object`, `primora_query_audit`, `primora_run_job`, …
 
-Secrets are agent-safe by design — values are never returned by any tool:
+Secrets and logins are encrypted at rest. An agent reads one named value
+when it needs it, and does not paste that value into chat or a `.env` file.
+Lists omit passwords. Project reveals are audit-logged.
 
-- `primora_vault_status` / `primora_vault_list` — local-vault state and
-  metadata (names/urls/notes only); requires `primora vault unlock` on the host.
-- `primora_vault_exec` — runs `primora` commands with a vault secret injected
-  into the child's env. A strict allow-list (read-mostly commands like
-  `whoami`, `context`, `orgs:list`, `buckets:list`, `jobs:list`,
-  `audit:list`, `events:send`) — nothing that reads, writes, or moves a
-  credential can run; file/path flags are rejected and the injected env
-  name must be a safe identifier (loader hooks like `NODE_OPTIONS` are
-  blocked).
-- `primora_secrets_list` / `primora_secrets_set` — project-vault metadata and
-  write-only storage. No reveal or delete: agents consume secrets through
-  `secret://NAME` references in job payloads, resolved server-side at delivery.
+- `primora_vault_status` / `primora_vault_list` / `primora_vault_get` —
+  local vault. Get returns one secret. Requires `primora vault unlock`.
+- `primora_vault_exec` — runs an allow-listed `primora` command with a
+  vault secret in the child env (the secret is not in the command output).
+  File/path flags are rejected. Loader hooks like `NODE_OPTIONS` are blocked.
+- `primora_secrets_list` / `primora_secrets_set` / `primora_secrets_get` —
+  project vault. Get reveals one secret and is audit-logged. Job payloads
+  can still reference `secret://NAME`.
+- `primora_logins_list` / `primora_logins_set` / `primora_logins_get` —
+  username and password for a stable app id, local or `remote: true` for
+  the project. The app id is not a host or a port.
