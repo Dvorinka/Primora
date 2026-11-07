@@ -12,7 +12,7 @@ permissions:
 jobs:
   backend-tests:
     name: Backend Tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     
     services:
       postgres:
@@ -27,7 +27,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
         ports:
-          - 5432:5432
+          - 15433:5432
 
     steps:
       - uses: actions/checkout@v4
@@ -41,12 +41,12 @@ jobs:
       - name: Run backend tests
         working-directory: apps/backend
         env:
-          DATABASE_URL: postgres://primora_test:test@localhost:5432/primora_test?sslmode=disable
+          DATABASE_URL: postgres://primora_test:test@localhost:15433/primora_test?sslmode=disable
         run: go test -v ./...
 
   frontend-tests:
     name: Frontend Tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     
     steps:
       - uses: actions/checkout@v4
@@ -68,7 +68,7 @@ jobs:
 
   build:
     name: Build All Services
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     
     steps:
       - uses: actions/checkout@v4
@@ -100,7 +100,7 @@ jobs:
 
   docker-build:
     name: Docker Build (${{ matrix.app }})
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     strategy:
       fail-fast: false
       matrix:
@@ -145,7 +145,7 @@ jobs:
     name: Publish edge images
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     needs: [docker-build, e2e-smoke]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     permissions:
       packages: write
       contents: read
@@ -181,7 +181,7 @@ jobs:
 
   migrations:
     name: Migration Up/Down
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
 
     services:
       postgres:
@@ -196,7 +196,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
         ports:
-          - 5432:5432
+          - 15434:5432
 
     steps:
       - uses: actions/checkout@v4
@@ -213,28 +213,35 @@ jobs:
       - name: Migrations up
         run: |
           goose -dir apps/backend/db/migrations \
-            postgres "postgres://primora_test:test@localhost:5432/primora_test?sslmode=disable" up
+            postgres "postgres://primora_test:test@localhost:15434/primora_test?sslmode=disable" up
 
       - name: Migrations reset (all downs)
         run: |
           goose -dir apps/backend/db/migrations \
-            postgres "postgres://primora_test:test@localhost:5432/primora_test?sslmode=disable" reset
+            postgres "postgres://primora_test:test@localhost:15434/primora_test?sslmode=disable" reset
 
       - name: Migrations up again (idempotent re-apply)
         run: |
           goose -dir apps/backend/db/migrations \
-            postgres "postgres://primora_test:test@localhost:5432/primora_test?sslmode=disable" up
+            postgres "postgres://primora_test:test@localhost:15434/primora_test?sslmode=disable" up
 
   e2e-smoke:
     name: Compose E2E Smoke
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Prepare env
-        run: cp .env.example .env
+        run: |
+          cp .env.example .env
+          sed -i \
+            -e 's/^POSTGRES_PORT=.*/POSTGRES_PORT=15440/' \
+            -e 's/^DRAGONFLY_PORT=.*/DRAGONFLY_PORT=15441/' \
+            -e 's/^NGINX_PORT=.*/NGINX_PORT=15442/' \
+            -e 's/^MAILPIT_HTTP_PORT=.*/MAILPIT_HTTP_PORT=15443/' \
+            .env
 
       - name: Validate compose files
         run: >-
@@ -249,7 +256,7 @@ jobs:
           up -d --build
 
       - name: Run smoke checks
-        run: ./scripts/smoke-e2e.sh
+        run: BASE_URL=http://localhost:15442 ./scripts/smoke-e2e.sh
 
       - name: Dump logs on failure
         if: failure()
@@ -267,7 +274,9 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
+    env:
+      CGO_ENABLED: "0"
     
     steps:
       - uses: actions/checkout@v4
