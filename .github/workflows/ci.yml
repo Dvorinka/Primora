@@ -27,7 +27,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
         ports:
-          - 5432:5432
+          - 15433:5432
 
     steps:
       - uses: actions/checkout@v4
@@ -41,7 +41,7 @@ jobs:
       - name: Run backend tests
         working-directory: apps/backend
         env:
-          DATABASE_URL: postgres://primora_test:test@localhost:5432/primora_test?sslmode=disable
+          DATABASE_URL: postgres://primora_test:test@localhost:15433/primora_test?sslmode=disable
         run: go test -v ./...
 
   frontend-tests:
@@ -196,7 +196,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
         ports:
-          - 5432:5432
+          - 15434:5432
 
     steps:
       - uses: actions/checkout@v4
@@ -213,17 +213,17 @@ jobs:
       - name: Migrations up
         run: |
           goose -dir apps/backend/db/migrations \
-            postgres "postgres://primora_test:test@localhost:5432/primora_test?sslmode=disable" up
+            postgres "postgres://primora_test:test@localhost:15434/primora_test?sslmode=disable" up
 
       - name: Migrations reset (all downs)
         run: |
           goose -dir apps/backend/db/migrations \
-            postgres "postgres://primora_test:test@localhost:5432/primora_test?sslmode=disable" reset
+            postgres "postgres://primora_test:test@localhost:15434/primora_test?sslmode=disable" reset
 
       - name: Migrations up again (idempotent re-apply)
         run: |
           goose -dir apps/backend/db/migrations \
-            postgres "postgres://primora_test:test@localhost:5432/primora_test?sslmode=disable" up
+            postgres "postgres://primora_test:test@localhost:15434/primora_test?sslmode=disable" up
 
   e2e-smoke:
     name: Compose E2E Smoke
