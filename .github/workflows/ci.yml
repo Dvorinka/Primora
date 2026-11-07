@@ -275,6 +275,8 @@ jobs:
   lint:
     name: Lint
     runs-on: [self-hosted, linux, x64]
+    env:
+      CGO_ENABLED: "0"
     
     steps:
       - uses: actions/checkout@v4
