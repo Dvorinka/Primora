@@ -12,7 +12,7 @@ permissions:
 jobs:
   backend-tests:
     name: Backend Tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     
     services:
       postgres:
@@ -46,7 +46,7 @@ jobs:
 
   frontend-tests:
     name: Frontend Tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     
     steps:
       - uses: actions/checkout@v4
@@ -68,7 +68,7 @@ jobs:
 
   build:
     name: Build All Services
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     
     steps:
       - uses: actions/checkout@v4
@@ -100,7 +100,7 @@ jobs:
 
   docker-build:
     name: Docker Build (${{ matrix.app }})
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     strategy:
       fail-fast: false
       matrix:
@@ -145,7 +145,7 @@ jobs:
     name: Publish edge images
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     needs: [docker-build, e2e-smoke]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     permissions:
       packages: write
       contents: read
@@ -181,7 +181,7 @@ jobs:
 
   migrations:
     name: Migration Up/Down
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
 
     services:
       postgres:
@@ -227,7 +227,7 @@ jobs:
 
   e2e-smoke:
     name: Compose E2E Smoke
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     timeout-minutes: 15
 
     steps:
@@ -267,7 +267,7 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     
     steps:
       - uses: actions/checkout@v4

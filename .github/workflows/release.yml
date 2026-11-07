@@ -19,7 +19,7 @@ permissions:
 jobs:
   verify:
     name: Verify version
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     outputs:
       version: ${{ steps.check.outputs.version }}
       needed: ${{ steps.check.outputs.needed }}
@@ -65,12 +65,13 @@ jobs:
     # Native runners per arch — QEMU emulation SIGILLs on the current
     # node:20-alpine arm64 layers (uncaught target signal 4) and wedges
     # the build step indefinitely.
-    runs-on: ${{ matrix.platform == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.platform == 'arm64' && fromJSON('["ubuntu-24.04-arm"]') || matrix.ro }}
     strategy:
       fail-fast: false
       matrix:
         app: [backend, auth, frontend]
         platform: [amd64, arm64]
+        ro: [[self-hosted, linux, x64]]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -98,7 +99,7 @@ jobs:
     name: Image manifests
     needs: [verify, images]
     if: needs.verify.outputs.needed == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: docker/setup-buildx-action@v3
       - name: Compute lowercase GHCR owner
@@ -124,7 +125,7 @@ jobs:
     name: Compile ${{ matrix.name }}
     needs: verify
     if: needs.verify.outputs.needed == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     strategy:
       fail-fast: false
       matrix:
@@ -154,14 +155,14 @@ jobs:
     name: Desktop bundle (${{ matrix.name }})
     needs: verify
     if: needs.verify.outputs.needed == 'true'
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.ro }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-22.04, name: linux }
-          - { os: macos-latest, name: macos }
-          - { os: windows-latest, name: windows }
+          - { os: ubuntu-22.04, name: linux, ro: [self-hosted, linux, x64] }
+          - { os: macos-latest, name: macos, ro: [self-hosted, macos, x64] }
+          - { os: windows-latest, name: windows, ro: [self-hosted, windows, x64] }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -199,7 +200,7 @@ jobs:
     name: Pack npm tarballs
     needs: verify
     if: needs.verify.outputs.needed == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -222,7 +223,7 @@ jobs:
     name: GitHub Release
     needs: [verify, manifests, cli-binaries, desktop, npm-packages]
     if: needs.verify.outputs.needed == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     env:
       VERSION: ${{ needs.verify.outputs.version }}
     steps:
@@ -324,7 +325,7 @@ jobs:
     name: SBOMs
     needs: [verify, release]
     if: needs.verify.outputs.needed == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     permissions:
       packages: read
       # contents: write — the job uploads SBOM assets onto the release.
@@ -371,7 +372,7 @@ jobs:
   npm-publish:
     name: Publish to npm
     needs: release
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     env:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
