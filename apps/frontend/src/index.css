@@ -486,6 +486,45 @@ code {
     text-overflow: ellipsis;
   }
 
+  /* Overview operate tiles. Five across on desktop, two on a phone. */
+  .link-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  @media (min-width: 1024px) {
+    .link-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  }
+  .link-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.125rem;
+    min-width: 0;
+    padding: 0.875rem 1rem;
+    border: none;
+    border-left: 1px solid var(--border);
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    color: inherit;
+    font: inherit;
+  }
+  .link-tile:hover { background: var(--surface); }
+  .link-tile:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  .link-grid .link-tile:nth-child(2n + 1) { border-left: none; }
+  @media (min-width: 1024px) {
+    .link-grid .link-tile:nth-child(2n + 1) { border-left: 1px solid var(--border); }
+    .link-grid .link-tile:first-child { border-left: none; }
+  }
+  @media (max-width: 1023px) {
+    .link-tile:nth-child(n + 3) { border-top: 1px solid var(--border); }
+  }
+
   /* ---------- list rows (hairline, not cards) ---------- */
   .row-list {
     border-top: 1px solid var(--border);

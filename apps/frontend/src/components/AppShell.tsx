@@ -1,5 +1,6 @@
 import { type JSX, For, Show, createSignal, onCleanup, onMount } from "solid-js";
 import type { OrganizationSummary, ProjectSummary } from "@primora/api-client";
+import { type ViewType } from "../lib/views";
 import {
   LogoMark,
   IconOverview,
@@ -24,51 +25,45 @@ import {
   IconX,
 } from "./Icons";
 
-export type ViewType =
-  | "dashboard"
-  | "projects"
-  | "members"
-  | "storage"
-  | "collections"
-  | "databases"
-  | "telemetry"
-  | "integrations"
-  | "automation"
-  | "functions"
-  | "vault"
-  | "auth"
-  | "audit"
-  | "settings";
+export type { ViewType };
 
 interface NavEntry {
   id: ViewType;
   label: string;
   shortLabel?: string;
+  keywords: string[];
   icon: (p: { class?: string }) => JSX.Element;
 }
 
 const projectNav: NavEntry[] = [
-  { id: "dashboard", label: "Overview", icon: IconOverview },
-  { id: "databases", label: "Databases", shortLabel: "DBs", icon: IconDatabases },
-  { id: "telemetry", label: "Telemetry", shortLabel: "Signals", icon: IconTelemetry },
-  { id: "integrations", label: "Integrations", shortLabel: "Integr.", icon: IconIntegrations },
-  { id: "automation", label: "Automation", shortLabel: "Auto", icon: IconZap },
-  { id: "functions", label: "Functions", shortLabel: "Funcs", icon: IconTerminal },
-  { id: "vault", label: "Vault", icon: IconKey },
-  { id: "storage", label: "Storage", icon: IconStorage },
-  { id: "collections", label: "Collections", icon: IconCollections },
-  { id: "auth", label: "Authentication", shortLabel: "Auth", icon: IconAuth },
-  { id: "audit", label: "Audit log", shortLabel: "Audit", icon: IconAudit },
+  { id: "dashboard", label: "Overview", icon: IconOverview, keywords: ["home", "dashboard"] },
+  { id: "databases", label: "Databases", icon: IconDatabases, keywords: ["db", "sql", "query", "tables", "redis"] },
+  { id: "telemetry", label: "Telemetry", icon: IconTelemetry, keywords: ["errors", "metrics", "logs", "observability", "issues"] },
+  { id: "integrations", label: "Integrations", icon: IconIntegrations, keywords: ["webhooks", "rybbit", "connectors", "alerts"] },
+  { id: "automation", label: "Automation", icon: IconZap, keywords: ["cron", "jobs", "schedule", "events", "realtime"] },
+  { id: "functions", label: "Functions", icon: IconTerminal, keywords: ["serverless", "code", "lambda", "invoke"] },
+  { id: "vault", label: "Vault", icon: IconKey, keywords: ["secrets", "env", "credentials"] },
+  { id: "storage", label: "Storage", icon: IconStorage, keywords: ["files", "buckets", "upload"] },
+  { id: "collections", label: "Collections", icon: IconCollections, keywords: ["documents", "json"] },
+  { id: "auth", label: "Authentication", icon: IconAuth, keywords: ["users", "sign in", "ban"] },
+  { id: "audit", label: "Audit log", icon: IconAudit, keywords: ["logs", "events", "history"] },
 ];
-
-// Instagram-style bottom bar caps at five slots — the rest stay reachable via Menu.
-const bottomNav: NavEntry[] = projectNav.filter((e) => !["collections", "telemetry", "integrations", "automation"].includes(e.id));
 
 const workspaceNav: NavEntry[] = [
-  { id: "projects", label: "Projects", icon: IconProjects },
-  { id: "members", label: "Members", icon: IconMembers },
-  { id: "settings", label: "Settings", icon: IconSettings },
+  { id: "projects", label: "Projects", icon: IconProjects, keywords: ["project"] },
+  { id: "members", label: "Members", icon: IconMembers, keywords: ["team", "users", "invite"] },
+  { id: "settings", label: "Settings", icon: IconSettings, keywords: ["api keys", "organization"] },
 ];
+
+// Sidebar order. The command palette is built from this, so a new page cannot be unreachable from search.
+export const shellNav: NavEntry[] = [...projectNav, ...workspaceNav];
+
+// Five slots: four destinations plus Menu. Everything else stays in the drawer.
+const BOTTOM_NAV_IDS: ViewType[] = ["dashboard", "databases", "storage", "telemetry"];
+const bottomNav: NavEntry[] = BOTTOM_NAV_IDS.flatMap((id) => {
+  const entry = projectNav.find((item) => item.id === id);
+  return entry ? [entry] : [];
+});
 
 interface AppShellProps {
   view: ViewType;
@@ -92,22 +87,9 @@ interface AppShellProps {
   children?: JSX.Element;
 }
 
-const viewTitle: Record<ViewType, string> = {
-  dashboard: "Overview",
-  projects: "Projects",
-  members: "Members",
-  storage: "Storage",
-  collections: "Collections",
-  databases: "Databases",
-  telemetry: "Telemetry",
-  integrations: "Integrations",
-  automation: "Automation",
-  functions: "Functions",
-  vault: "Vault",
-  auth: "Authentication",
-  audit: "Audit log",
-  settings: "Settings",
-};
+const viewTitle: Record<ViewType, string> = Object.fromEntries(
+  shellNav.map((entry) => [entry.id, entry.label]),
+) as Record<ViewType, string>;
 
 function initials(name?: string, email?: string): string {
   const src = name || email || "?";
@@ -145,6 +127,7 @@ export function AppShell(props: AppShellProps) {
   const NavButton = (entry: NavEntry) => (
     <button
       class={`nav-item ${props.view === entry.id ? "active" : ""}`}
+      data-testid={`nav-${entry.id}`}
       onClick={() => navigate(entry.id)}
       aria-current={props.view === entry.id ? "page" : undefined}
     >
@@ -288,6 +271,7 @@ export function AppShell(props: AppShellProps) {
             {(entry) => (
               <button
                 class={`bottom-nav-item ${props.view === entry.id ? "active" : ""}`}
+                data-testid={`bottom-nav-${entry.id}`}
                 onClick={() => navigate(entry.id)}
                 aria-current={props.view === entry.id ? "page" : undefined}
               >

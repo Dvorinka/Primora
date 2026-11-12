@@ -9,6 +9,9 @@ import {
   IconIntegrations,
   IconChevronRight,
   IconTerminal,
+  IconDatabases,
+  IconTelemetry,
+  IconZap,
 } from "./Icons";
 
 interface ProjectDashboardProps {
@@ -44,6 +47,48 @@ function formatRelative(value?: string | null): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
+}
+
+function countLabel(count: number | undefined, singular: string, plural: string) {
+  const n = count ?? 0;
+  return `${n} ${n === 1 ? singular : plural}`;
+}
+
+function ResourceGroup(props: {
+  title: string;
+  items: { title: string; sub: string; icon: typeof IconStorage; view: string }[];
+  onNavigate: (view: string) => void;
+}) {
+  return (
+    <div>
+      <h2 class="section-title" style="margin-bottom: 0.75rem">{props.title}</h2>
+      <div class="row-list">
+        <For each={props.items}>
+          {(item) => (
+            <div
+              class="row-item clickable"
+              data-testid={`overview-${item.view}`}
+              onClick={() => props.onNavigate(item.view)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === "Enter" && props.onNavigate(item.view)}
+            >
+              <span class="row-icon">
+                <item.icon class="w-4 h-4" />
+              </span>
+              <div class="row-main">
+                <div class="row-title">{item.title}</div>
+                <div class="row-sub">{item.sub}</div>
+              </div>
+              <span class="row-trailing">
+                <IconChevronRight class="w-3.5 h-3.5" />
+              </span>
+            </div>
+          )}
+        </For>
+      </div>
+    </div>
+  );
 }
 
 function actionTone(action: string): string {
@@ -88,10 +133,23 @@ export function ProjectDashboard(props: ProjectDashboardProps) {
     },
   ];
 
-  const resources = () => [
+  type ResourceLink = {
+    title: string;
+    sub: string;
+    icon: typeof IconStorage;
+    view: string;
+  };
+
+  const dataResources = (): ResourceLink[] => [
+    {
+      title: "Databases",
+      sub: "SQL, Redis, schema",
+      icon: IconDatabases,
+      view: "databases",
+    },
     {
       title: "Storage",
-      sub: `${overview()?.bucket_count ?? 0} buckets`,
+      sub: `${overview()?.bucket_count ?? 0} buckets · ${formatBytes(overview()?.object_bytes_total)}`,
       icon: IconStorage,
       view: "storage",
     },
@@ -101,21 +159,37 @@ export function ProjectDashboard(props: ProjectDashboardProps) {
       icon: IconCollections,
       view: "collections",
     },
+  ];
+
+  // Members and API keys already sit on the metric strip. These are the pages that strip does not open.
+  const operateResources = (): ResourceLink[] => [
     {
-      title: "Credentials",
-      sub: `${overview()?.active_api_key_count ?? 0} active keys`,
-      icon: IconKey,
-      view: "settings",
+      title: "Telemetry",
+      sub: "Errors, metrics, logs",
+      icon: IconTelemetry,
+      view: "telemetry",
     },
     {
-      title: "Members",
-      sub: `${overview()?.member_count ?? 0} in project`,
-      icon: IconMembers,
-      view: "members",
+      title: "Automation",
+      sub: "Schedules and live events",
+      icon: IconZap,
+      view: "automation",
+    },
+    {
+      title: "Functions",
+      sub: "Invoke and triggers",
+      icon: IconTerminal,
+      view: "functions",
+    },
+    {
+      title: "Vault",
+      sub: "Project secrets",
+      icon: IconKey,
+      view: "vault",
     },
     {
       title: "Integrations",
-      sub: `${overview()?.integration_count ?? 0} connectors · ${overview()?.webhook_count ?? 0} webhooks`,
+      sub: `${countLabel(overview()?.integration_count, "connector", "connectors")} · ${countLabel(overview()?.webhook_count, "webhook", "webhooks")}`,
       icon: IconIntegrations,
       view: "integrations",
     },
@@ -233,33 +307,30 @@ export function ProjectDashboard(props: ProjectDashboardProps) {
           </Show>
         </div>
 
-        {/* resources — hairline rows */}
         <div class="lg:col-span-2" style="min-width: 0">
-          <h2 class="section-title" style="margin-bottom: 0.75rem">Resources</h2>
-          <div class="row-list">
-            <For each={resources()}>
-              {(r) => (
-                <div
-                  class="row-item clickable"
-                  onClick={() => props.onNavigate(r.view)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => e.key === "Enter" && props.onNavigate(r.view)}
-                >
-                  <span class="row-icon">
-                    <r.icon class="w-4 h-4" />
-                  </span>
-                  <div class="row-main">
-                    <div class="row-title">{r.title}</div>
-                    <div class="row-sub">{r.sub}</div>
-                  </div>
-                  <span class="row-trailing">
-                    <IconChevronRight class="w-3.5 h-3.5" />
-                  </span>
-                </div>
-              )}
-            </For>
-          </div>
+          <ResourceGroup title="Data" items={dataResources()} onNavigate={props.onNavigate} />
+        </div>
+      </div>
+
+      <div>
+        <h2 class="section-title" style="margin-bottom: 0.75rem">Operate</h2>
+        <div class="link-grid">
+          <For each={operateResources()}>
+            {(item) => (
+              <button
+                type="button"
+                class="link-tile"
+                data-testid={`overview-${item.view}`}
+                onClick={() => props.onNavigate(item.view)}
+              >
+                <span class="metric-label">
+                  <item.icon />
+                  {item.title}
+                </span>
+                <span class="metric-sub">{item.sub}</span>
+              </button>
+            )}
+          </For>
         </div>
       </div>
     </div>
