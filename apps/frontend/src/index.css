@@ -679,6 +679,15 @@ code {
     color: var(--error);
     font-size: 0.75rem;
   }
+  .doc-table { table-layout: fixed; }
+  .doc-table .doc-when { width: 11rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .doc-table .doc-go { width: 2.25rem; text-align: right; }
+  .doc-table .doc-main { overflow: hidden; }
+  .doc-sub-when { display: none; }
+  @media (max-width: 639px) {
+    .doc-table .doc-when { display: none; }
+    .doc-sub-when { display: inline; }
+  }
 
   /* ---------- messages / alerts ---------- */
   .message {

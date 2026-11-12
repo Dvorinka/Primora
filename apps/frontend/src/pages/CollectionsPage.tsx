@@ -44,6 +44,14 @@ function prettyJson(value: Record<string, unknown>): string {
   return JSON.stringify(value, null, 2);
 }
 
+function documentLabel(data: Record<string, unknown>): string {
+  for (const key of ["title", "name", "slug"]) {
+    const value = data[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
 export function CollectionsPage(props: CollectionsPageProps) {
   const [createOpen, setCreateOpen] = createSignal(false);
   const [docEditorOpen, setDocEditorOpen] = createSignal(false);
@@ -206,7 +214,7 @@ export function CollectionsPage(props: CollectionsPageProps) {
               class="card-header"
               style="padding:1rem 1.25rem;margin-bottom:0;border-bottom:1px solid var(--border)"
             >
-              <div class="flex items-center justify-between gap-3 w-full">
+              <div class="flex flex-wrap items-center justify-between gap-3 w-full">
                 <div class="min-w-0">
                   <span class="card-header-title">{activeCollection()!.name}</span>
                   <span class="card-header-description">
@@ -258,12 +266,12 @@ export function CollectionsPage(props: CollectionsPageProps) {
             </Show>
 
             <div class="table-container">
-              <table class="table">
+              <table class="table doc-table">
                 <thead>
                   <tr>
                     <th>Document</th>
-                    <th style="width:1%">Updated</th>
-                    <th style="width:1%" />
+                    <th class="doc-when">Updated</th>
+                    <th class="doc-go" />
                   </tr>
                 </thead>
                 <tbody>
@@ -279,27 +287,33 @@ export function CollectionsPage(props: CollectionsPageProps) {
                       </tr>
                     }
                   >
-                    {(doc) => (
-                      <tr class="clickable" onClick={() => openEditDoc(doc)}>
-                        <td>
-                          <div class="flex items-center gap-2.5 min-w-0">
-                            <IconFile class="w-4 h-4 text-text-3 flex-shrink-0" />
-                            <div class="min-w-0">
-                              <div class="font-mono text-xs text-text-1">{doc.id}</div>
-                              <div class="text-xs text-text-3 truncate" style="max-width:30rem">
-                                {JSON.stringify(doc.data)}
+                    {(doc) => {
+                      const label = documentLabel(doc.data);
+                      return (
+                        <tr class="clickable" onClick={() => openEditDoc(doc)}>
+                          <td class="doc-main">
+                            <div class="flex items-center gap-2.5 min-w-0">
+                              <IconFile class="w-4 h-4 text-text-3 flex-shrink-0" />
+                              <div class="min-w-0">
+                                <div class={label ? "text-sm text-text-1 truncate" : "font-mono text-xs text-text-1 truncate"}>
+                                  {label || doc.id}
+                                </div>
+                                <div class="text-xs text-text-3 truncate">
+                                  {label ? doc.id : JSON.stringify(doc.data)}
+                                  <span class="doc-sub-when"> · {props.formatDate(doc.updated_at)}</span>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </td>
-                        <td class="text-xs text-text-3 whitespace-nowrap">
-                          {props.formatDate(doc.updated_at)}
-                        </td>
-                        <td>
-                          <IconChevronRight class="w-4 h-4 text-text-3" />
-                        </td>
-                      </tr>
-                    )}
+                          </td>
+                          <td class="doc-when text-xs text-text-3">
+                            {props.formatDate(doc.updated_at)}
+                          </td>
+                          <td class="doc-go">
+                            <IconChevronRight class="w-4 h-4 text-text-3" />
+                          </td>
+                        </tr>
+                      );
+                    }}
                   </For>
                 </tbody>
               </table>
