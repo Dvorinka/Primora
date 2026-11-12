@@ -4,6 +4,14 @@ All notable changes to Primora. Format follows [Keep a Changelog](https://keepac
 
 ## [Unreleased]
 
+### Added
+
+- **Collection search in the console** — Collections can filter and order documents with the same `field.op.value` grammar as the API (`status.eq.published`, `views.desc`). Demo mode applies it locally and only lists the selected collection.
+
+### Fixed
+
+- **Breadcrumb keeps the page name** — narrow screens show the current page instead of squeezing the organization, project, and page down to a letter each. The full path stays in the tooltip on wider screens.
+
 ## [0.8.5] - 2026-09-28
 
 ### Fixed

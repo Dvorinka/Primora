@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 import type { Collection, Document } from "@primora/api-client";
 import { Badge } from "../components/Badge";
 import { Modal, ModalFooter } from "../components/Modal";
@@ -21,6 +21,9 @@ interface CollectionsPageProps {
   collections: Collection[];
   documents: Document[];
   selectedCollectionID?: string;
+  documentFilter: string;
+  documentOrder: string;
+  documentLoadError: string;
   collectionInput: CollectionInput;
   collectionMessage: string;
   collectionPending: boolean;
@@ -30,6 +33,7 @@ interface CollectionsPageProps {
   onCreateCollection: (event: SubmitEvent) => void;
   onDeleteCollection: (id: string) => void;
   onSelectCollection: (id: string) => void;
+  onDocumentQuery: (filter: string, order: string) => string;
   onCreateDocument: (data: Record<string, unknown>) => void;
   onUpdateDocument: (id: string, data: Record<string, unknown>) => void;
   onDeleteDocument: (id: string) => void;
@@ -46,6 +50,32 @@ export function CollectionsPage(props: CollectionsPageProps) {
   const [editingDoc, setEditingDoc] = createSignal<Document | null>(null);
   const [docJson, setDocJson] = createSignal("{}");
   const [docError, setDocError] = createSignal("");
+  const [draftFilter, setDraftFilter] = createSignal(props.documentFilter);
+  const [draftOrder, setDraftOrder] = createSignal(props.documentOrder);
+  const [queryError, setQueryError] = createSignal("");
+
+  let seenCollection = props.selectedCollectionID;
+  createEffect(() => {
+    const id = props.selectedCollectionID;
+    if (id === seenCollection) return;
+    seenCollection = id;
+    setDraftFilter("");
+    setDraftOrder("");
+    setQueryError("");
+  });
+
+  const applyQuery = (event: SubmitEvent) => {
+    event.preventDefault();
+    const problem = props.onDocumentQuery(draftFilter().trim(), draftOrder().trim());
+    setQueryError(problem);
+  };
+
+  const clearQuery = () => {
+    setDraftFilter("");
+    setDraftOrder("");
+    setQueryError("");
+    props.onDocumentQuery("", "");
+  };
 
   const activeCollection = createMemo(() =>
     props.collections.find((c) => c.id === props.selectedCollectionID),
@@ -110,7 +140,7 @@ export function CollectionsPage(props: CollectionsPageProps) {
         <div class="message message-neutral">{props.collectionMessage}</div>
       </Show>
 
-      <div class="grid gap-5" style="grid-template-columns: minmax(0, 17rem) minmax(0, 1fr)">
+      <div class="collection-split">
         {/* collection list */}
         <div class="card card-flush">
           <div
@@ -197,6 +227,36 @@ export function CollectionsPage(props: CollectionsPageProps) {
               </div>
             </div>
 
+            <form class="doc-query" onSubmit={applyQuery}>
+              <input
+                class="input input-sm"
+                aria-label="Filter documents"
+                data-testid="document-filter"
+                placeholder="status.eq.published"
+                value={draftFilter()}
+                onInput={(e) => setDraftFilter(e.currentTarget.value)}
+              />
+              <input
+                class="input input-sm"
+                aria-label="Order documents"
+                data-testid="document-order"
+                placeholder="views.desc"
+                value={draftOrder()}
+                onInput={(e) => setDraftOrder(e.currentTarget.value)}
+              />
+              <button class="btn btn-secondary btn-sm" type="submit" data-testid="document-query-apply">
+                Apply
+              </button>
+              <Show when={props.documentFilter || props.documentOrder || draftFilter() || draftOrder()}>
+                <button class="btn btn-ghost btn-sm" type="button" onClick={clearQuery}>
+                  Clear
+                </button>
+              </Show>
+            </form>
+            <Show when={queryError() || props.documentLoadError}>
+              <p class="doc-query-error" role="alert">{queryError() || props.documentLoadError}</p>
+            </Show>
+
             <div class="table-container">
               <table class="table">
                 <thead>
@@ -212,7 +272,9 @@ export function CollectionsPage(props: CollectionsPageProps) {
                     fallback={
                       <tr>
                         <td colspan={3} class="py-10 text-center text-text-3">
-                          No documents yet. Create one as a JSON object.
+                          {props.documentFilter || props.documentOrder
+                            ? "No documents match this query."
+                            : "No documents yet. Create one as a JSON object."}
                         </td>
                       </tr>
                     }
