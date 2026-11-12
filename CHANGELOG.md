@@ -4,6 +4,14 @@ All notable changes to Primora. Format follows [Keep a Changelog](https://keepac
 
 ## [Unreleased]
 
+### Added
+
+- **Schedules in plain language.** A new schedule can be every N minutes or hours, hourly, daily, weekdays, or weekly. The cron expression stays on the form and can still be typed by hand (`0 3 * * *`, `@every 15m`). The job list shows the sentence next to the expression. An existing schedule can be edited the same way. A blank signing secret keeps the current one.
+
+### Fixed
+
+- **Demo schedules redraw after a change.** The demo job list handed back the same job objects the table already held, so a new schedule, an edit, or a toggle did not appear until a reload.
+
 ## [0.8.5] - 2026-09-28
 
 ### Fixed

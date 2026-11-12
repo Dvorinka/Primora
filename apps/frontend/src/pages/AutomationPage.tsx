@@ -12,7 +12,9 @@ import { demoService } from "../lib/demo-mode";
 import { Badge } from "../components/Badge";
 import { Modal } from "../components/Modal";
 import { Input, Textarea } from "../components/Input";
+import { ScheduleField } from "../components/ScheduleField";
 import { errorMessage } from "../lib/api";
+import { describeSchedule, scheduleError } from "../lib/schedule";
 import {
   IconPlus,
   IconRefresh,
@@ -66,7 +68,9 @@ export function AutomationPage(props: AutomationPageProps) {
   const [runs, setRuns] = createSignal<Record<string, ScheduledJobRun[]>>({});
   const [expandedJob, setExpandedJob] = createSignal<string>();
   const [showCreate, setShowCreate] = createSignal(false);
-  const [jobForm, setJobForm] = createSignal({ name: "", schedule: "", url: "", payload: "", secret: "", enabled: true, target: "url" as "url" | "function", function_id: "" });
+  const [editing, setEditing] = createSignal<ScheduledJob>();
+  const blankJob = () => ({ name: "", schedule: "0 3 * * *", url: "", payload: "", secret: "", enabled: true, target: "url" as "url" | "function", function_id: "" });
+  const [jobForm, setJobForm] = createSignal(blankJob());
   const [functions, setFunctions] = createSignal<PrimoraFunction[]>([]);
   const [createdSecret, setCreatedSecret] = createSignal("");
   const [loading, setLoading] = createSignal(false);
@@ -189,7 +193,37 @@ export function AutomationPage(props: AutomationPageProps) {
     }
   };
 
-  const createJob = (e: Event) => {
+  const closeForm = () => {
+    setShowCreate(false);
+    setEditing(undefined);
+    setError("");
+  };
+
+  const openCreate = () => {
+    setEditing(undefined);
+    setJobForm(blankJob());
+    setError("");
+    setShowCreate(true);
+  };
+
+  const openEdit = (job: ScheduledJob) => {
+    const payload = job.payload && Object.keys(job.payload).length > 0 ? JSON.stringify(job.payload, null, 2) : "";
+    setEditing(job);
+    setJobForm({
+      name: job.name,
+      schedule: job.schedule,
+      url: job.function_id ? "" : job.url,
+      payload,
+      secret: "",
+      enabled: job.enabled,
+      target: job.function_id ? "function" : "url",
+      function_id: job.function_id ?? "",
+    });
+    setError("");
+    setShowCreate(true);
+  };
+
+  const saveJob = (e: Event) => {
     e.preventDefault();
     const form = jobForm();
     let payload: Record<string, unknown> | undefined;
@@ -200,6 +234,33 @@ export function AutomationPage(props: AutomationPageProps) {
         setError("Payload must be valid JSON");
         return;
       }
+    }
+    const scheduleProblem = scheduleError(form.schedule);
+    if (scheduleProblem) {
+      setError(scheduleProblem);
+      return;
+    }
+    const current = editing();
+    if (current) {
+      void run("save-job", async () => {
+        await svc(props.demoMode).updateScheduledJob({
+          projectId: props.projectID!,
+          jobId: current.id,
+          requestBody: {
+            name: form.name.trim(),
+            schedule: form.schedule.trim(),
+            url: form.target === "url" ? form.url.trim() : undefined,
+            function_id: form.target === "function" ? form.function_id : "",
+            secret: form.secret.trim() || undefined,
+            payload: payload ?? {},
+            enabled: form.enabled,
+          },
+        });
+        setJobForm(blankJob());
+        setEditing(undefined);
+        setShowCreate(false);
+      }, "Schedule updated");
+      return;
     }
     void run("create-job", async () => {
       const created = await svc(props.demoMode).createScheduledJob({
@@ -215,7 +276,7 @@ export function AutomationPage(props: AutomationPageProps) {
         },
       });
       if (created.secret) setCreatedSecret(created.secret);
-      setJobForm({ name: "", schedule: "", url: "", payload: "", secret: "", enabled: true, target: "url", function_id: "" });
+      setJobForm(blankJob());
       setShowCreate(false);
     }, "Schedule created");
   };
@@ -306,7 +367,7 @@ export function AutomationPage(props: AutomationPageProps) {
               </div>
             </div>
             <Show when={props.canManage}>
-              <button class="btn btn-primary btn-sm" onClick={() => setShowCreate(true)}>
+              <button class="btn btn-primary btn-sm" onClick={openCreate}>
                 <IconPlus class="w-4 h-4" />
                 New schedule
               </button>
@@ -341,7 +402,14 @@ export function AutomationPage(props: AutomationPageProps) {
                         <tr>
                           <td class="font-medium">{job.name}</td>
                           <td>
-                            <code class="text-xs">{job.schedule}</code>
+                            <Show when={describeSchedule(job.schedule)} fallback={<code class="text-xs">{job.schedule}</code>}>
+                              {(label) => (
+                                <div>
+                                  <div>{label()}</div>
+                                  <code class="text-xs text-text-2">{job.schedule}</code>
+                                </div>
+                              )}
+                            </Show>
                           </td>
                           <td class="text-text-2" style="max-width:14rem;overflow:hidden;text-overflow:ellipsis">
                             {job.function_id
@@ -373,6 +441,14 @@ export function AutomationPage(props: AutomationPageProps) {
                               Runs
                             </button>
                             <Show when={props.canManage}>
+                              <button
+                                type="button"
+                                class="btn btn-ghost btn-sm"
+                                aria-label={`Edit ${job.name}`}
+                                onClick={() => openEdit(job)}
+                              >
+                                Edit
+                              </button>
                               <button
                                 class="btn btn-ghost btn-sm"
                                 onClick={() => runNow(job)}
@@ -533,8 +609,15 @@ export function AutomationPage(props: AutomationPageProps) {
         </div>
       </Show>
 
-      <Modal error={error()} open={showCreate()} onClose={() => setShowCreate(false)} title="New schedule" size="md">
-        <form onSubmit={createJob} class="space-y-4">
+      <Modal
+        error={error()}
+        open={showCreate()}
+        onClose={closeForm}
+        title={editing() ? "Edit schedule" : "New schedule"}
+        size="md"
+        class="max-h-[calc(100dvh-2rem)] overflow-y-auto"
+      >
+        <form onSubmit={saveJob} class="space-y-4">
           <Input
             label="Name"
             value={jobForm().name}
@@ -542,19 +625,10 @@ export function AutomationPage(props: AutomationPageProps) {
             placeholder="nightly-rollup"
             required
           />
-          <div>
-            <Input
-              label="Schedule"
-              value={jobForm().schedule}
-              onInput={(e) => setJobForm((c) => ({ ...c, schedule: e.currentTarget.value }))}
-              placeholder="*/15 * * * *  or  @every 1h"
-              required
-            />
-            <p class="label-hint">
-              Standard 5-field cron, or a descriptor: <code>@hourly</code>, <code>@daily</code>,{" "}
-              <code>@every 30m</code>.
-            </p>
-          </div>
+          <ScheduleField
+            value={jobForm().schedule}
+            onChange={(schedule) => setJobForm((c) => ({ ...c, schedule }))}
+          />
           <div>
             <span class="label">Target</span>
             <div class="flex gap-2 mb-2">
@@ -619,8 +693,11 @@ export function AutomationPage(props: AutomationPageProps) {
             label="Signing secret (optional)"
             value={jobForm().secret}
             onInput={(e) => setJobForm((c) => ({ ...c, secret: e.currentTarget.value }))}
-            placeholder="generated if empty"
+            placeholder={editing() ? "leave blank to keep" : "generated if empty"}
           />
+          <Show when={editing()}>
+            <p class="label-hint">Blank keeps the current signing secret.</p>
+          </Show>
           <label class="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -630,12 +707,12 @@ export function AutomationPage(props: AutomationPageProps) {
             Enabled — start running on schedule immediately
           </label>
           <div class="flex gap-2 justify-end">
-            <button type="button" class="btn btn-secondary" onClick={() => setShowCreate(false)}>
+            <button type="button" class="btn btn-secondary" onClick={closeForm}>
               Cancel
             </button>
-            <button type="submit" class="btn btn-primary" disabled={busy() === "create-job"}>
+            <button type="submit" class="btn btn-primary" disabled={busy() === "create-job" || busy() === "save-job"}>
               <IconZap class="w-4 h-4" />
-              Create schedule
+              {editing() ? "Save schedule" : "Create schedule"}
             </button>
           </div>
         </form>

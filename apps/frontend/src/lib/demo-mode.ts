@@ -1320,7 +1320,7 @@ class DemoService {
 
   async listScheduledJobs(): Promise<{ items: ScheduledJob[] }> {
     await this.delay();
-    return { items: demoJobs };
+    return { items: demoJobs.map((job) => ({ ...job })) };
   }
 
   async createScheduledJob(data: {
