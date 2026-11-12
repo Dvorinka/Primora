@@ -1468,3 +1468,45 @@ code {
   }
   .bottom-nav-item svg { color: inherit; }
 }
+
+/* Phone lists were scrolling inside the card, with the actions off-screen.
+   Stack the row. Collection documents keep .doc-table. */
+@media (max-width: 639px) {
+  .table-container:has(> .table:not(.doc-table)) { overflow-x: hidden; }
+  .table:not(.doc-table),
+  .table:not(.doc-table) tbody { display: block; }
+  .table:not(.doc-table) thead { display: none; }
+  .table:not(.doc-table) tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 0.75rem;
+    row-gap: 0.25rem;
+    max-width: 100%;
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .table:not(.doc-table) tr:last-child { border-bottom: none; }
+  .table:not(.doc-table) td {
+    display: block;
+    flex-shrink: 0;
+    /* beats width:1% on the action cell, which was collapsing the buttons */
+    width: auto !important;
+    max-width: 100%;
+    padding: 0;
+    border: 0;
+    /* beats the inline nowrap on action cells */
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+  }
+  .table:not(.doc-table) td:first-child {
+    flex: 1 0 100%;
+    color: var(--text-1);
+  }
+  .table:not(.doc-table) td :where(span, code, div, p, select) {
+    white-space: normal;
+    max-width: 100%;
+  }
+  .table:not(.doc-table) td .flex { flex-wrap: wrap; }
+  .table:not(.doc-table) td:last-child:has(> svg:only-child) { display: none; }
+}

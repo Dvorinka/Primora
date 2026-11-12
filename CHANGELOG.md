@@ -12,6 +12,7 @@ All notable changes to Primora. Format follows [Keep a Changelog](https://keepac
 
 - **Breadcrumb keeps the page name** — narrow screens show the current page instead of squeezing the organization, project, and page down to a letter each. The full path stays in the tooltip on wider screens.
 - **Collection rows fit the screen** — a document with a title, name, or slug shows that, and the row stays inside the page on a phone instead of forcing a sideways scroll.
+- **List tables fit the phone** — storage, members, audit, vault, and the other console lists stack each row so the actions stay on screen. Collection documents keep their own layout.
 
 ## [0.8.5] - 2026-09-28
 
