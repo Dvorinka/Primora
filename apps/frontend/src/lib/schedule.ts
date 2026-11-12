@@ -115,7 +115,8 @@ export function scheduleError(expr: string): string | undefined {
   if (!value) return "Schedule is required";
   if (readSchedule(value).mode !== "custom") return undefined;
   if (/^@(yearly|annually|monthly|weekly|daily|midnight|hourly)$/i.test(value)) return undefined;
-  if (/^@every\s+\d+(s|m|h)$/i.test(value)) return undefined;
+  // Go durations the server accepts, including compounds such as 1h30m.
+  if (/^@every\s+(?:\d+(?:\.\d+)?(?:ns|us|µs|ms|s|m|h))+$/i.test(value)) return undefined;
   const parts = value.split(/\s+/);
   if (parts.length === 5 && parts.every((part) => /^[\d*,\-/]+$/.test(part))) return undefined;
   return `invalid schedule "${value}". Pick a repeat above, or type a cron expression like "0 3 * * *"`;

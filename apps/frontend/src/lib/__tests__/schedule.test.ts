@@ -42,6 +42,8 @@ describe("schedule", () => {
     expect(scheduleError("nope")).toMatch(/invalid schedule/);
     expect(scheduleError("0 0 1 * *")).toBeUndefined();
     expect(scheduleError("@every 30s")).toBeUndefined();
+    expect(scheduleError("@every 1h30m")).toBeUndefined();
+    expect(readSchedule("@every 1h30m").mode).toBe("custom");
     expect(scheduleError("")).toMatch(/required/);
   });
 });
