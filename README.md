@@ -52,7 +52,7 @@ Supabase, with no hosted tier - your data stays on your hardware.
 - **Collections** - schema-flexible JSON documents in Postgres JSONB, with filter/order queries.
 - **Functions** - project-scoped JS/TS run by bun/deno — on the host (`exec`) or in ephemeral locked-down containers (`docker` driver) — with per-run logs. Trigger them four ways: manual invoke, cron schedules (`function_id` on a job), inbound hooks (`mode: "function"`), or domain events (`event_pattern` like `document.*`).
 - **Vault** - AES-256-GCM project secrets plus an Argon2id/XChaCha20 local vault in the CLI and desktop app.
-- **Automation** - scheduled jobs, inbound webhooks, telemetry alert rules, and `secret://` refs resolved at delivery.
+- **Automation** - scheduled jobs (a plain-language picker, or a cron expression such as `0 3 * * *` / `@every 15m`), inbound webhooks, telemetry alert rules, and `secret://` refs resolved at delivery.
 - **Realtime** - SSE event stream with a typed client SDK (`@primora/client`) — channel subscriptions, presence counts, and client-published `custom.*` events that fan out to webhooks and functions.
 - **API keys** - `prm_<prefix>_<secret>` credentials, shown once.
 - **Agent setup** - every project can mint a `write`-scoped key and generate a copyable AI-agent prompt that wires telemetry, database tracking, and MCP/CLI access into any repository.
