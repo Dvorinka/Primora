@@ -4,6 +4,16 @@ All notable changes to Primora. Format follows [Keep a Changelog](https://keepac
 
 ## [Unreleased]
 
+### Added
+
+- **Pages have addresses** — the open console view lives in the URL hash (`#telemetry`), so refresh, Back, and a pasted link land on the same page. The last organization and project are restored with it.
+- **Overview links the rest of the project** — Databases, Telemetry, Automation, Functions, and Vault sit next to storage and integrations, in Data and Operate groups.
+
+### Fixed
+
+- **Command palette lists every page** — Integrations was missing from search. The palette is now built from the same list as the sidebar.
+- **Phone navigation fits** — the bottom bar is Overview, Databases, Storage, Telemetry, and Menu. The other pages stay in the drawer instead of squeezing eight labels onto one row.
+
 ## [0.8.5] - 2026-09-28
 
 ### Fixed

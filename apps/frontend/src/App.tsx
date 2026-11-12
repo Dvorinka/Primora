@@ -23,12 +23,13 @@ import {
   type OrganizationSummary,
   type ProjectSummary,
 } from "@primora/api-client";
-import { Show, createEffect, createMemo, createResource, createSignal, onCleanup } from "solid-js";
+import { Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js";
 
 import { authClient, fetchApiToken } from "./lib/auth-client";
 import { configureApiToken, errorMessage } from "./lib/api";
 import { isDemoMode, disableDemoMode, enableDemoMode, demoSession, demoService } from "./lib/demo-mode";
 import { applySlugField } from "./lib/slug";
+import { parseView, viewHash } from "./lib/views";
 import {
   AgentSetupModal,
   AppShell,
@@ -37,6 +38,7 @@ import {
   OnboardingModal,
   ProjectDashboard,
   PwaInstallBanner,
+  shellNav,
   type PaletteCommand,
   type ViewType,
 } from "./components";
@@ -58,23 +60,7 @@ import {
   StoragePage,
 } from "./pages";
 import { Input } from "./components/Input";
-import {
-  IconOverview,
-  IconProjects,
-  IconMembers,
-  IconStorage,
-  IconDatabases,
-  IconTelemetry,
-  IconZap,
-  IconTerminal,
-  IconCollections,
-  IconAudit,
-  IconAuth,
-  IconSettings,
-  IconPlus,
-  IconKey,
-  IconUpload,
-} from "./components/Icons";
+import { IconProjects, IconPlus, IconKey, IconUpload } from "./components/Icons";
 
 const OBJECTS_PAGE_SIZE = 25;
 const AUDIT_PAGE_SIZE = 25;
@@ -87,6 +73,22 @@ type ObjectPreview =
 
 function getErrorMessage(error: unknown, fallback: string) {
   return errorMessage(error, fallback);
+}
+
+function readStoredId(key: string): string | undefined {
+  try {
+    return localStorage.getItem(key) || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function storeId(key: string, id: string) {
+  try {
+    localStorage.setItem(key, id);
+  } catch {
+    // Private mode and blocked storage still work for the session.
+  }
 }
 
 function formatDate(value?: string | null) {
@@ -127,7 +129,24 @@ export default function App() {
   const [email, setEmail] = createSignal("");
   const [password, setPassword] = createSignal("");
   const [name, setName] = createSignal("");
-  const [activeView, setActiveView] = createSignal<ViewType>("dashboard");
+  // Hash is the address of the open page. pushState keeps Back working
+  // without a server rewrite; the listener covers Back and manual edits.
+  const [activeView, setActiveViewRaw] = createSignal<ViewType>(parseView(window.location.hash));
+  const setActiveView = (view: ViewType) => {
+    setActiveViewRaw(view);
+    const next = viewHash(view);
+    if (window.location.hash === next) return;
+    history.pushState(null, "", `${window.location.pathname}${window.location.search}${next}`);
+  };
+  onMount(() => {
+    const sync = () => setActiveViewRaw(parseView(window.location.hash));
+    window.addEventListener("hashchange", sync);
+    window.addEventListener("popstate", sync);
+    onCleanup(() => {
+      window.removeEventListener("hashchange", sync);
+      window.removeEventListener("popstate", sync);
+    });
+  });
   const [showOnboarding, setShowOnboarding] = createSignal(false);
   const [agentSetupOpen, setAgentSetupOpen] = createSignal(false);
   const [paletteOpen, setPaletteOpen] = createSignal(false);
@@ -147,8 +166,9 @@ export default function App() {
   const [collectionsMessage, setCollectionsMessage] = createSignal("");
   const [instanceMessage, setInstanceMessage] = createSignal("");
 
-  const [selectedOrganizationID, setSelectedOrganizationID] = createSignal<string | undefined>();
-  const [selectedProjectID, setSelectedProjectID] = createSignal<string | undefined>();
+  // Last org and project survive a reload. An id this account does not own falls through to the first real one.
+  const [selectedOrganizationID, setSelectedOrganizationID] = createSignal<string | undefined>(readStoredId("primora_org"));
+  const [selectedProjectID, setSelectedProjectID] = createSignal<string | undefined>(readStoredId("primora_project"));
   const [selectedBucketID, setSelectedBucketID] = createSignal<string | undefined>();
   const [selectedCollectionID, setSelectedCollectionID] = createSignal<string | undefined>();
   const [selectedObjectKey, setSelectedObjectKey] = createSignal<string | undefined>();
@@ -222,6 +242,8 @@ export default function App() {
   createEffect(() => {
     document.documentElement.classList.toggle("light", theme() === "light");
     localStorage.setItem("primora_theme", theme());
+    const view = activeView();
+    document.title = view === "dashboard" ? "Primora" : `Primora · ${shellNav.find((entry) => entry.id === view)?.label ?? "Primora"}`;
   });
 
   /* ---------------------------------------------------------- */
@@ -583,6 +605,7 @@ export default function App() {
   });
 
   createEffect(() => {
+    if (platform.loading) return;
     const orgs = platform()?.organizations ?? [];
     if (orgs.length === 0) {
       setSelectedOrganizationID(undefined);
@@ -590,17 +613,22 @@ export default function App() {
       return;
     }
     const current = orgs.find((o) => o.id === selectedOrganizationID()) ?? orgs[0];
-    setSelectedOrganizationID(current.id);
+    if (current.id !== selectedOrganizationID()) setSelectedOrganizationID(current.id);
+    if (current.id) storeId("primora_org", current.id);
   });
 
   createEffect(() => {
+    // Platform and the project list both start empty. Clearing here would
+    // throw away the id restored from localStorage before either has loaded.
+    if (platform.loading || organizationProjects.loading || !activeOrganization()) return;
     const projects = availableProjects();
     if (projects.length === 0) {
       setSelectedProjectID(undefined);
       return;
     }
     const current = projects.find((p) => p.id === selectedProjectID()) ?? projects[0];
-    setSelectedProjectID(current?.id);
+    if (current?.id !== selectedProjectID()) setSelectedProjectID(current?.id);
+    if (current?.id) storeId("primora_project", current.id);
   });
 
   createEffect(() => {
@@ -654,9 +682,16 @@ export default function App() {
     objectSearch();
     setObjectOffset(0);
   });
+  // Skip the first run so a restored project survives mount. A later query
+  // drops the selection; the project effect then picks the first match.
+  let projectSearchReady = false;
   createEffect(() => {
-    projectSearch();
-    setSelectedProjectID(undefined);
+    const query = projectSearch();
+    if (!projectSearchReady) {
+      projectSearchReady = true;
+      return;
+    }
+    if (query.trim()) setSelectedProjectID(undefined);
   });
   createEffect(() => {
     bucketSearch();
@@ -1080,6 +1115,7 @@ export default function App() {
         await refreshProjectOverviewSnapshot();
         setPlatformMessage("Invitation accepted.");
         window.history.replaceState({}, "", "/");
+        setActiveViewRaw("dashboard");
       } catch (error) {
         setPlatformMessage(getErrorMessage(error, "Invitation acceptance failed"));
       }
@@ -1538,19 +1574,14 @@ export default function App() {
   /* ---------------------------------------------------------- */
 
   const paletteCommands = createMemo<PaletteCommand[]>(() => [
-    { id: "nav-dashboard", label: "Go to Overview", category: "Navigate", icon: <IconOverview class="w-4 h-4" />, keywords: ["home", "dashboard"], action: () => setActiveView("dashboard") },
-    { id: "nav-projects", label: "Go to Projects", category: "Navigate", icon: <IconProjects class="w-4 h-4" />, keywords: ["project"], action: () => setActiveView("projects") },
-    { id: "nav-members", label: "Go to Members", category: "Navigate", icon: <IconMembers class="w-4 h-4" />, keywords: ["team", "users", "invite"], action: () => setActiveView("members") },
-    { id: "nav-databases", label: "Go to Databases", category: "Navigate", icon: <IconDatabases class="w-4 h-4" />, keywords: ["db", "sql", "query", "tables", "redis"], action: () => setActiveView("databases") },
-    { id: "nav-telemetry", label: "Go to Telemetry", category: "Navigate", icon: <IconTelemetry class="w-4 h-4" />, keywords: ["errors", "metrics", "logs", "observability", "issues"], action: () => setActiveView("telemetry") },
-    { id: "nav-automation", label: "Go to Automation", category: "Navigate", icon: <IconZap class="w-4 h-4" />, keywords: ["cron", "jobs", "schedule", "events", "realtime"], action: () => setActiveView("automation") },
-    { id: "nav-vault", label: "Go to Vault", category: "Navigate", icon: <IconKey class="w-4 h-4" />, keywords: ["secrets", "env", "credentials", "api key", "token"], action: () => setActiveView("vault") },
-    { id: "nav-functions", label: "Go to Functions", category: "Navigate", icon: <IconTerminal class="w-4 h-4" />, keywords: ["serverless", "code", "lambda", "invoke", "edge"], action: () => setActiveView("functions") },
-    { id: "nav-storage", label: "Go to Storage", category: "Navigate", icon: <IconStorage class="w-4 h-4" />, keywords: ["files", "buckets", "upload"], action: () => setActiveView("storage") },
-    { id: "nav-collections", label: "Go to Collections", category: "Navigate", icon: <IconCollections class="w-4 h-4" />, keywords: ["documents", "database"], action: () => setActiveView("collections") },
-    { id: "nav-auth", label: "Go to Authentication", category: "Navigate", icon: <IconAuth class="w-4 h-4" />, keywords: ["users", "sign in", "ban"], action: () => setActiveView("auth") },
-    { id: "nav-audit", label: "Go to Audit log", category: "Navigate", icon: <IconAudit class="w-4 h-4" />, keywords: ["logs", "events"], action: () => setActiveView("audit") },
-    { id: "nav-settings", label: "Go to Settings", category: "Navigate", icon: <IconSettings class="w-4 h-4" />, keywords: ["api keys", "organization"], action: () => setActiveView("settings") },
+    ...shellNav.map((entry) => ({
+      id: `nav-${entry.id}`,
+      label: `Go to ${entry.label}`,
+      category: "Navigate",
+      icon: <entry.icon class="w-4 h-4" />,
+      keywords: entry.keywords,
+      action: () => setActiveView(entry.id),
+    })),
     { id: "act-theme", label: `Switch to ${theme() === "dark" ? "light" : "dark"} theme`, category: "Actions", keywords: ["dark", "light", "appearance"], action: () => setTheme(theme() === "dark" ? "light" : "dark") },
     { id: "act-new-project", label: "Create project", category: "Actions", icon: <IconPlus class="w-4 h-4" />, action: () => setActiveView("projects") },
     { id: "act-new-key", label: "Create API key", category: "Actions", icon: <IconKey class="w-4 h-4" />, action: () => setActiveView("settings") },
