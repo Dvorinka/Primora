@@ -242,11 +242,11 @@ export function AppShell(props: AppShellProps) {
           </button>
 
           <nav class="topbar-breadcrumb" aria-label="Breadcrumb">
-            <span class="crumb">{currentOrg()?.name ?? "Workspace"}</span>
-            <span class="crumb-sep">/</span>
-            <span class="crumb">{currentProject()?.name ?? "—"}</span>
-            <span class="crumb-sep">/</span>
-            <span class="crumb current">{viewTitle[props.view]}</span>
+            <span class="crumb" title={currentOrg()?.name ?? "Workspace"}>{currentOrg()?.name ?? "Workspace"}</span>
+            <span class="crumb-sep" aria-hidden="true">/</span>
+            <span class="crumb" title={currentProject()?.name ?? "Project"}>{currentProject()?.name ?? "—"}</span>
+            <span class="crumb-sep" aria-hidden="true">/</span>
+            <span class="crumb current" title={viewTitle[props.view]}>{viewTitle[props.view]}</span>
           </nav>
 
           <div class="flex-1" />

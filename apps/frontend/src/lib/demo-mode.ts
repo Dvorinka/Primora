@@ -12,6 +12,7 @@ import {
   ScheduledJobRun,
   WebhookDelivery,
 } from "@primora/api-client";
+import { queryDocuments } from "./documentQuery";
 import type {
   ApiKey,
   AuditLog,
@@ -623,7 +624,13 @@ class DemoService {
     ] as InstanceSetting[];
   }
   async listCollections() { await this.delay(); return collections; }
-  async listDocuments() { await this.delay(); return documents; }
+  async listDocuments(collectionId?: string, filter = "", order = "") {
+    await this.delay();
+    const scoped = collectionId ? documents.filter((doc) => doc.collection_id === collectionId) : documents;
+    const result = queryDocuments(scoped, filter, order);
+    if ("error" in result) throw new Error(result.error);
+    return result.items;
+  }
 
   /* paged endpoints return the full page envelope */
   async listBucketObjects() {

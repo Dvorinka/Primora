@@ -656,6 +656,39 @@ code {
   .table tbody tr.clickable { cursor: pointer; }
   .table .mono, .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
+  .collection-split {
+    display: grid;
+    gap: 1.25rem;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  @media (min-width: 800px) {
+    .collection-split { grid-template-columns: minmax(0, 17rem) minmax(0, 1fr); }
+  }
+  .doc-query {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    padding: 0.75rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .doc-query .input { flex: 1 1 10rem; min-width: 0; }
+  .doc-query-error {
+    margin: 0;
+    padding: 0.5rem 1.25rem 0.75rem;
+    color: var(--error);
+    font-size: 0.75rem;
+  }
+  .doc-table { table-layout: fixed; }
+  .doc-table .doc-when { width: 11rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .doc-table .doc-go { width: 2.25rem; text-align: right; }
+  .doc-table .doc-main { overflow: hidden; }
+  .doc-sub-when { display: none; }
+  @media (max-width: 639px) {
+    .doc-table .doc-when { display: none; }
+    .doc-sub-when { display: inline; }
+  }
+
   /* ---------- messages / alerts ---------- */
   .message {
     display: flex;
@@ -982,15 +1015,32 @@ code {
     gap: 0.5rem;
     font-size: 0.8125rem;
     min-width: 0;
+    overflow: hidden;
   }
   .crumb {
     color: var(--text-3);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    min-width: 0;
+    flex: 0 1 auto;
+    max-width: 14rem;
   }
-  .crumb.current { color: var(--text-1); font-weight: 500; }
-  .crumb-sep { color: var(--border-strong); }
+  .crumb.current {
+    color: var(--text-1);
+    font-weight: 500;
+    flex-shrink: 0;
+    max-width: 16rem;
+  }
+  .crumb-sep { color: var(--border-strong); flex-shrink: 0; }
+  @media (max-width: 639px) {
+    .topbar { gap: 0.5rem; padding: 0 0.75rem; }
+    .topbar > .flex-1 { display: none; }
+    .topbar-breadcrumb { flex: 1; }
+    .crumb:not(.current),
+    .crumb-sep { display: none; }
+    .crumb.current { max-width: none; }
+  }
 
   .topbar-search {
     display: flex;
@@ -1417,4 +1467,46 @@ code {
     background: var(--accent);
   }
   .bottom-nav-item svg { color: inherit; }
+}
+
+/* Phone lists were scrolling inside the card, with the actions off-screen.
+   Stack the row. Collection documents keep .doc-table. */
+@media (max-width: 639px) {
+  .table-container:has(> .table:not(.doc-table)) { overflow-x: hidden; }
+  .table:not(.doc-table),
+  .table:not(.doc-table) tbody { display: block; }
+  .table:not(.doc-table) thead { display: none; }
+  .table:not(.doc-table) tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 0.75rem;
+    row-gap: 0.25rem;
+    max-width: 100%;
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .table:not(.doc-table) tr:last-child { border-bottom: none; }
+  .table:not(.doc-table) td {
+    display: block;
+    flex-shrink: 0;
+    /* beats width:1% on the action cell, which was collapsing the buttons */
+    width: auto !important;
+    max-width: 100%;
+    padding: 0;
+    border: 0;
+    /* beats the inline nowrap on action cells */
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+  }
+  .table:not(.doc-table) td:first-child {
+    flex: 1 0 100%;
+    color: var(--text-1);
+  }
+  .table:not(.doc-table) td :where(span, code, div, p, select) {
+    white-space: normal;
+    max-width: 100%;
+  }
+  .table:not(.doc-table) td .flex { flex-wrap: wrap; }
+  .table:not(.doc-table) td:last-child:has(> svg:only-child) { display: none; }
 }

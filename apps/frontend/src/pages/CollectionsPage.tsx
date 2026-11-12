@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 import type { Collection, Document } from "@primora/api-client";
 import { Badge } from "../components/Badge";
 import { Modal, ModalFooter } from "../components/Modal";
@@ -21,6 +21,9 @@ interface CollectionsPageProps {
   collections: Collection[];
   documents: Document[];
   selectedCollectionID?: string;
+  documentFilter: string;
+  documentOrder: string;
+  documentLoadError: string;
   collectionInput: CollectionInput;
   collectionMessage: string;
   collectionPending: boolean;
@@ -30,6 +33,7 @@ interface CollectionsPageProps {
   onCreateCollection: (event: SubmitEvent) => void;
   onDeleteCollection: (id: string) => void;
   onSelectCollection: (id: string) => void;
+  onDocumentQuery: (filter: string, order: string) => string;
   onCreateDocument: (data: Record<string, unknown>) => void;
   onUpdateDocument: (id: string, data: Record<string, unknown>) => void;
   onDeleteDocument: (id: string) => void;
@@ -40,12 +44,46 @@ function prettyJson(value: Record<string, unknown>): string {
   return JSON.stringify(value, null, 2);
 }
 
+function documentLabel(data: Record<string, unknown>): string {
+  for (const key of ["title", "name", "slug"]) {
+    const value = data[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
 export function CollectionsPage(props: CollectionsPageProps) {
   const [createOpen, setCreateOpen] = createSignal(false);
   const [docEditorOpen, setDocEditorOpen] = createSignal(false);
   const [editingDoc, setEditingDoc] = createSignal<Document | null>(null);
   const [docJson, setDocJson] = createSignal("{}");
   const [docError, setDocError] = createSignal("");
+  const [draftFilter, setDraftFilter] = createSignal(props.documentFilter);
+  const [draftOrder, setDraftOrder] = createSignal(props.documentOrder);
+  const [queryError, setQueryError] = createSignal("");
+
+  let seenCollection = props.selectedCollectionID;
+  createEffect(() => {
+    const id = props.selectedCollectionID;
+    if (id === seenCollection) return;
+    seenCollection = id;
+    setDraftFilter("");
+    setDraftOrder("");
+    setQueryError("");
+  });
+
+  const applyQuery = (event: SubmitEvent) => {
+    event.preventDefault();
+    const problem = props.onDocumentQuery(draftFilter().trim(), draftOrder().trim());
+    setQueryError(problem);
+  };
+
+  const clearQuery = () => {
+    setDraftFilter("");
+    setDraftOrder("");
+    setQueryError("");
+    props.onDocumentQuery("", "");
+  };
 
   const activeCollection = createMemo(() =>
     props.collections.find((c) => c.id === props.selectedCollectionID),
@@ -110,7 +148,7 @@ export function CollectionsPage(props: CollectionsPageProps) {
         <div class="message message-neutral">{props.collectionMessage}</div>
       </Show>
 
-      <div class="grid gap-5" style="grid-template-columns: minmax(0, 17rem) minmax(0, 1fr)">
+      <div class="collection-split">
         {/* collection list */}
         <div class="card card-flush">
           <div
@@ -176,7 +214,7 @@ export function CollectionsPage(props: CollectionsPageProps) {
               class="card-header"
               style="padding:1rem 1.25rem;margin-bottom:0;border-bottom:1px solid var(--border)"
             >
-              <div class="flex items-center justify-between gap-3 w-full">
+              <div class="flex flex-wrap items-center justify-between gap-3 w-full">
                 <div class="min-w-0">
                   <span class="card-header-title">{activeCollection()!.name}</span>
                   <span class="card-header-description">
@@ -197,13 +235,43 @@ export function CollectionsPage(props: CollectionsPageProps) {
               </div>
             </div>
 
+            <form class="doc-query" onSubmit={applyQuery}>
+              <input
+                class="input input-sm"
+                aria-label="Filter documents"
+                data-testid="document-filter"
+                placeholder="status.eq.published"
+                value={draftFilter()}
+                onInput={(e) => setDraftFilter(e.currentTarget.value)}
+              />
+              <input
+                class="input input-sm"
+                aria-label="Order documents"
+                data-testid="document-order"
+                placeholder="views.desc"
+                value={draftOrder()}
+                onInput={(e) => setDraftOrder(e.currentTarget.value)}
+              />
+              <button class="btn btn-secondary btn-sm" type="submit" data-testid="document-query-apply">
+                Apply
+              </button>
+              <Show when={props.documentFilter || props.documentOrder || draftFilter() || draftOrder()}>
+                <button class="btn btn-ghost btn-sm" type="button" onClick={clearQuery}>
+                  Clear
+                </button>
+              </Show>
+            </form>
+            <Show when={queryError() || props.documentLoadError}>
+              <p class="doc-query-error" role="alert">{queryError() || props.documentLoadError}</p>
+            </Show>
+
             <div class="table-container">
-              <table class="table">
+              <table class="table doc-table">
                 <thead>
                   <tr>
                     <th>Document</th>
-                    <th style="width:1%">Updated</th>
-                    <th style="width:1%" />
+                    <th class="doc-when">Updated</th>
+                    <th class="doc-go" />
                   </tr>
                 </thead>
                 <tbody>
@@ -212,32 +280,40 @@ export function CollectionsPage(props: CollectionsPageProps) {
                     fallback={
                       <tr>
                         <td colspan={3} class="py-10 text-center text-text-3">
-                          No documents yet. Create one as a JSON object.
+                          {props.documentFilter || props.documentOrder
+                            ? "No documents match this query."
+                            : "No documents yet. Create one as a JSON object."}
                         </td>
                       </tr>
                     }
                   >
-                    {(doc) => (
-                      <tr class="clickable" onClick={() => openEditDoc(doc)}>
-                        <td>
-                          <div class="flex items-center gap-2.5 min-w-0">
-                            <IconFile class="w-4 h-4 text-text-3 flex-shrink-0" />
-                            <div class="min-w-0">
-                              <div class="font-mono text-xs text-text-1">{doc.id}</div>
-                              <div class="text-xs text-text-3 truncate" style="max-width:30rem">
-                                {JSON.stringify(doc.data)}
+                    {(doc) => {
+                      const label = documentLabel(doc.data);
+                      return (
+                        <tr class="clickable" onClick={() => openEditDoc(doc)}>
+                          <td class="doc-main">
+                            <div class="flex items-center gap-2.5 min-w-0">
+                              <IconFile class="w-4 h-4 text-text-3 flex-shrink-0" />
+                              <div class="min-w-0">
+                                <div class={label ? "text-sm text-text-1 truncate" : "font-mono text-xs text-text-1 truncate"}>
+                                  {label || doc.id}
+                                </div>
+                                <div class="text-xs text-text-3 truncate">
+                                  {label ? doc.id : JSON.stringify(doc.data)}
+                                  <span class="doc-sub-when"> · {props.formatDate(doc.updated_at)}</span>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </td>
-                        <td class="text-xs text-text-3 whitespace-nowrap">
-                          {props.formatDate(doc.updated_at)}
-                        </td>
-                        <td>
-                          <IconChevronRight class="w-4 h-4 text-text-3" />
-                        </td>
-                      </tr>
-                    )}
+                          </td>
+                          <td class="doc-when text-xs text-text-3">
+                            {props.formatDate(doc.updated_at)}
+                          </td>
+                          <td class="doc-go">
+                            <IconChevronRight class="w-4 h-4 text-text-3" />
+                          </td>
+                        </tr>
+                      );
+                    }}
                   </For>
                 </tbody>
               </table>

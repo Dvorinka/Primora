@@ -29,6 +29,7 @@ import { authClient, fetchApiToken } from "./lib/auth-client";
 import { configureApiToken, errorMessage } from "./lib/api";
 import { isDemoMode, disableDemoMode, enableDemoMode, demoSession, demoService } from "./lib/demo-mode";
 import { applySlugField } from "./lib/slug";
+import { documentQueryError } from "./lib/documentQuery";
 import {
   AgentSetupModal,
   AppShell,
@@ -151,6 +152,8 @@ export default function App() {
   const [selectedProjectID, setSelectedProjectID] = createSignal<string | undefined>();
   const [selectedBucketID, setSelectedBucketID] = createSignal<string | undefined>();
   const [selectedCollectionID, setSelectedCollectionID] = createSignal<string | undefined>();
+  const [documentFilter, setDocumentFilter] = createSignal("");
+  const [documentOrder, setDocumentOrder] = createSignal("");
   const [selectedObjectKey, setSelectedObjectKey] = createSignal<string | undefined>();
 
   const [objectOffset, setObjectOffset] = createSignal(0);
@@ -523,10 +526,19 @@ export default function App() {
   );
 
   const [documents, { refetch: refetchDocuments }] = createResource(
-    () => selectedCollectionID() ?? null,
-    async (collectionID) => {
-      if (isDemo) return await demoService.listDocuments();
-      return CollectionsService.listDocuments({ collectionId: collectionID }).then((res) => res.items);
+    () => {
+      const id = selectedCollectionID();
+      if (!id) return null;
+      return [id, documentFilter().trim(), documentOrder().trim()].join("\u001f");
+    },
+    async (key) => {
+      const [collectionID, filter, order] = key.split("\u001f");
+      if (isDemo) return await demoService.listDocuments(collectionID, filter, order);
+      return CollectionsService.listDocuments({
+        collectionId: collectionID,
+        filter: filter || undefined,
+        order: order || undefined,
+      }).then((res) => res.items);
     },
   );
 
@@ -665,6 +677,8 @@ export default function App() {
   createEffect(() => {
     activeProject()?.id;
     setSelectedCollectionID(undefined);
+    setDocumentFilter("");
+    setDocumentOrder("");
   });
   createEffect(() => {
     const list = collections() ?? [];
@@ -1419,7 +1433,11 @@ export default function App() {
         await refetchCollections();
         await refetchAuditLogs();
         await refreshProjectOverviewSnapshot();
-        if (selectedCollectionID() === collectionID) setSelectedCollectionID(undefined);
+        if (selectedCollectionID() === collectionID) {
+          setSelectedCollectionID(undefined);
+          setDocumentFilter("");
+          setDocumentOrder("");
+        }
         setCollectionsMessage("Collection deleted.");
       } catch (error) {
         setCollectionsMessage(getErrorMessage(error, "Collection deletion failed"));
@@ -1872,7 +1890,21 @@ export default function App() {
               onCollectionInputChange={(field, value) => setCollectionInput((c) => applySlugField(c, field, value))}
               onCreateCollection={createCollection}
               onDeleteCollection={deleteCollection}
-              onSelectCollection={setSelectedCollectionID}
+              documentFilter={documentFilter()}
+              documentOrder={documentOrder()}
+              documentLoadError={documents.error ? getErrorMessage(documents.error, "Could not load documents") : ""}
+              onSelectCollection={(id) => {
+                setDocumentFilter("");
+                setDocumentOrder("");
+                setSelectedCollectionID(id);
+              }}
+              onDocumentQuery={(filter, order) => {
+                const problem = documentQueryError(filter, order);
+                if (problem) return problem;
+                setDocumentFilter(filter);
+                setDocumentOrder(order);
+                return "";
+              }}
               onCreateDocument={createDocument}
               onUpdateDocument={updateDocument}
               onDeleteDocument={deleteDocument}
